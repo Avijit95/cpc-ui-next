@@ -1,0 +1,123 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Users,
+  Package,
+  Tag,
+  ShoppingBag,
+  FileText,
+  BarChart3,
+  Image as ImageIcon,
+  LifeBuoy,
+  Shield,
+  LogOut,
+  ChevronRight,
+} from "lucide-react";
+
+const navGroups = [
+  {
+    label: "MAIN",
+    items: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "MANAGEMENT",
+    items: [
+      { href: "/admin/users", label: "Users & Roles", icon: Users },
+      { href: "/admin/products", label: "Products", icon: Package },
+      { href: "/admin/pricing", label: "Pricing & Discounts", icon: Tag },
+    ],
+  },
+  {
+    label: "BILLING",
+    items: [
+      { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
+      { href: "/admin/invoices", label: "Invoices", icon: FileText },
+    ],
+  },
+  {
+    label: "CONTENT",
+    items: [
+      { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/admin/cms", label: "CMS", icon: ImageIcon },
+    ],
+  },
+  {
+    label: "SYSTEM",
+    items: [
+      { href: "/admin/support", label: "Support", icon: LifeBuoy },
+      { href: "/admin/logs", label: "Security & Logs", icon: Shield },
+    ],
+  },
+];
+
+export default function AdminSidebar() {
+  const pathname = usePathname();
+  return (
+    <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#0f172a] text-gray-300 flex flex-col z-30">
+      <div className="px-6 py-5 border-b border-white/10">
+        <Link href="/admin" className="flex items-center gap-2.5">
+          <div className="w-9 h-9 bg-[#129cd3] rounded-lg flex items-center justify-center text-white font-bold">
+            C
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm leading-tight">CPC Admin</p>
+            <p className="text-gray-400 text-[10px]">Control Panel</p>
+          </div>
+        </Link>
+      </div>
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 scrollbar-thin">
+        {navGroups.map((group) => (
+          <div key={group.label}>
+            <p className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+              {group.label}
+            </p>
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== "/admin" && pathname.startsWith(item.href));
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        active
+                          ? "bg-[#129cd3] text-white shadow-[0_4px_12px_rgba(18,156,211,0.3)]"
+                          : "hover:bg-white/5 hover:text-white"
+                      }`}
+                    >
+                      <Icon size={16} />
+                      <span>{item.label}</span>
+                      {active && <ChevronRight size={14} className="ml-auto" />}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+      <div className="px-4 py-4 border-t border-white/10">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-full bg-[#129cd3] flex items-center justify-center text-white text-sm font-bold">
+            A
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-semibold truncate">Admin User</p>
+            <p className="text-gray-400 text-[10px] truncate">admin@dextechlabs.com</p>
+          </div>
+        </div>
+        <Link
+          href="/login"
+          className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-red-400 rounded-lg transition-colors"
+        >
+          <LogOut size={14} /> Sign out
+        </Link>
+      </div>
+    </aside>
+  );
+}

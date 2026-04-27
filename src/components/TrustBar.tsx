@@ -1,24 +1,25 @@
-import { Truck, ShieldCheck, RotateCcw, Headphones } from "lucide-react";
+import { Truck, RotateCcw, CreditCard, Headphones, Gift } from "lucide-react";
 
 const features = [
-  { icon: Truck, title: "Free Delivery", desc: "On orders above ₹999" },
-  { icon: ShieldCheck, title: "Genuine Products", desc: "100% authentic guarantee" },
-  { icon: RotateCcw, title: "Easy Returns", desc: "7-day hassle-free return" },
-  { icon: Headphones, title: "24/7 Support", desc: "Dedicated customer care" },
+  { icon: Truck, title: "FREE DELIVERY", desc: "On orders above ₹999" },
+  { icon: RotateCcw, title: "EASY RETURNS", desc: "30-day return policy" },
+  { icon: CreditCard, title: "SECURE PAYMENT", desc: "100% secure checkout" },
+  { icon: Gift, title: "GIFT CARDS", desc: "Give the perfect gift" },
+  { icon: Headphones, title: "24/7 SUPPORT", desc: "Dedicated customer care" },
 ];
 
 export default function TrustBar() {
   return (
-    <section className="py-8 px-4 bg-blue-600">
-      <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
+    <section className="py-5 px-4 bg-[#129cd3]">
+      <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         {features.map(({ icon: Icon, title, desc }) => (
           <div key={title} className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Icon size={20} className="text-white" />
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Icon size={18} className="text-white" />
             </div>
             <div>
-              <p className="text-white font-semibold text-sm">{title}</p>
-              <p className="text-blue-100 text-xs">{desc}</p>
+              <p className="text-white font-bold text-xs">{title}</p>
+              <p className="text-[#b3e3f5] text-[11px]">{desc}</p>
             </div>
           </div>
         ))}

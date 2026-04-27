@@ -1,0 +1,308 @@
+"use client";
+
+import { useState } from "react";
+import {
+  Mail, Lock, Phone, Eye, EyeOff, ArrowRight,
+  ShoppingBag, Shield, Zap, Headphones,
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+
+type Tab = "google" | "phone" | "email";
+
+const benefits = [
+  { icon: ShoppingBag, text: "Access exclusive deals & offers" },
+  { icon: Zap, text: "One-click checkout & Buy Now" },
+  { icon: Shield, text: "Secure payments & easy returns" },
+  { icon: Headphones, text: "Priority 24/7 customer support" },
+];
+
+export default function LoginPage() {
+  const [activeTab, setActiveTab] = useState<Tab>("phone");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) return;
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    if (value && index < 5) {
+      document.getElementById(`otp-${index + 1}`)?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      document.getElementById(`otp-${index - 1}`)?.focus();
+    }
+  };
+
+  const switchTab = (tab: Tab) => {
+    setActiveTab(tab);
+    setOtpSent(false);
+    setOtp(["", "", "", "", "", ""]);
+  };
+
+  return (
+    <div className="min-h-screen flex">
+      {/* ── Left Panel ── */}
+      <div className="hidden lg:flex flex-col justify-between w-[45%] bg-[#129cd3] p-12 relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute -top-20 -left-20 w-80 h-80 bg-white/10 rounded-full" />
+        <div className="absolute -bottom-16 -right-16 w-72 h-72 bg-white/10 rounded-full" />
+        <div className="absolute top-1/2 right-0 w-40 h-40 bg-white/5 rounded-full translate-x-1/2 -translate-y-1/2" />
+
+        {/* Logo */}
+        <div className="relative z-10">
+          <Link href="/">
+            <Image src="/logo-light.png" alt="CPC" width={150} height={52} className="brightness-0 invert" />
+          </Link>
+        </div>
+
+        {/* Centre content */}
+        <div className="relative z-10">
+          <h1 className="text-4xl font-bold text-white leading-tight mb-4">
+            Welcome to<br />CellPhone Crowd
+          </h1>
+          <p className="text-white/80 text-base mb-10 leading-relaxed">
+            India&apos;s trusted destination for premium electronics. Sign in to unlock exclusive deals and manage your orders.
+          </p>
+
+          <ul className="space-y-4">
+            {benefits.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-center gap-4">
+                <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Icon size={18} className="text-white" />
+                </div>
+                <span className="text-white/90 text-sm">{text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Bottom */}
+        <p className="relative z-10 text-white/50 text-xs">
+          © 2024 CellPhone Crowd. All rights reserved.
+        </p>
+      </div>
+
+      {/* ── Right Panel ── */}
+      <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12">
+        {/* Mobile logo */}
+        <div className="lg:hidden mb-8">
+          <Link href="/">
+            <Image src="/logo-light.png" alt="CPC" width={140} height={48} />
+          </Link>
+        </div>
+
+        <div className="w-full max-w-md">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900">Sign in to your account</h2>
+            <p className="text-gray-500 text-sm mt-1">
+              New here?{" "}
+              <Link href="/dealer/register" className="text-[#129cd3] hover:underline font-medium">
+                Create an account
+              </Link>
+            </p>
+          </div>
+
+          {/* Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Tabs */}
+            <div className="grid grid-cols-3 border-b border-gray-100">
+              {(["phone", "google", "email"] as Tab[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => switchTab(tab)}
+                  className={`py-3.5 text-xs font-semibold transition-all ${
+                    activeTab === tab
+                      ? "text-[#129cd3] border-b-2 border-[#129cd3] bg-[#f0f9ff]"
+                      : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {tab === "google" ? "Google" : tab === "phone" ? "📱 Phone" : "✉️ Email"}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-8">
+              {/* ── Phone Tab ── */}
+              {activeTab === "phone" && (
+                <div className="space-y-5">
+                  {!otpSent ? (
+                    <>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Mobile Number
+                        </label>
+                        <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+                          <span className="px-4 py-3 bg-gray-50 text-gray-600 text-sm font-semibold border-r border-gray-200 flex-shrink-0">
+                            +91
+                          </span>
+                          <input
+                            type="tel"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                            placeholder="Enter 10-digit number"
+                            className="flex-1 px-4 py-3 text-sm outline-none text-gray-800"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => phoneNumber.length === 10 && setOtpSent(true)}
+                        className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all ${
+                          phoneNumber.length === 10
+                            ? "bg-[#129cd3] hover:bg-[#0e87b5] text-white shadow-md shadow-[#129cd3]/30"
+                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        }`}
+                      >
+                        Send OTP <ArrowRight size={16} />
+                      </button>
+                      <p className="text-center text-xs text-gray-400">
+                        We&apos;ll send a 6-digit OTP to verify your number
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="bg-[#e8f7fc] rounded-xl px-4 py-3 flex items-center justify-between">
+                        <p className="text-sm text-gray-700">
+                          OTP sent to <span className="font-bold text-gray-900">+91 {phoneNumber}</span>
+                        </p>
+                        <button onClick={() => setOtpSent(false)} className="text-xs text-[#129cd3] hover:underline font-medium">
+                          Change
+                        </button>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          Enter 6-digit OTP
+                        </label>
+                        <div className="flex gap-2 justify-between">
+                          {otp.map((digit, i) => (
+                            <input
+                              key={i}
+                              id={`otp-${i}`}
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={1}
+                              value={digit}
+                              onChange={(e) => handleOtpChange(i, e.target.value.replace(/\D/g, ""))}
+                              onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                              className="w-11 h-12 text-center text-lg font-bold border-2 border-gray-200 focus:border-[#129cd3] focus:bg-[#f0f9ff] rounded-xl outline-none transition-colors"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <Link
+                        href="/"
+                        className="w-full bg-[#129cd3] hover:bg-[#0e87b5] text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
+                      >
+                        Verify & Continue <ArrowRight size={16} />
+                      </Link>
+                      <p className="text-center text-xs text-gray-500">
+                        Didn&apos;t receive?{" "}
+                        <button className="text-[#129cd3] hover:underline font-semibold">Resend OTP</button>
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Google Tab ── */}
+              {activeTab === "google" && (
+                <div className="space-y-5">
+                  <p className="text-center text-gray-500 text-sm">
+                    Sign in quickly and securely with your Google account.
+                  </p>
+                  <Link
+                    href="/"
+                    className="w-full flex items-center justify-center gap-3 border-2 border-gray-200 hover:border-[#129cd3] hover:bg-[#f0f9ff] text-gray-700 font-semibold py-3.5 rounded-xl transition-all group"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                    <span className="group-hover:text-[#129cd3]">Continue with Google</span>
+                  </Link>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-100" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-white px-3 text-xs text-gray-400">or try another way</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => switchTab("phone")} className="flex items-center justify-center gap-2 border border-gray-200 hover:border-[#129cd3] hover:text-[#129cd3] text-gray-600 text-sm py-2.5 rounded-xl transition-colors">
+                      <Phone size={14} /> Phone
+                    </button>
+                    <button onClick={() => switchTab("email")} className="flex items-center justify-center gap-2 border border-gray-200 hover:border-[#129cd3] hover:text-[#129cd3] text-gray-600 text-sm py-2.5 rounded-xl transition-colors">
+                      <Mail size={14} /> Email
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Email Tab ── */}
+              {activeTab === "email" && (
+                <div className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                    <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+                      <span className="px-3 py-3 text-gray-400 flex-shrink-0"><Mail size={17} /></span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                    <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+                      <span className="px-3 py-3 text-gray-400 flex-shrink-0"><Lock size={17} /></span>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
+                      />
+                      <button onClick={() => setShowPassword(!showPassword)} className="px-3 text-gray-400 hover:text-gray-600 flex-shrink-0">
+                        {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <label className="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
+                      <input type="checkbox" className="accent-[#129cd3]" /> Remember me
+                    </label>
+                    <a href="#" className="text-[#129cd3] hover:underline font-semibold">Forgot password?</a>
+                  </div>
+                  <Link
+                    href="/"
+                    className="w-full bg-[#129cd3] hover:bg-[#0e87b5] text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
+                  >
+                    Sign In <ArrowRight size={16} />
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <p className="text-center text-xs text-gray-400 mt-5">
+            By continuing, you agree to our{" "}
+            <a href="#" className="text-[#129cd3] hover:underline">Terms of Service</a> and{" "}
+            <a href="#" className="text-[#129cd3] hover:underline">Privacy Policy</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
