@@ -296,3 +296,121 @@ export type ImportJobStatus = {
 };
 
 export type ImportJobAccepted = { jobId: string };
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cart — Sprint 3 (mirrors apps/api/src/modules/pricing/pricing.types.ts and
+// cart.service.ts CartViewResponse)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type CouponPreview = { id: string; name: string; value: number };
+
+export type AppliedCoupon = CouponPreview;
+
+export type CartGstLine = {
+  hsnCode: string;
+  ratePercent: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  total: number;
+};
+
+export type PricedCartLine = {
+  cartItemId: string;
+  productId: string;
+  variantId: string | null;
+  name: string;
+  qty: number;
+  unitPrice: number;
+  availableCoupons: { customer?: CouponPreview; retail?: CouponPreview };
+  appliedCoupons: { customer?: AppliedCoupon; retail?: AppliedCoupon };
+  discount: { customer: number; retail: number; total: number };
+  lineSubtotal: number;
+  gst: CartGstLine;
+  lineGrandTotal: number;
+};
+
+export type StaleApplication = {
+  cartItemId: string;
+  type: "customer" | "retail";
+  reason: "COUPON_REMOVED" | "PARTNER_NOT_VERIFIED";
+};
+
+export type StockWarning = {
+  cartItemId: string;
+  requested: number;
+  available: number;
+};
+
+export type CartView = {
+  items: PricedCartLine[];
+  subtotal: number;
+  discountTotal: number;
+  gstTotal: number;
+  grandTotal: number;
+  staleApplications: StaleApplication[];
+  stockWarnings: StockWarning[];
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Wishlist — Sprint 3
+// ────────────────────────────────────────────────────────────────────────────
+
+export type WishlistCardItem = {
+  wishlistItemId: string;
+  variantId: string | null;
+  id: string;
+  slug: string;
+  name: string;
+  brand: string | null;
+  basePrice: number;
+  finalPrice: number;
+  lowestVariantPrice: number | null;
+  primaryImageUrl: string | null;
+  badges: string[];
+};
+
+export type WishlistView = { items: WishlistCardItem[] };
+
+export type WishlistMoveToCartResponse = {
+  cart: CartView;
+  wishlist: WishlistView;
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Coupons — Sprint 3 (admin)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type CouponType = "CUSTOMER_FIXED" | "RETAIL_PERCENT";
+export type CouponStatus = "ACTIVE" | "PAUSED";
+
+export type AdminCouponRow = {
+  id: string;
+  name: string;
+  type: CouponType;
+  status: CouponStatus;
+  attachmentCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminCouponDetail = AdminCouponRow & {
+  attachments: { productId: string; productName: string; value: number }[];
+};
+
+export type AdminCouponsList = {
+  items: AdminCouponRow[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type ProductCouponSlot = "customer" | "retail";
+
+export type AttachedSlotResponse = {
+  productId: string;
+  slot: ProductCouponSlot;
+  couponId: string;
+  couponName: string;
+  value: number;
+};

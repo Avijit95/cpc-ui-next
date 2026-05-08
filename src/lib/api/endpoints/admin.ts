@@ -2,6 +2,9 @@ import { request, s3Put } from "../client";
 import type {
   AdminCategory,
   AdminCategoryListItem,
+  AdminCouponDetail,
+  AdminCouponRow,
+  AdminCouponsList,
   AdminPartner,
   AdminPartnerDetail,
   AdminPartnersList,
@@ -9,9 +12,13 @@ import type {
   AdminProductDetail,
   AdminProductsList,
   AdminVariant,
+  AttachedSlotResponse,
+  CouponStatus,
+  CouponType,
   ImportJobAccepted,
   ImportJobStatus,
   KycStatus,
+  ProductCouponSlot,
   ProductImagePresignResponse,
   ProductImagesConfirmResponse,
   ProductStatus,
@@ -101,6 +108,33 @@ export type ProductImagesConfirmBody = {
   objectKeys: string[];
   sortOrder?: number[];
   replace?: boolean;
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Coupons (Sprint 3)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ListCouponsQuery = {
+  type?: CouponType;
+  status?: CouponStatus;
+  limit?: number;
+  offset?: number;
+};
+
+export type CreateCouponBody = {
+  name: string;
+  type: CouponType;
+  status?: CouponStatus;
+};
+
+export type UpdateCouponBody = {
+  name?: string;
+  status?: CouponStatus;
+};
+
+export type AttachProductCouponBody = {
+  couponId: string;
+  value: number;
 };
 
 export const adminApi = {
@@ -240,5 +274,45 @@ export const adminApi = {
     return request<ImportJobStatus>(
       `/admin/products/import/${encodeURIComponent(jobId)}`,
     );
+  },
+
+  // ── Coupons (Sprint 3) ──────────────────────────────────────────────────
+  listCoupons(query: ListCouponsQuery = {}) {
+    return request<AdminCouponsList>("/admin/coupons", { query });
+  },
+  getCoupon(id: string) {
+    return request<AdminCouponDetail>(`/admin/coupons/${id}`);
+  },
+  createCoupon(body: CreateCouponBody) {
+    return request<AdminCouponRow>("/admin/coupons", {
+      method: "POST",
+      body,
+    });
+  },
+  updateCoupon(id: string, body: UpdateCouponBody) {
+    return request<AdminCouponRow>(`/admin/coupons/${id}`, {
+      method: "PATCH",
+      body,
+    });
+  },
+  deleteCoupon(id: string) {
+    return request<void>(`/admin/coupons/${id}`, { method: "DELETE" });
+  },
+
+  // ── Product ↔ coupon attachments (Sprint 3) ─────────────────────────────
+  attachProductCoupon(
+    productId: string,
+    slot: ProductCouponSlot,
+    body: AttachProductCouponBody,
+  ) {
+    return request<AttachedSlotResponse>(
+      `/admin/products/${productId}/coupons/${slot}`,
+      { method: "PUT", body },
+    );
+  },
+  detachProductCoupon(productId: string, slot: ProductCouponSlot) {
+    return request<void>(`/admin/products/${productId}/coupons/${slot}`, {
+      method: "DELETE",
+    });
   },
 };

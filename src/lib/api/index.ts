@@ -22,7 +22,18 @@ export type {
   ProductImageContentType,
   ProductImagePresignBody,
   ProductImagesConfirmBody,
+  ListCouponsQuery,
+  CreateCouponBody,
+  UpdateCouponBody,
+  AttachProductCouponBody,
 } from "./endpoints/admin";
 export { catalogApi } from "./endpoints/catalog";
+export { cartApi } from "./endpoints/cart";
+export type { AddCartItemBody, UpdateCartItemBody } from "./endpoints/cart";
+export { wishlistApi } from "./endpoints/wishlist";
+export type {
+  AddWishlistItemBody,
+  MoveToCartBody,
+} from "./endpoints/wishlist";
 export { healthApi } from "./endpoints/health";
 export type * from "./types";

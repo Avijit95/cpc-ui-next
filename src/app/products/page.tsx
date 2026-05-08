@@ -1,48 +1,88 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import ProductCard from "@/components/ProductCard";
-import { products } from "@/data/products";
-import { SlidersHorizontal, ChevronDown, Star } from "lucide-react";
+import ProductCard, { ProductCardSkeleton } from "@/components/ProductCard";
+import { catalogApi, isApiError } from "@/lib/api";
+import type {
+  BrandFacet,
+  CatalogSort,
+  ListCard,
+  ProductListResponse,
+} from "@/lib/api";
+import { SlidersHorizontal, ChevronDown } from "lucide-react";
 
-const categoryOptions = ["Smartphones", "Cameras", "Speakers", "Smartwatches", "Earphones", "Accessories"];
-const brandOptions = ["Apple", "Samsung", "Sony", "OnePlus", "JBL", "Google"];
-const sortOptions = ["Featured", "Price: Low to High", "Price: High to Low", "Top Rated", "Newest"];
+const categoryOptions = [
+  "Smartphones",
+  "Cameras",
+  "Speakers",
+  "Smartwatches",
+  "Earphones",
+  "Accessories",
+];
+
+type SortOption = {
+  label: string;
+  value: CatalogSort | undefined;
+};
+
+const sortOptions: SortOption[] = [
+  { label: "Featured", value: undefined },
+  { label: "Price: Low to High", value: "price-asc" },
+  { label: "Price: High to Low", value: "price-desc" },
+  { label: "Newest", value: "newest" },
+];
+
+const PAGE_LIMIT = 24;
 
 export default function ProductsPage() {
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [selectedRating, setSelectedRating] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [priceRange, setPriceRange] = useState(200000);
-  const [sortBy, setSortBy] = useState("Featured");
+  const [sortLabel, setSortLabel] = useState<string>("Featured");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const toggleCategory = (cat: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-    );
-  };
+  const [data, setData] = useState<ProductListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const toggleBrand = (brand: string) => {
-    setSelectedBrands((prev) =>
-      prev.includes(brand) ? prev.filter((b) => b !== brand) : [...prev, brand]
-    );
-  };
+  useEffect(() => {
+    const ac = new AbortController();
+    const sortValue = sortOptions.find((o) => o.label === sortLabel)?.value;
 
-  let filtered = products.filter((p) => {
-    const catMatch = selectedCategories.length === 0 || selectedCategories.includes(p.category);
-    const brandMatch = selectedBrands.length === 0 || selectedBrands.some((b) => p.name.includes(b));
-    const ratingMatch = selectedRating === null || p.rating >= selectedRating;
-    const priceMatch = p.price <= priceRange;
-    return catMatch && brandMatch && ratingMatch && priceMatch;
-  });
+    setLoading(true);
+    setError(null);
 
-  if (sortBy === "Price: Low to High") filtered = [...filtered].sort((a, b) => a.price - b.price);
-  else if (sortBy === "Price: High to Low") filtered = [...filtered].sort((a, b) => b.price - a.price);
-  else if (sortBy === "Top Rated") filtered = [...filtered].sort((a, b) => b.rating - a.rating);
+    catalogApi
+      .listProducts(
+        {
+          category: selectedCategory ?? undefined,
+          brand: selectedBrand ?? undefined,
+          priceMax: priceRange < 200000 ? priceRange : undefined,
+          sort: sortValue,
+          limit: PAGE_LIMIT,
+        },
+        ac.signal,
+      )
+      .then((resp) => setData(resp))
+      .catch((err: unknown) => {
+        if (ac.signal.aborted) return;
+        setError(
+          isApiError(err) ? err.displayMessage : "Failed to load products",
+        );
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [selectedCategory, selectedBrand, priceRange, sortLabel]);
+
+  const items: ListCard[] = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
 
   const filterSidebar = (
     <aside className="w-full space-y-6">
@@ -55,9 +95,12 @@ export default function ProductsPage() {
           {categoryOptions.map((cat) => (
             <label key={cat} className="flex items-center gap-2.5 cursor-pointer group">
               <input
-                type="checkbox"
-                checked={selectedCategories.includes(cat)}
-                onChange={() => toggleCategory(cat)}
+                type="radio"
+                name="category"
+                checked={selectedCategory === cat}
+                onChange={() =>
+                  setSelectedCategory(selectedCategory === cat ? null : cat)
+                }
                 className="w-4 h-4 accent-[#129cd3] cursor-pointer"
               />
               <span className="text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
@@ -91,62 +134,43 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Rating */}
-      <div>
-        <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2">
-          Minimum Rating
-        </h3>
-        <div className="space-y-2">
-          {[4, 3, 2].map((rating) => (
-            <label key={rating} className="flex items-center gap-2.5 cursor-pointer group">
-              <input
-                type="radio"
-                name="rating"
-                checked={selectedRating === rating}
-                onChange={() => setSelectedRating(selectedRating === rating ? null : rating)}
-                className="w-4 h-4 accent-[#129cd3] cursor-pointer"
-              />
-              <span className="flex items-center gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    size={12}
-                    className={i < rating ? "fill-yellow-400 text-yellow-400" : "fill-gray-200 text-gray-200"}
-                  />
-                ))}
-                <span className="text-xs text-gray-500 ml-1">& up</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
-
       {/* Brands */}
       <div>
         <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2">
           Brand
         </h3>
         <div className="space-y-2">
-          {brandOptions.map((brand) => (
-            <label key={brand} className="flex items-center gap-2.5 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={selectedBrands.includes(brand)}
-                onChange={() => toggleBrand(brand)}
-                className="w-4 h-4 accent-[#129cd3] cursor-pointer"
-              />
-              <span className="text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
-                {brand}
-              </span>
-            </label>
-          ))}
+          {brandFacets.length === 0 ? (
+            <p className="text-xs text-gray-400">No brands available.</p>
+          ) : (
+            brandFacets.map((b) => (
+              <label key={b.name} className="flex items-center gap-2.5 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="brand"
+                  checked={selectedBrand === b.name}
+                  onChange={() =>
+                    setSelectedBrand(selectedBrand === b.name ? null : b.name)
+                  }
+                  className="w-4 h-4 accent-[#129cd3] cursor-pointer"
+                />
+                <span className="text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
+                  {b.name}{" "}
+                  <span className="text-xs text-gray-400">({b.count})</span>
+                </span>
+              </label>
+            ))
+          )}
         </div>
       </div>
 
       {/* Clear Filters */}
-      {(selectedCategories.length > 0 || selectedBrands.length > 0 || selectedRating !== null) && (
+      {(selectedCategory !== null || selectedBrand !== null) && (
         <button
-          onClick={() => { setSelectedCategories([]); setSelectedBrands([]); setSelectedRating(null); }}
+          onClick={() => {
+            setSelectedCategory(null);
+            setSelectedBrand(null);
+          }}
           className="w-full py-2 border border-[#129cd3] text-[#129cd3] text-sm rounded hover:bg-[#e8f7fc] transition-colors"
         >
           Clear All Filters
@@ -179,19 +203,30 @@ export default function ProductsPage() {
                 <SlidersHorizontal size={15} /> Filters
               </button>
               <p className="text-sm text-gray-600">
-                Showing <span className="font-semibold text-gray-800">{filtered.length}</span> results
+                {loading ? (
+                  <span className="text-gray-400">Loading…</span>
+                ) : (
+                  <>
+                    Showing{" "}
+                    <span className="font-semibold text-gray-800">{items.length}</span>
+                    {total > items.length && (
+                      <> of <span className="font-semibold text-gray-800">{total}</span></>
+                    )}{" "}
+                    results
+                  </>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600 hidden sm:block">Sort by:</span>
               <div className="relative">
                 <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
+                  value={sortLabel}
+                  onChange={(e) => setSortLabel(e.target.value)}
                   className="appearance-none border border-gray-300 text-sm px-3 py-2 pr-8 rounded outline-none hover:border-[#129cd3] focus:border-[#129cd3] bg-white text-gray-700 cursor-pointer"
                 >
                   {sortOptions.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
+                    <option key={opt.label} value={opt.label}>{opt.label}</option>
                   ))}
                 </select>
                 <ChevronDown size={14} className="absolute right-2.5 top-3 text-gray-400 pointer-events-none" />
@@ -223,7 +258,18 @@ export default function ProductsPage() {
 
             {/* Product Grid */}
             <div className="flex-1">
-              {filtered.length === 0 ? (
+              {error ? (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+                  <p className="text-lg font-medium text-red-500 mb-1">Could not load products</p>
+                  <p className="text-sm text-gray-400">{error}</p>
+                </div>
+              ) : loading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {[...Array(8)].map((_, i) => (
+                    <ProductCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                   <SlidersHorizontal size={48} className="mb-4 opacity-30" />
                   <p className="text-lg font-medium">No products found</p>
@@ -231,10 +277,8 @@ export default function ProductsPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filtered.map((product) => (
-                    <a key={product.id} href={`/products/${product.id}`}>
-                      <ProductCard product={product} />
-                    </a>
+                  {items.map((product) => (
+                    <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
               )}
