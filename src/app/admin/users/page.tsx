@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
 import {
   UserPlus,
@@ -13,51 +13,119 @@ import {
   Store,
   ShieldCheck,
   Search,
+  Loader2,
 } from "lucide-react";
+import { adminApi, isApiError } from "@/lib/api";
+import type { AdminPartner, KycStatus } from "@/lib/api";
 
 type Tab = "customers" | "partners" | "admins";
 
+// Customers and admins endpoints aren't built yet (api-integration.md §8).
+// Keep static fixtures so the existing tabs stay usable for visual review.
 const customers = [
   { id: 1, name: "Rahul Sharma", email: "rahul.s@gmail.com", phone: "+91 98765 43210", orders: 12, spent: 184500, joined: "2025-11-14", status: "Active" },
   { id: 2, name: "Priya Menon", email: "priyam@gmail.com", phone: "+91 99872 11001", orders: 8, spent: 92380, joined: "2025-12-02", status: "Active" },
   { id: 3, name: "Arjun Reddy", email: "arjun.r@outlook.com", phone: "+91 90004 87231", orders: 24, spent: 412800, joined: "2025-08-21", status: "Active" },
-  { id: 4, name: "Neha Kapoor", email: "nehak@yahoo.in", phone: "+91 77891 55430", orders: 3, spent: 28790, joined: "2026-01-19", status: "Inactive" },
-  { id: 5, name: "Vikram Singh", email: "vsingh@gmail.com", phone: "+91 88124 90021", orders: 17, spent: 236400, joined: "2025-09-10", status: "Active" },
-];
-
-const partners = [
-  { id: 1, business: "Mobile Mart Hyderabad", owner: "Kiran Kumar", gstin: "36ABCDE1234F1Z5", city: "Hyderabad", kyc: "Approved", status: "Active", onboarded: "2025-07-02" },
-  { id: 2, business: "TechZone Retail", owner: "Manish Jain", gstin: "07XYZPQ9876R1Z2", city: "Delhi", kyc: "Pending", status: "Under Review", onboarded: "2026-04-10" },
-  { id: 3, business: "Digital World", owner: "Sunita Rao", gstin: "29DEFGH5678K1Z8", city: "Bengaluru", kyc: "Approved", status: "Active", onboarded: "2025-03-18" },
-  { id: 4, business: "ElectroHub", owner: "Farhan Ali", gstin: "27MNOPQ4321T1Z3", city: "Mumbai", kyc: "Rejected", status: "Blocked", onboarded: "2026-02-25" },
 ];
 
 const admins = [
   { id: 1, name: "Avijit Ghosh", email: "admin@dextechlabs.com", role: "Super Admin", lastLogin: "2026-04-24 09:12", ip: "103.212.45.19", status: "Active" },
-  { id: 2, name: "Ramesh Iyer", email: "ramesh@cpc.com", role: "Product Manager", lastLogin: "2026-04-24 08:42", ip: "49.38.102.11", status: "Active" },
-  { id: 3, name: "Aditi Verma", email: "aditi@cpc.com", role: "Order Manager", lastLogin: "2026-04-23 18:28", ip: "49.38.102.14", status: "Active" },
-  { id: 4, name: "Sahil Mehta", email: "sahil@cpc.com", role: "Support Agent", lastLogin: "2026-04-22 17:55", ip: "103.212.45.22", status: "Suspended" },
 ];
 
 function formatPrice(n: number) {
   return "₹" + n.toLocaleString("en-IN");
 }
 
-const kycBadge = (kyc: string) => {
-  if (kyc === "Approved") return { cls: "bg-emerald-50 text-emerald-600 border-emerald-200", Icon: CheckCircle2 };
-  if (kyc === "Pending") return { cls: "bg-amber-50 text-amber-600 border-amber-200", Icon: Clock };
-  return { cls: "bg-red-50 text-red-600 border-red-200", Icon: XCircle };
+function kycLabel(s: KycStatus): string {
+  if (s === "VERIFIED") return "Approved";
+  if (s === "PENDING") return "Pending";
+  if (s === "REJECTED") return "Rejected";
+  return "—";
+}
+
+const kycBadge = (kyc: KycStatus) => {
+  if (kyc === "VERIFIED") return { cls: "bg-emerald-50 text-emerald-600 border-emerald-200", Icon: CheckCircle2 };
+  if (kyc === "PENDING") return { cls: "bg-amber-50 text-amber-600 border-amber-200", Icon: Clock };
+  if (kyc === "REJECTED") return { cls: "bg-red-50 text-red-600 border-red-200", Icon: XCircle };
+  return { cls: "bg-gray-100 text-gray-600 border-gray-200", Icon: Clock };
 };
 
 export default function UsersPage() {
-  const [tab, setTab] = useState<Tab>("customers");
+  const [tab, setTab] = useState<Tab>("partners");
   const [query, setQuery] = useState("");
+  const [partnerStatus, setPartnerStatus] = useState<KycStatus>("PENDING");
+  const [partners, setPartners] = useState<AdminPartner[]>([]);
+  const [partnersTotal, setPartnersTotal] = useState(0);
+  const [partnersErr, setPartnersErr] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
+
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Show the spinner while a fetch is in flight: while the request key
+  // we last finished loading for doesn't match the current request key.
+  const requestKey = `${tab}|${partnerStatus}|${reloadKey}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const loadingPartners = tab === "partners" && loadedKey !== requestKey;
+
+  useEffect(() => {
+    if (tab !== "partners") return;
+    const myKey = requestKey;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await adminApi.listPartners({ status: partnerStatus, limit: 100 });
+        if (cancelled) return;
+        setPartners(data.items);
+        setPartnersTotal(data.total);
+        setPartnersErr(null);
+      } catch (err) {
+        if (cancelled) return;
+        setPartnersErr(isApiError(err) ? err.displayMessage : "Failed to load partners.");
+      } finally {
+        if (!cancelled) setLoadedKey(myKey);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, partnerStatus, requestKey]);
+
+  const handleApprove = async (id: string) => {
+    setActingId(id);
+    try {
+      await adminApi.approvePartner(id);
+      reload();
+    } catch (err) {
+      setPartnersErr(isApiError(err) ? err.displayMessage : "Approve failed.");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    const reason = window.prompt("Reason for rejection (3-500 chars):");
+    if (!reason || reason.trim().length < 3) return;
+    setActingId(id);
+    try {
+      await adminApi.rejectPartner(id, reason.trim());
+      reload();
+    } catch (err) {
+      setPartnersErr(isApiError(err) ? err.displayMessage : "Reject failed.");
+    } finally {
+      setActingId(null);
+    }
+  };
 
   const counts = {
     customers: customers.length,
-    partners: partners.length,
+    partners: partnersTotal,
     admins: admins.length,
   };
+
+  const filteredPartners = partners.filter((p) =>
+    [p.companyName, p.name, p.email, p.gstNumber]
+      .filter(Boolean)
+      .some((v) => v!.toLowerCase().includes(query.toLowerCase())),
+  );
 
   return (
     <>
@@ -72,7 +140,6 @@ export default function UsersPage() {
       />
 
       <div className="p-6 space-y-5">
-        {/* Summary cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
             <div className="w-11 h-11 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center">
@@ -80,7 +147,7 @@ export default function UsersPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500 uppercase">Customers</p>
-              <p className="text-xl font-bold text-gray-800">14,392</p>
+              <p className="text-xl font-bold text-gray-800">—</p>
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
@@ -88,8 +155,8 @@ export default function UsersPage() {
               <Store size={20} />
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Retail Partners</p>
-              <p className="text-xl font-bold text-gray-800">286</p>
+              <p className="text-xs text-gray-500 uppercase">Retail Partners ({kycLabel(partnerStatus)})</p>
+              <p className="text-xl font-bold text-gray-800">{partnersTotal}</p>
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
@@ -98,12 +165,11 @@ export default function UsersPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500 uppercase">Admins</p>
-              <p className="text-xl font-bold text-gray-800">12</p>
+              <p className="text-xl font-bold text-gray-800">—</p>
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="flex items-center border-b border-gray-100 px-2">
             {(["customers", "partners", "admins"] as Tab[]).map((t) => (
@@ -131,13 +197,29 @@ export default function UsersPage() {
                 className="bg-transparent outline-none text-sm text-gray-700 flex-1"
               />
             </div>
-            <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white">
-              <option>All status</option>
-              <option>Active</option>
-              <option>Inactive</option>
-              <option>Blocked</option>
-            </select>
+            {tab === "partners" ? (
+              <select
+                value={partnerStatus}
+                onChange={(e) => setPartnerStatus(e.target.value as KycStatus)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+              >
+                <option value="PENDING">Pending</option>
+                <option value="VERIFIED">Approved</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="NONE">None</option>
+              </select>
+            ) : (
+              <select className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white">
+                <option>All status</option>
+              </select>
+            )}
           </div>
+
+          {partnersErr && tab === "partners" && (
+            <div className="m-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {partnersErr}
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             {tab === "customers" && (
@@ -174,13 +256,7 @@ export default function UsersPage() {
                         <td className="px-5 py-3 font-semibold">{formatPrice(c.spent)}</td>
                         <td className="px-5 py-3 text-gray-500">{c.joined}</td>
                         <td className="px-5 py-3">
-                          <span
-                            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
-                              c.status === "Active"
-                                ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                                : "bg-gray-100 text-gray-600 border-gray-200"
-                            }`}
-                          >
+                          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-600 border-emerald-200">
                             {c.status}
                           </span>
                         </td>
@@ -201,54 +277,78 @@ export default function UsersPage() {
                   <tr>
                     <th className="text-left font-semibold px-5 py-3">Business</th>
                     <th className="text-left font-semibold px-5 py-3">GSTIN</th>
-                    <th className="text-left font-semibold px-5 py-3">City</th>
+                    <th className="text-left font-semibold px-5 py-3">Contact</th>
                     <th className="text-left font-semibold px-5 py-3">KYC</th>
-                    <th className="text-left font-semibold px-5 py-3">Status</th>
-                    <th className="text-left font-semibold px-5 py-3">Onboarded</th>
+                    <th className="text-left font-semibold px-5 py-3">Submitted</th>
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {partners
-                    .filter((p) => p.business.toLowerCase().includes(query.toLowerCase()))
-                    .map((p) => {
-                      const k = kycBadge(p.kyc);
-                      const KI = k.Icon;
-                      return (
-                        <tr key={p.id} className="hover:bg-gray-50">
-                          <td className="px-5 py-3">
-                            <p className="font-semibold text-gray-800">{p.business}</p>
-                            <p className="text-xs text-gray-500">Owner: {p.owner}</p>
-                          </td>
-                          <td className="px-5 py-3 font-mono text-xs text-gray-600">{p.gstin}</td>
-                          <td className="px-5 py-3 text-gray-700">{p.city}</td>
-                          <td className="px-5 py-3">
-                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${k.cls}`}>
-                              <KI size={11} /> {p.kyc}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 text-gray-700">{p.status}</td>
-                          <td className="px-5 py-3 text-gray-500">{p.onboarded}</td>
-                          <td className="px-5 py-3">
-                            <div className="flex items-center gap-1.5">
-                              {p.kyc === "Pending" && (
-                                <>
-                                  <button className="text-[11px] font-semibold px-2.5 py-1 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100">
-                                    Approve
-                                  </button>
-                                  <button className="text-[11px] font-semibold px-2.5 py-1 rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">
-                                    Reject
-                                  </button>
-                                </>
-                              )}
-                              <button className="text-gray-400 hover:text-[#129cd3]">
-                                <MoreHorizontal size={16} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  {loadingPartners && (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-10 text-center text-sm text-gray-500">
+                        <Loader2 className="inline animate-spin mr-2" size={16} /> Loading partners…
+                      </td>
+                    </tr>
+                  )}
+                  {!loadingPartners && filteredPartners.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-10 text-center text-sm text-gray-500">
+                        No partners in {kycLabel(partnerStatus)} state.
+                      </td>
+                    </tr>
+                  )}
+                  {!loadingPartners && filteredPartners.map((p) => {
+                    const k = kycBadge(p.kycStatus);
+                    const KI = k.Icon;
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-3">
+                          <p className="font-semibold text-gray-800">{p.companyName ?? "—"}</p>
+                          <p className="text-xs text-gray-500">Owner: {p.name}</p>
+                          {p.kycStatus === "REJECTED" && p.kycRejectedReason && (
+                            <p className="text-[11px] text-red-500 mt-1 italic">Reason: {p.kycRejectedReason}</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 font-mono text-xs text-gray-600">{p.gstNumber ?? "—"}</td>
+                        <td className="px-5 py-3 text-xs text-gray-600">
+                          <p>{p.email ?? "—"}</p>
+                          <p className="text-gray-400">{p.phone ?? "—"}</p>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${k.cls}`}>
+                            <KI size={11} /> {kycLabel(p.kycStatus)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-gray-500">{new Date(p.createdAt).toLocaleDateString()}</td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {p.kycStatus === "PENDING" && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(p.id)}
+                                  disabled={actingId === p.id}
+                                  className="text-[11px] font-semibold px-2.5 py-1 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50"
+                                >
+                                  {actingId === p.id ? "…" : "Approve"}
+                                </button>
+                                <button
+                                  onClick={() => handleReject(p.id)}
+                                  disabled={actingId === p.id}
+                                  className="text-[11px] font-semibold px-2.5 py-1 rounded bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            <button className="text-gray-400 hover:text-[#129cd3]">
+                              <MoreHorizontal size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -282,13 +382,7 @@ export default function UsersPage() {
                         <td className="px-5 py-3 text-gray-600">{a.lastLogin}</td>
                         <td className="px-5 py-3 font-mono text-xs text-gray-600">{a.ip}</td>
                         <td className="px-5 py-3">
-                          <span
-                            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
-                              a.status === "Active"
-                                ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                                : "bg-red-50 text-red-600 border-red-200"
-                            }`}
-                          >
+                          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-600 border-emerald-200">
                             {a.status}
                           </span>
                         </td>

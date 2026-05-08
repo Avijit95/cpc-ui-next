@@ -15,6 +15,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 const navLinks = [
   { name: "HOME", href: "/", hasDropdown: false },
@@ -26,10 +27,23 @@ const navLinks = [
   { name: "DEALS", href: "/products", hasDropdown: false, badge: "hot" },
 ];
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((s) => s[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
+  const { user, status } = useAuth();
+  const isAuthed = status === "authenticated" && !!user;
+  const accountHref = isAuthed && user.role === "ADMIN" ? "/admin" : "/account";
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,15 +57,23 @@ export default function Header() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <span>Free 2-day delivery and free returns within India.</span>
           <div className="hidden sm:flex items-center gap-4">
-            <Link href="/login" className="hover:text-[#129cd3] transition-colors flex items-center gap-1">
-              <User size={11} /> Sign In
-            </Link>
+            {!isAuthed && (
+              <Link href="/login" className="hover:text-[#129cd3] transition-colors flex items-center gap-1">
+                <User size={11} /> Sign In
+              </Link>
+            )}
             <a href="#" className="hover:text-[#129cd3] transition-colors flex items-center gap-1">
               <Gift size={11} /> Gift Certificates
             </a>
-            <Link href="/account" className="hover:text-[#129cd3] transition-colors flex items-center gap-1">
-              My Account <ChevronDown size={10} />
-            </Link>
+            {isAuthed ? (
+              <Link href={accountHref} className="hover:text-[#129cd3] transition-colors flex items-center gap-1">
+                Hi, {user.name.split(" ")[0]} <ChevronDown size={10} />
+              </Link>
+            ) : (
+              <Link href="/account" className="hover:text-[#129cd3] transition-colors flex items-center gap-1">
+                My Account <ChevronDown size={10} />
+              </Link>
+            )}
             <span className="border-l border-gray-300 pl-3 flex items-center gap-1 cursor-pointer hover:text-[#129cd3] transition-colors">
               INR <ChevronDown size={10} />
             </span>
@@ -103,8 +125,27 @@ export default function Header() {
               <ShoppingCart size={22} />
               <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#129cd3] text-white text-[9px] rounded-full flex items-center justify-center font-bold">2</span>
             </Link>
-            <Link href="/account" className="hidden md:flex flex-col items-center text-gray-600 hover:text-[#129cd3] transition-colors">
-              <User size={22} />
+            <Link
+              href={accountHref}
+              aria-label={isAuthed ? `Open ${user.name}'s profile` : "Sign in"}
+              className="hidden md:flex items-center text-gray-600 hover:text-[#129cd3] transition-colors"
+            >
+              {isAuthed ? (
+                user.profilePicUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={user.profilePicUrl}
+                    alt={user.name}
+                    className="w-9 h-9 rounded-full object-cover ring-2 ring-[#129cd3]"
+                  />
+                ) : (
+                  <span className="w-9 h-9 rounded-full bg-[#129cd3] text-white text-xs font-bold flex items-center justify-center ring-2 ring-[#129cd3]/20">
+                    {initials(user.name)}
+                  </span>
+                )
+              ) : (
+                <User size={22} />
+              )}
             </Link>
             <button className="md:hidden text-gray-700" onClick={() => setMobileOpen(!mobileOpen)}>
               {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -156,9 +197,31 @@ export default function Header() {
             </Link>
           ))}
           <div className="flex gap-4 p-4 border-t border-gray-100">
-            <Link href="/login" className="flex items-center gap-2 text-gray-600 text-sm hover:text-[#129cd3] transition-colors">
-              <User size={16} /> Sign In
-            </Link>
+            {isAuthed ? (
+              <Link
+                href={accountHref}
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 text-gray-600 text-sm hover:text-[#129cd3] transition-colors"
+              >
+                {user.profilePicUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.profilePicUrl} alt={user.name} className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <span className="w-6 h-6 rounded-full bg-[#129cd3] text-white text-[10px] font-bold flex items-center justify-center">
+                    {initials(user.name)}
+                  </span>
+                )}
+                {user.name.split(" ")[0]}
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 text-gray-600 text-sm hover:text-[#129cd3] transition-colors"
+              >
+                <User size={16} /> Sign In
+              </Link>
+            )}
             <Link href="/wishlist" className="flex items-center gap-2 text-gray-600 text-sm hover:text-[#129cd3] transition-colors">
               <Heart size={16} /> Wishlist
             </Link>

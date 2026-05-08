@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
-  Mail, Lock, Phone, Eye, EyeOff, ArrowRight,
+  Mail, Lock, Phone, Eye, EyeOff, ArrowRight, Loader2,
   ShoppingBag, Shield, Zap, Headphones,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { authApi, isApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 type Tab = "google" | "phone" | "email";
 
@@ -17,14 +20,65 @@ const benefits = [
   { icon: Headphones, text: "Priority 24/7 customer support" },
 ];
 
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+// Minimal type for the GIS callback payload we use.
+type GoogleCredentialResponse = { credential: string };
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (resp: GoogleCredentialResponse) => void;
+          }) => void;
+          prompt: () => void;
+          renderButton: (
+            el: HTMLElement,
+            opts: { theme?: string; size?: string; width?: number },
+          ) => void;
+        };
+      };
+    };
+  }
+}
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/";
+  const { setSession, status, user } = useAuth();
+
   const [activeTab, setActiveTab] = useState<Tab>("phone");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [needsName, setNeedsName] = useState(false);
+  const [signupName, setSignupName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Already logged in — bounce.
+  useEffect(() => {
+    if (status === "authenticated" && user) {
+      router.replace(user.role === "ADMIN" ? "/admin" : next);
+    }
+  }, [status, user, router, next]);
+
+  const e164Phone = phoneNumber.length === 10 ? `+91${phoneNumber}` : "";
 
   const handleOtpChange = (index: number, value: string) => {
     if (value.length > 1) return;
@@ -46,25 +100,142 @@ export default function LoginPage() {
     setActiveTab(tab);
     setOtpSent(false);
     setOtp(["", "", "", "", "", ""]);
+    setNeedsName(false);
+    setSignupName("");
+    setErrorMsg(null);
   };
+
+  const handleApiError = (err: unknown, fallback = "Something went wrong. Please try again.") => {
+    if (isApiError(err)) {
+      setErrorMsg(err.displayMessage || fallback);
+    } else {
+      setErrorMsg(fallback);
+    }
+  };
+
+  const finishLogin = (resp: { user: { role: string } } & Parameters<typeof setSession>[0]) => {
+    setSession(resp);
+    router.replace(resp.user.role === "ADMIN" ? "/admin" : next);
+  };
+
+  // ── Phone OTP flow ──────────────────────────────────────────────
+  const handleSendOtp = async () => {
+    if (!e164Phone) return;
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      await authApi.requestOtp({ phone: e164Phone });
+      setOtpSent(true);
+    } catch (err) {
+      handleApiError(err, "Couldn't send OTP. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const code = otp.join("");
+    if (code.length !== 6) {
+      setErrorMsg("Enter the 6-digit OTP.");
+      return;
+    }
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const resp = await authApi.verifyOtp({
+        phone: e164Phone,
+        code,
+        ...(needsName && signupName ? { name: signupName } : {}),
+      });
+      finishLogin(resp);
+    } catch (err) {
+      if (isApiError(err) && err.code === "NAME_REQUIRED_FOR_SIGNUP") {
+        setNeedsName(true);
+        setErrorMsg("New here? Tell us your name to finish signing up.");
+      } else {
+        handleApiError(err, "Couldn't verify OTP.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Email login ─────────────────────────────────────────────────
+  const handleEmailLogin = async () => {
+    if (!email || !password) {
+      setErrorMsg("Enter your email and password.");
+      return;
+    }
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const resp = await authApi.loginEmail({ email, password });
+      finishLogin(resp);
+    } catch (err) {
+      handleApiError(err, "Sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Google ID token flow ────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "google" || !GOOGLE_CLIENT_ID) return;
+    if (document.getElementById("gis-script")) {
+      initGoogle();
+      return;
+    }
+    const s = document.createElement("script");
+    s.id = "gis-script";
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.defer = true;
+    s.onload = initGoogle;
+    document.head.appendChild(s);
+
+    function initGoogle() {
+      if (!window.google || !GOOGLE_CLIENT_ID) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (resp) => {
+          setBusy(true);
+          setErrorMsg(null);
+          try {
+            const data = await authApi.google(resp.credential);
+            finishLogin(data);
+          } catch (err) {
+            handleApiError(err, "Google sign-in failed.");
+          } finally {
+            setBusy(false);
+          }
+        },
+      });
+      const btn = document.getElementById("gis-btn");
+      if (btn) {
+        window.google.accounts.id.renderButton(btn, {
+          theme: "outline",
+          size: "large",
+          width: 360,
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   return (
     <div className="min-h-screen flex">
       {/* ── Left Panel ── */}
       <div className="hidden lg:flex flex-col justify-between w-[45%] bg-[#129cd3] p-12 relative overflow-hidden">
-        {/* Background decoration */}
         <div className="absolute -top-20 -left-20 w-80 h-80 bg-white/10 rounded-full" />
         <div className="absolute -bottom-16 -right-16 w-72 h-72 bg-white/10 rounded-full" />
         <div className="absolute top-1/2 right-0 w-40 h-40 bg-white/5 rounded-full translate-x-1/2 -translate-y-1/2" />
 
-        {/* Logo */}
         <div className="relative z-10">
           <Link href="/">
             <Image src="/logo-light.png" alt="CPC" width={150} height={52} className="brightness-0 invert" />
           </Link>
         </div>
 
-        {/* Centre content */}
         <div className="relative z-10">
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
             Welcome to<br />CellPhone Crowd
@@ -85,7 +256,6 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        {/* Bottom */}
         <p className="relative z-10 text-white/50 text-xs">
           © 2024 CellPhone Crowd. All rights reserved.
         </p>
@@ -93,7 +263,6 @@ export default function LoginPage() {
 
       {/* ── Right Panel ── */}
       <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12">
-        {/* Mobile logo */}
         <div className="lg:hidden mb-8">
           <Link href="/">
             <Image src="/logo-light.png" alt="CPC" width={140} height={48} />
@@ -111,9 +280,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Card */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* Tabs */}
             <div className="grid grid-cols-3 border-b border-gray-100">
               {(["phone", "google", "email"] as Tab[]).map((tab) => (
                 <button
@@ -131,6 +298,12 @@ export default function LoginPage() {
             </div>
 
             <div className="p-8">
+              {errorMsg && (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 whitespace-pre-line">
+                  {errorMsg}
+                </div>
+              )}
+
               {/* ── Phone Tab ── */}
               {activeTab === "phone" && (
                 <div className="space-y-5">
@@ -154,14 +327,15 @@ export default function LoginPage() {
                         </div>
                       </div>
                       <button
-                        onClick={() => phoneNumber.length === 10 && setOtpSent(true)}
+                        onClick={handleSendOtp}
+                        disabled={phoneNumber.length !== 10 || busy}
                         className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all ${
-                          phoneNumber.length === 10
+                          phoneNumber.length === 10 && !busy
                             ? "bg-[#129cd3] hover:bg-[#0e87b5] text-white shadow-md shadow-[#129cd3]/30"
                             : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         }`}
                       >
-                        Send OTP <ArrowRight size={16} />
+                        {busy ? <Loader2 size={16} className="animate-spin" /> : <>Send OTP <ArrowRight size={16} /></>}
                       </button>
                       <p className="text-center text-xs text-gray-400">
                         We&apos;ll send a 6-digit OTP to verify your number
@@ -173,7 +347,10 @@ export default function LoginPage() {
                         <p className="text-sm text-gray-700">
                           OTP sent to <span className="font-bold text-gray-900">+91 {phoneNumber}</span>
                         </p>
-                        <button onClick={() => setOtpSent(false)} className="text-xs text-[#129cd3] hover:underline font-medium">
+                        <button
+                          onClick={() => { setOtpSent(false); setNeedsName(false); setOtp(["","","","","",""]); }}
+                          className="text-xs text-[#129cd3] hover:underline font-medium"
+                        >
                           Change
                         </button>
                       </div>
@@ -197,15 +374,30 @@ export default function LoginPage() {
                           ))}
                         </div>
                       </div>
-                      <Link
-                        href="/"
-                        className="w-full bg-[#129cd3] hover:bg-[#0e87b5] text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
+                      {needsName && (
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">
+                            Your name
+                          </label>
+                          <input
+                            type="text"
+                            value={signupName}
+                            onChange={(e) => setSignupName(e.target.value.slice(0, 100))}
+                            placeholder="Full name"
+                            className="w-full border-2 border-gray-200 focus:border-[#129cd3] rounded-xl px-4 py-3 text-sm outline-none text-gray-800 transition-colors"
+                          />
+                        </div>
+                      )}
+                      <button
+                        onClick={handleVerifyOtp}
+                        disabled={busy || otp.join("").length !== 6 || (needsName && !signupName.trim())}
+                        className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
                       >
-                        Verify & Continue <ArrowRight size={16} />
-                      </Link>
+                        {busy ? <Loader2 size={16} className="animate-spin" /> : <>Verify &amp; Continue <ArrowRight size={16} /></>}
+                      </button>
                       <p className="text-center text-xs text-gray-500">
                         Didn&apos;t receive?{" "}
-                        <button className="text-[#129cd3] hover:underline font-semibold">Resend OTP</button>
+                        <button onClick={handleSendOtp} className="text-[#129cd3] hover:underline font-semibold">Resend OTP</button>
                       </p>
                     </>
                   )}
@@ -218,14 +410,14 @@ export default function LoginPage() {
                   <p className="text-center text-gray-500 text-sm">
                     Sign in quickly and securely with your Google account.
                   </p>
-                  <Link
-                    href="/"
-                    className="w-full flex items-center justify-center gap-3 border-2 border-gray-200 hover:border-[#129cd3] hover:bg-[#f0f9ff] text-gray-700 font-semibold py-3.5 rounded-xl transition-all group"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                    <span className="group-hover:text-[#129cd3]">Continue with Google</span>
-                  </Link>
+
+                  {GOOGLE_CLIENT_ID ? (
+                    <div className="flex justify-center"><div id="gis-btn" /></div>
+                  ) : (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                      Set <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in <code className="font-mono">.env.local</code> to enable Google sign-in.
+                    </div>
+                  )}
 
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">
@@ -271,6 +463,7 @@ export default function LoginPage() {
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleEmailLogin(); }}
                         placeholder="Enter your password"
                         className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
                       />
@@ -285,12 +478,13 @@ export default function LoginPage() {
                     </label>
                     <a href="#" className="text-[#129cd3] hover:underline font-semibold">Forgot password?</a>
                   </div>
-                  <Link
-                    href="/"
-                    className="w-full bg-[#129cd3] hover:bg-[#0e87b5] text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
+                  <button
+                    onClick={handleEmailLogin}
+                    disabled={busy || !email || !password}
+                    className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
                   >
-                    Sign In <ArrowRight size={16} />
-                  </Link>
+                    {busy ? <Loader2 size={16} className="animate-spin" /> : <>Sign In <ArrowRight size={16} /></>}
+                  </button>
                 </div>
               )}
             </div>
