@@ -35,8 +35,11 @@ jobs:
     timeout-minutes: 15
 
     env:
+      # NEXT_PUBLIC_* values are inlined at build time. NODE_ENV is intentionally
+      # not set — `npm ci` with NODE_ENV=production skips devDependencies
+      # (typescript, eslint, tailwindcss). `next build` sets NODE_ENV=production
+      # internally during the build, and EC2's /etc/cpn/ui.env sets it at runtime.
       NEXT_PUBLIC_API_URL: https://api.cpc24.co.in
-      NODE_ENV: production
 
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +54,7 @@ jobs:
         run: npm ci
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Lint
         run: npm run lint
