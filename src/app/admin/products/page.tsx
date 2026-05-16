@@ -83,11 +83,6 @@ export default function AdminProductsPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Reset to page 0 when filters change.
-  useEffect(() => {
-    setPage(0);
-  }, [statusFilter, categoryFilter]);
-
   // Categories for filter dropdown.
   useEffect(() => {
     let cancelled = false;
@@ -104,33 +99,44 @@ export default function AdminProductsPage() {
     };
   }, []);
 
-  const load = useCallback(async () => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => {
     setLoading(true);
     setErrorMsg(null);
-    try {
-      const resp = await adminApi.listProducts({
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminApi
+      .listProducts({
         status: statusFilter || undefined,
         categoryId: categoryFilter || undefined,
         search: search || undefined,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
+      })
+      .then((resp) => {
+        if (cancelled) return;
+        setItems(resp.items);
+        setTotal(resp.total);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setErrorMsg(
+            isApiError(err)
+              ? err.displayMessage
+              : "Couldn't load products. Try again.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-      setItems(resp.items);
-      setTotal(resp.total);
-    } catch (err) {
-      setErrorMsg(
-        isApiError(err)
-          ? err.displayMessage
-          : "Couldn't load products. Try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, categoryFilter, search, page]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    return () => {
+      cancelled = true;
+    };
+  }, [statusFilter, categoryFilter, search, page, reloadKey]);
 
   const categoryNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -240,9 +246,10 @@ export default function AdminProductsPage() {
           </div>
           <select
             value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as "" | ProductStatus)
-            }
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "" | ProductStatus);
+              setPage(0);
+            }}
             className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
           >
             {STATUS_OPTIONS.map((o) => (
@@ -253,7 +260,10 @@ export default function AdminProductsPage() {
           </select>
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(0);
+            }}
             className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
           >
             <option value="">All categories</option>
@@ -270,7 +280,7 @@ export default function AdminProductsPage() {
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
             <span>{errorMsg}</span>
             <button
-              onClick={() => void load()}
+              onClick={reload}
               className="text-xs font-semibold text-red-700 hover:underline"
             >
               Retry

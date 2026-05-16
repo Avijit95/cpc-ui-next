@@ -77,7 +77,8 @@ export default function CartPage() {
       setPendingQty((p) => ({ ...p, [id]: nextQty }));
       setLineErrors((e) => {
         if (!e[id]) return e;
-        const { [id]: _, ...rest } = e;
+        const rest = { ...e };
+        delete rest[id];
         return rest;
       });
       setBusy(id, true);
@@ -92,7 +93,8 @@ export default function CartPage() {
         }));
       } finally {
         setPendingQty((p) => {
-          const { [id]: _, ...rest } = p;
+          const rest = { ...p };
+          delete rest[id];
           return rest;
         });
         setBusy(id, false);
@@ -106,7 +108,8 @@ export default function CartPage() {
       const id = line.cartItemId;
       setLineErrors((e) => {
         if (!e[id]) return e;
-        const { [id]: _, ...rest } = e;
+        const rest = { ...e };
+        delete rest[id];
         return rest;
       });
       setBusy(id, true);

@@ -176,7 +176,7 @@ export default function DealerDashboardPage() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <h2 className="font-bold text-gray-800">Recent Bulk Orders</h2>
-                <a href="/account/orders" className="text-[#129cd3] text-sm hover:underline">View all</a>
+                <Link href="/account/orders" className="text-[#129cd3] text-sm hover:underline">View all</Link>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

@@ -49,14 +49,39 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
 
   // Load on auth change.
   useEffect(() => {
-    if (status === "authenticated") {
-      void refresh();
-    } else if (status === "unauthenticated") {
-      setItems([]);
-      setError(null);
-      setLoading(false);
+    if (status === "unauthenticated") {
+      // Async-defer the reset so we don't synchronously setState in the effect body.
+      queueMicrotask(() => {
+        setItems([]);
+        setError(null);
+        setLoading(false);
+      });
+      return;
     }
-  }, [status, refresh]);
+    if (status !== "authenticated") return;
+
+    let cancelled = false;
+    wishlistApi
+      .view()
+      .then((v) => {
+        if (cancelled) return;
+        setItems(v.items);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            isApiError(err) ? err.displayMessage : "Failed to load wishlist",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
 
   const isWishlisted = useCallback(
     (productId: string) => items.some((it) => it.id === productId),

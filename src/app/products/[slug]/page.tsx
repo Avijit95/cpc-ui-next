@@ -86,23 +86,25 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (!slug) return;
     const ac = new AbortController();
-    setLoading(true);
-    setError(null);
-    setNotFound(false);
     catalogApi
       .getProduct(slug, ac.signal)
       .then((p) => {
+        if (ac.signal.aborted) return;
         setProduct(p);
         setActiveImageIdx(0);
+        setError(null);
+        setNotFound(false);
       })
       .catch((err: unknown) => {
         if (ac.signal.aborted) return;
         if (isApiError(err) && err.statusCode === 404) {
           setNotFound(true);
+          setError(null);
         } else {
           setError(
             isApiError(err) ? err.displayMessage : "Failed to load product",
           );
+          setNotFound(false);
         }
       })
       .finally(() => {

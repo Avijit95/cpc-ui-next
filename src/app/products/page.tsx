@@ -52,9 +52,6 @@ export default function ProductsPage() {
     const ac = new AbortController();
     const sortValue = sortOptions.find((o) => o.label === sortLabel)?.value;
 
-    setLoading(true);
-    setError(null);
-
     catalogApi
       .listProducts(
         {
@@ -66,7 +63,11 @@ export default function ProductsPage() {
         },
         ac.signal,
       )
-      .then((resp) => setData(resp))
+      .then((resp) => {
+        if (ac.signal.aborted) return;
+        setData(resp);
+        setError(null);
+      })
       .catch((err: unknown) => {
         if (ac.signal.aborted) return;
         setError(

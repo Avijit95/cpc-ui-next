@@ -39,26 +39,36 @@ export default function AdminCategoriesPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => {
     setLoading(true);
     setErrorMsg(null);
-    try {
-      const list = await adminApi.listCategories();
-      setItems(list);
-    } catch (err) {
-      setErrorMsg(
-        isApiError(err)
-          ? err.displayMessage
-          : "Couldn't load categories. Try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    setReloadKey((k) => k + 1);
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    adminApi
+      .listCategories()
+      .then((list) => {
+        if (!cancelled) setItems(list);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setErrorMsg(
+            isApiError(err)
+              ? err.displayMessage
+              : "Couldn't load categories. Try again.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const parentNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -170,7 +180,7 @@ export default function AdminCategoriesPage() {
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
             <span>{errorMsg}</span>
             <button
-              onClick={() => void load()}
+              onClick={reload}
               className="text-xs font-semibold text-red-700 hover:underline"
             >
               Retry

@@ -42,12 +42,14 @@ export default function ProductSection({
 
   useEffect(() => {
     const ac = new AbortController();
-    setLoading(true);
-    setError(null);
 
     catalogApi
       .listProducts({ sort, limit: ITEM_LIMIT }, ac.signal)
-      .then((resp) => setItems(resp.items))
+      .then((resp) => {
+        if (ac.signal.aborted) return;
+        setItems(resp.items);
+        setError(null);
+      })
       .catch((err: unknown) => {
         if (ac.signal.aborted) return;
         setError(

@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Tag, X } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
-import type {
-  AdminCouponRow,
-  CouponType,
-  ProductCouponSlot,
-} from "@/lib/api";
+import type { AdminCouponRow, ProductCouponSlot } from "@/lib/api";
 
 type AttachmentSnapshot = {
   couponId: string;

@@ -80,26 +80,36 @@ export default function PricingPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => {
     setLoading(true);
     setError(null);
-    try {
-      const resp = await adminApi.listCoupons({ limit: 100 });
-      setItems(resp.items);
-    } catch (err) {
-      setError(
-        isApiError(err)
-          ? err.displayMessage
-          : "Couldn't load coupons. Try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    setReloadKey((k) => k + 1);
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    adminApi
+      .listCoupons({ limit: 100 })
+      .then((resp) => {
+        if (!cancelled) setItems(resp.items);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            isApiError(err)
+              ? err.displayMessage
+              : "Couldn't load coupons. Try again.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const totalCount = items.length;
   const activeCount = useMemo(
@@ -118,7 +128,7 @@ export default function PricingPage() {
     try {
       await adminApi.deleteCoupon(confirmDelete.id);
       setConfirmDelete(null);
-      void load();
+      reload();
     } catch (err) {
       setDeleteError(deleteErrorMessage(err));
     } finally {
@@ -276,7 +286,7 @@ export default function PricingPage() {
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false);
-            void load();
+            reload();
           }}
         />
       )}
@@ -287,7 +297,7 @@ export default function PricingPage() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            void load();
+            reload();
           }}
         />
       )}
