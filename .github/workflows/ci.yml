@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Lint + typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      # NEXT_PUBLIC_* values are inlined at build time. Using the real prod
+      # API origin so PR builds detect breakages with what actually ships.
+      NEXT_PUBLIC_API_URL: https://api.cpc24.co.in
+      NODE_ENV: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build (standalone)
+        run: npm run build
+
+      - name: Verify standalone output
+        run: |
+          test -f .next/standalone/server.js
+          test -d .next/static
+          test -d public

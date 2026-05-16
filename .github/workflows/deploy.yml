@@ -1,0 +1,109 @@
+name: Deploy
+
+# Builds the Next.js UI on the runner (the 908 MiB EC2 box cannot run
+# `next build` without OOM-killing the API) and rsyncs the standalone
+# artifact + .next/static + public to /var/www/cpc-ui-next on the EC2 box,
+# then restarts the cpc-ui-next.service systemd unit.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   EC2_HOST    — public hostname or Elastic IP of the EC2 box
+#   EC2_USER    — `ubuntu`
+#   EC2_SSH_KEY — PEM contents (the whole private key, not a path)
+#
+# Required EC2-side prep (one-time, see cell-phone-nest/docs/ui-runbook.md):
+#   /var/www/cpc-ui-next owned ubuntu:www-data, mode 2755 (setgid)
+#   /etc/cpn/ui.env with NODE_ENV=production, PORT=3000, HOSTNAME=127.0.0.1
+#   /etc/sudoers.d/ubuntu-cpc-ui-next granting NOPASSWD for systemctl
+#     {restart,status,start,stop} cpc-ui-next
+#   cpc-ui-next.service installed and enabled
+#   nginx vhost installed
+#   Node 22 on /usr/bin/node (symlink from nvm if needed)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ui-prod
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build + rsync to EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      NEXT_PUBLIC_API_URL: https://api.cpc24.co.in
+      NODE_ENV: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build (standalone)
+        run: npm run build
+
+      - name: Verify standalone output
+        run: |
+          test -f .next/standalone/server.js
+          test -d .next/static
+          test -d public
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Add EC2 host key to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync standalone bundle
+        run: |
+          rsync -avz --delete \
+            .next/standalone/ \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/cpc-ui-next/"
+
+      - name: Rsync .next/static
+        run: |
+          rsync -avz --delete \
+            .next/static/ \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/cpc-ui-next/.next/static/"
+
+      - name: Rsync public/
+        run: |
+          rsync -avz --delete \
+            public/ \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/cpc-ui-next/public/"
+
+      - name: Restart service
+        run: |
+          ssh "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            "sudo systemctl restart cpc-ui-next && sudo systemctl status cpc-ui-next --no-pager --lines=5"
+
+      - name: Smoke test (loopback)
+        run: |
+          ssh "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            "curl -sS -o /dev/null -w 'origin HTTP %{http_code} time %{time_total}s\n' http://127.0.0.1:3000/"
+
+      - name: Smoke test (public)
+        run: |
+          curl -sS -o /dev/null -w 'public HTTP %{http_code} time %{time_total}s\n' \
+            https://cpc24.co.in/ || echo "(public smoke failed — DNS/Cloudflare may not be live yet)"
