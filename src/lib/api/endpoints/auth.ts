@@ -2,6 +2,8 @@ import { request } from "../client";
 import type {
   LoginResponse,
   OtpRequestResponse,
+  PasswordForgotResponse,
+  PasswordResetResponse,
   RefreshResponse,
 } from "../types";
 
@@ -18,6 +20,9 @@ export type EmailLoginBody = {
 
 export type OtpRequestBody = { phone: string };
 export type OtpVerifyBody = { phone: string; code: string; name?: string };
+
+export type PasswordForgotBody = { email: string };
+export type PasswordResetBody = { token: string; newPassword: string };
 
 export const authApi = {
   registerEmail(body: EmailRegisterBody) {
@@ -67,5 +72,19 @@ export const authApi = {
   },
   logoutAll() {
     return request<void>("/auth/logout-all", { method: "POST" });
+  },
+  passwordForgot(body: PasswordForgotBody) {
+    return request<PasswordForgotResponse>("/auth/password/forgot", {
+      method: "POST",
+      body,
+      anonymous: true,
+    });
+  },
+  passwordReset(body: PasswordResetBody) {
+    return request<PasswordResetResponse>("/auth/password/reset", {
+      method: "POST",
+      body,
+      anonymous: true,
+    });
   },
 };

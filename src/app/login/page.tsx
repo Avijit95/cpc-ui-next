@@ -476,7 +476,7 @@ function LoginPageInner() {
                     <label className="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
                       <input type="checkbox" className="accent-[#129cd3]" /> Remember me
                     </label>
-                    <a href="#" className="text-[#129cd3] hover:underline font-semibold">Forgot password?</a>
+                    <Link href="/forgot-password" className="text-[#129cd3] hover:underline font-semibold">Forgot password?</Link>
                   </div>
                   <button
                     onClick={handleEmailLogin}

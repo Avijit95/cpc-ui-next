@@ -1,219 +1,730 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
-import { Plus, Pencil, Trash2, Eye, EyeOff, Image as ImageIcon, LayoutGrid, Megaphone } from "lucide-react";
+import { adminApi, isApiError } from "@/lib/api";
+import type { Banner, CreateBannerBody, UpdateBannerBody } from "@/lib/api";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Eye,
+  EyeOff,
+  ImagePlus,
+  Loader2,
+  X,
+  LayoutGrid,
+  Image as ImageIcon,
+  Calendar,
+} from "lucide-react";
 
-type Tab = "heroSlides" | "promoBanners" | "pages";
+const KNOWN_POSITIONS = ["home_hero", "home_side"] as const;
 
-const heroSlides = [
-  { id: 1, title: "Flagship smartphones", image: "/slide1.jpg", badge: "NEW DROP", active: true, order: 1 },
-  { id: 2, title: "Camera collection", image: "/slide2.jpg", badge: "UP TO 40% OFF", active: true, order: 2 },
-  { id: 3, title: "Audio experience", image: "/slide3.jpg", badge: "BEST DEAL", active: false, order: 3 },
-];
+type ImageContentType = "image/jpeg" | "image/png" | "image/webp";
 
-const promoBanners = [
-  { id: 1, slot: "Right panel #1", image: "/1.webp", link: "/products?category=Smartphones", active: true },
-  { id: 2, slot: "Right panel #2", image: "/2.webp", link: "/products?category=Cameras", active: true },
-];
+type FormState = {
+  imageObjectKey: string;
+  imageUrl: string | null;
+  position: string;
+  linkUrl: string;
+  sortOrder: string;
+  activeFrom: string;
+  activeTo: string;
+  isActive: boolean;
+};
 
-const pages = [
-  { id: 1, title: "About us", slug: "/about", updated: "2026-03-12", status: "Published" },
-  { id: 2, title: "Privacy policy", slug: "/privacy", updated: "2026-02-18", status: "Published" },
-  { id: 3, title: "Refund policy", slug: "/refund", updated: "2026-02-18", status: "Published" },
-  { id: 4, title: "Partner program", slug: "/dealer", updated: "2026-04-21", status: "Draft" },
-];
+const EMPTY_FORM: FormState = {
+  imageObjectKey: "",
+  imageUrl: null,
+  position: "home_hero",
+  linkUrl: "",
+  sortOrder: "0",
+  activeFrom: "",
+  activeTo: "",
+  isActive: true,
+};
+
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return "";
+  }
+}
+
+function fromDatetimeLocal(v: string): string | null {
+  if (!v) return null;
+  try {
+    return new Date(v).toISOString();
+  } catch {
+    return null;
+  }
+}
+
+function toFormState(b: Banner): FormState {
+  return {
+    imageObjectKey: b.imageObjectKey,
+    imageUrl: b.imageUrl,
+    position: b.position,
+    linkUrl: b.linkUrl ?? "",
+    sortOrder: String(b.sortOrder),
+    activeFrom: toDatetimeLocal(b.activeFrom),
+    activeTo: toDatetimeLocal(b.activeTo),
+    isActive: b.isActive,
+  };
+}
 
 export default function CmsPage() {
-  const [tab, setTab] = useState<Tab>("heroSlides");
+  const [items, setItems] = useState<Banner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [modalMode, setModalMode] = useState<"closed" | "create" | "edit">("closed");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [confirmDelete, setConfirmDelete] = useState<Banner | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminApi
+      .listBanners()
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            isApiError(err) ? err.displayMessage : "Could not load banners",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await adminApi.listBanners();
+      setItems(data);
+    } catch {
+      // Best-effort.
+    }
+  }, []);
+
+  const groupedByPosition = useMemo(() => {
+    const map = new Map<string, Banner[]>();
+    for (const b of items) {
+      const list = map.get(b.position) ?? [];
+      list.push(b);
+      map.set(b.position, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.sortOrder - b.sortOrder);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [items]);
+
+  const openCreate = () => {
+    setModalMode("create");
+    setEditId(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+  };
+
+  const openEdit = (banner: Banner) => {
+    setModalMode("edit");
+    setEditId(banner.id);
+    setForm(toFormState(banner));
+    setFormError(null);
+  };
+
+  const closeModal = () => {
+    if (saveBusy || uploadBusy) return;
+    setModalMode("closed");
+    setEditId(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+  };
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const ct = file.type as ImageContentType;
+      if (!["image/jpeg", "image/png", "image/webp"].includes(ct)) {
+        setFormError("Image must be JPG, PNG, or WebP.");
+        return;
+      }
+      setUploadBusy(true);
+      setFormError(null);
+      try {
+        const result = await adminApi.uploadBannerImage(file);
+        setForm((prev) => ({
+          ...prev,
+          imageObjectKey: result.objectKey,
+          imageUrl: result.publicUrl ?? prev.imageUrl,
+        }));
+      } catch (err) {
+        setFormError(
+          isApiError(err) ? err.displayMessage : "Image upload failed",
+        );
+      } finally {
+        setUploadBusy(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [],
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!form.imageObjectKey) {
+      setFormError("Please upload a banner image first.");
+      return;
+    }
+    if (!form.position.trim()) {
+      setFormError("Position is required.");
+      return;
+    }
+    const sortOrder = Number(form.sortOrder);
+    if (Number.isNaN(sortOrder)) {
+      setFormError("Sort order must be a number.");
+      return;
+    }
+    setSaveBusy(true);
+    setFormError(null);
+    try {
+      if (modalMode === "create") {
+        const body: CreateBannerBody = {
+          imageObjectKey: form.imageObjectKey,
+          position: form.position.trim(),
+          sortOrder,
+          isActive: form.isActive,
+        };
+        if (form.linkUrl.trim()) body.linkUrl = form.linkUrl.trim();
+        if (form.activeFrom) body.activeFrom = fromDatetimeLocal(form.activeFrom);
+        if (form.activeTo) body.activeTo = fromDatetimeLocal(form.activeTo);
+        await adminApi.createBanner(body);
+      } else if (modalMode === "edit" && editId) {
+        const body: UpdateBannerBody = {
+          imageObjectKey: form.imageObjectKey,
+          position: form.position.trim(),
+          sortOrder,
+          isActive: form.isActive,
+          linkUrl: form.linkUrl.trim() || null,
+          activeFrom: form.activeFrom ? fromDatetimeLocal(form.activeFrom) : null,
+          activeTo: form.activeTo ? fromDatetimeLocal(form.activeTo) : null,
+        };
+        await adminApi.updateBanner(editId, body);
+      }
+      await refresh();
+      setModalMode("closed");
+      setEditId(null);
+      setForm(EMPTY_FORM);
+    } catch (err) {
+      setFormError(
+        isApiError(err) ? err.displayMessage : "Could not save banner",
+      );
+    } finally {
+      setSaveBusy(false);
+    }
+  }, [modalMode, editId, form, refresh]);
+
+  const toggleActive = useCallback(
+    async (banner: Banner) => {
+      try {
+        await adminApi.updateBanner(banner.id, { isActive: !banner.isActive });
+        await refresh();
+      } catch {
+        // Visual hint only — silent on failure for now.
+      }
+    },
+    [refresh],
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (!confirmDelete) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await adminApi.deleteBanner(confirmDelete.id);
+      setItems((prev) => prev.filter((b) => b.id !== confirmDelete.id));
+      setConfirmDelete(null);
+    } catch (err) {
+      setDeleteError(
+        isApiError(err) ? err.displayMessage : "Could not delete banner",
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [confirmDelete]);
 
   return (
     <>
       <AdminHeader
         title="CMS"
-        subtitle="Banners, hero slides and editable content pages"
+        subtitle="Banners — hero slides, side panels, scheduled campaigns"
         actions={
-          <button className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
-            <Plus size={14} /> New {tab === "heroSlides" ? "slide" : tab === "promoBanners" ? "banner" : "page"}
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={14} /> New banner
           </button>
         }
       />
 
       <div className="p-6 space-y-5">
+        {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
             <div className="w-11 h-11 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center">
               <LayoutGrid size={20} />
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Hero slides</p>
-              <p className="text-xl font-bold text-gray-800">{heroSlides.length}</p>
+              <p className="text-xs text-gray-500 uppercase">Banners</p>
+              <p className="text-xl font-bold text-gray-800">{items.length}</p>
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-              <Megaphone size={20} />
+            <div className="w-11 h-11 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+              <Eye size={20} />
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Promo banners</p>
-              <p className="text-xl font-bold text-gray-800">{promoBanners.length}</p>
+              <p className="text-xs text-gray-500 uppercase">Active</p>
+              <p className="text-xl font-bold text-gray-800">
+                {items.filter((b) => b.isActive).length}
+              </p>
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center">
+            <div className="w-11 h-11 rounded-lg bg-gray-100 text-gray-600 flex items-center justify-center">
               <ImageIcon size={20} />
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase">Content pages</p>
-              <p className="text-xl font-bold text-gray-800">{pages.length}</p>
+              <p className="text-xs text-gray-500 uppercase">Positions</p>
+              <p className="text-xl font-bold text-gray-800">
+                {groupedByPosition.length}
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="flex items-center border-b border-gray-100 px-2">
-            {([
-              { id: "heroSlides" as const, label: "Hero slides" },
-              { id: "promoBanners" as const, label: "Promo banners" },
-              { id: "pages" as const, label: "Pages" },
-            ]).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`px-5 py-3.5 text-sm font-semibold border-b-2 transition-colors ${
-                  tab === t.id
-                    ? "border-[#129cd3] text-[#129cd3]"
-                    : "border-transparent text-gray-500 hover:text-gray-800"
-                }`}
-              >
-                {t.label}
-              </button>
+        {/* List */}
+        {loading ? (
+          <div className="space-y-3">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse"
+              />
             ))}
           </div>
-
-          <div className="p-5">
-            {tab === "heroSlides" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {heroSlides.map((s) => (
-                  <div key={s.id} className="border border-gray-200 rounded-xl overflow-hidden group">
-                    <div className="relative h-36 bg-gray-100">
+        ) : error ? (
+          <div className="bg-white rounded-xl border border-red-200 p-5 text-sm text-red-600">
+            {error}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
+            <ImageIcon size={32} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-sm font-semibold text-gray-700 mb-1">
+              No banners yet
+            </p>
+            <p className="text-xs text-gray-500 mb-4">
+              Add a banner image and assign it a position to start displaying it on the storefront.
+            </p>
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+            >
+              <Plus size={14} /> New banner
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {groupedByPosition.map(([position, list]) => (
+              <div
+                key={position}
+                className="bg-white border border-gray-200 rounded-xl overflow-hidden"
+              >
+                <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <h2 className="font-bold text-gray-800 text-sm">
+                    <code className="text-[11px] bg-gray-100 px-1.5 py-0.5 rounded">
+                      {position}
+                    </code>
+                  </h2>
+                  <span className="text-xs text-gray-500">
+                    {list.length} banner{list.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {list.map((b) => (
+                    <div
+                      key={b.id}
+                      className="px-5 py-3 flex items-center gap-4"
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s.image} alt={s.title} className="w-full h-full object-cover" />
-                      <span className="absolute top-2 left-2 bg-yellow-400 text-gray-900 text-[10px] font-bold px-2 py-0.5 rounded">
-                        {s.badge}
-                      </span>
-                      <span
-                        className={`absolute top-2 right-2 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          s.active ? "bg-emerald-500 text-white" : "bg-gray-500 text-white"
-                        }`}
-                      >
-                        {s.active ? "Live" : "Hidden"}
-                      </span>
-                    </div>
-                    <div className="p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-sm text-gray-800">{s.title}</p>
-                        <p className="text-xs text-gray-500">Order #{s.order}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button className="p-1.5 rounded text-gray-400 hover:text-[#129cd3] hover:bg-[#e8f7fc]">
-                          {s.active ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
-                        <button className="p-1.5 rounded text-gray-400 hover:text-[#129cd3] hover:bg-[#e8f7fc]">
-                          <Pencil size={14} />
-                        </button>
-                        <button className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {tab === "promoBanners" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {promoBanners.map((b) => (
-                  <div key={b.id} className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="relative h-48 bg-gray-100">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={b.image} alt={b.slot} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="font-semibold text-sm text-gray-800">{b.slot}</p>
-                        <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            b.active ? "bg-emerald-500 text-white" : "bg-gray-500 text-white"
-                          }`}
-                        >
-                          {b.active ? "Live" : "Hidden"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 font-mono mb-3">{b.link}</p>
-                      <div className="flex items-center gap-2">
-                        <button className="flex-1 text-xs font-semibold border border-gray-200 rounded-lg px-3 py-1.5 hover:border-[#129cd3] hover:text-[#129cd3]">
-                          Edit
-                        </button>
-                        <button className="flex-1 text-xs font-semibold border border-red-200 text-red-500 rounded-lg px-3 py-1.5 hover:bg-red-50">
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {tab === "pages" && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                    <tr>
-                      <th className="text-left font-semibold px-5 py-3">Page</th>
-                      <th className="text-left font-semibold px-5 py-3">Slug</th>
-                      <th className="text-left font-semibold px-5 py-3">Last updated</th>
-                      <th className="text-left font-semibold px-5 py-3">Status</th>
-                      <th className="px-5 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {pages.map((p) => (
-                      <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-3 font-semibold text-gray-800">{p.title}</td>
-                        <td className="px-5 py-3 font-mono text-xs text-gray-600">{p.slug}</td>
-                        <td className="px-5 py-3 text-gray-500">{p.updated}</td>
-                        <td className="px-5 py-3">
-                          <span
-                            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
-                              p.status === "Published"
-                                ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                                : "bg-gray-100 text-gray-600 border-gray-200"
-                            }`}
-                          >
-                            {p.status}
+                      <img
+                        src={b.imageUrl}
+                        alt=""
+                        className="w-24 h-14 object-cover rounded border border-gray-200 flex-shrink-0 bg-gray-50"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-semibold text-gray-700">
+                            Sort #{b.sortOrder}
                           </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-1">
-                            <button className="p-1.5 rounded text-gray-400 hover:text-[#129cd3] hover:bg-[#e8f7fc]">
-                              <Pencil size={14} />
-                            </button>
-                            <button className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                          {b.isActive ? (
+                            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                              ACTIVE
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded-full">
+                              PAUSED
+                            </span>
+                          )}
+                        </div>
+                        {b.linkUrl && (
+                          <p className="text-xs text-[#129cd3] line-clamp-1">
+                            → {b.linkUrl}
+                          </p>
+                        )}
+                        {(b.activeFrom || b.activeTo) && (
+                          <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
+                            <Calendar size={10} />
+                            {b.activeFrom
+                              ? new Date(b.activeFrom).toLocaleDateString(
+                                  "en-IN",
+                                  { day: "2-digit", month: "short", year: "numeric" },
+                                )
+                              : "open"}{" "}
+                            →{" "}
+                            {b.activeTo
+                              ? new Date(b.activeTo).toLocaleDateString(
+                                  "en-IN",
+                                  { day: "2-digit", month: "short", year: "numeric" },
+                                )
+                              : "open"}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => toggleActive(b)}
+                          className="p-1.5 rounded text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+                          aria-label={b.isActive ? "Pause" : "Activate"}
+                          title={b.isActive ? "Pause" : "Activate"}
+                        >
+                          {b.isActive ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                        <button
+                          onClick={() => openEdit(b)}
+                          className="p-1.5 rounded text-gray-400 hover:text-[#129cd3] hover:bg-[#e8f7fc]"
+                          aria-label="Edit"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setConfirmDelete(b);
+                            setDeleteError(null);
+                          }}
+                          className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50"
+                          aria-label="Delete"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Banner form modal */}
+      {modalMode !== "closed" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6 z-10 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-800">
+                {modalMode === "create" ? "New banner" : "Edit banner"}
+              </h2>
+              <button
+                onClick={closeModal}
+                disabled={saveBusy || uploadBusy}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Image */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Banner image
+                </label>
+                <div className="flex items-center gap-3">
+                  {form.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={form.imageUrl}
+                      alt=""
+                      className="w-32 h-20 object-cover rounded border border-gray-200 bg-gray-50"
+                    />
+                  ) : (
+                    <div className="w-32 h-20 rounded border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center text-gray-400">
+                      <ImageIcon size={20} />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadBusy}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#129cd3] border border-[#129cd3] px-3 py-1.5 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50 transition-colors"
+                    >
+                      {uploadBusy ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <ImagePlus size={13} />
+                      )}
+                      {form.imageObjectKey ? "Replace image" : "Upload image"}
+                    </button>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      JPG / PNG / WebP. Stored under banners/ — required.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Position */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Position slot
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={
+                      KNOWN_POSITIONS.includes(
+                        form.position as (typeof KNOWN_POSITIONS)[number],
+                      )
+                        ? form.position
+                        : "__custom"
+                    }
+                    onChange={(e) => {
+                      if (e.target.value === "__custom") {
+                        setForm((prev) => ({ ...prev, position: "" }));
+                      } else {
+                        setForm((prev) => ({
+                          ...prev,
+                          position: e.target.value,
+                        }));
+                      }
+                    }}
+                    className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 bg-white"
+                  >
+                    {KNOWN_POSITIONS.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
                     ))}
-                  </tbody>
-                </table>
+                    <option value="__custom">Custom…</option>
+                  </select>
+                  {!KNOWN_POSITIONS.includes(
+                    form.position as (typeof KNOWN_POSITIONS)[number],
+                  ) && (
+                    <input
+                      type="text"
+                      placeholder="custom_slot_name"
+                      value={form.position}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          position: e.target.value,
+                        }))
+                      }
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Link URL */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Click-through URL{" "}
+                  <span className="font-normal text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="/products?category=Phones"
+                  value={form.linkUrl}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, linkUrl: e.target.value }))
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                />
+              </div>
+
+              {/* Sort order */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Sort order
+                </label>
+                <input
+                  type="number"
+                  value={form.sortOrder}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, sortOrder: e.target.value }))
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                />
+              </div>
+
+              {/* Active window */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Active from{" "}
+                    <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={form.activeFrom}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        activeFrom: e.target.value,
+                      }))
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Active to{" "}
+                    <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={form.activeTo}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, activeTo: e.target.value }))
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+              </div>
+
+              {/* Active toggle */}
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, isActive: e.target.checked }))
+                  }
+                  className="w-4 h-4 accent-[#129cd3]"
+                />
+                Active (visible on the storefront within its date window)
+              </label>
+            </div>
+
+            {formError && (
+              <div className="mt-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {formError}
               </div>
             )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleSave}
+                disabled={saveBusy || uploadBusy}
+                className="flex-1 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {saveBusy && <Loader2 size={16} className="animate-spin" />}
+                {modalMode === "create" ? "Create banner" : "Save changes"}
+              </button>
+              <button
+                onClick={closeModal}
+                disabled={saveBusy || uploadBusy}
+                className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Delete confirm */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !deleteBusy && setConfirmDelete(null)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 z-10">
+            <h2 className="text-lg font-bold text-gray-800 mb-2">
+              Delete banner?
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              The banner in slot{" "}
+              <code className="bg-gray-100 px-1.5 py-0.5 rounded text-[11px]">
+                {confirmDelete.position}
+              </code>{" "}
+              will be removed. The image stays in S3 (manual cleanup if needed).
+            </p>
+            {deleteError && (
+              <div className="mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {deleteError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleDelete}
+                disabled={deleteBusy}
+                className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {deleteBusy && <Loader2 size={16} className="animate-spin" />}
+                Delete
+              </button>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleteBusy}
+                className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

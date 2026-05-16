@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { cartApi, catalogApi, isApiError } from "@/lib/api";
-import type { ProductDetail } from "@/lib/api";
+import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
+import type { ProductDetail, Review, ReviewListResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import {
@@ -18,6 +18,9 @@ import {
   RotateCcw,
   ChevronRight,
   Check,
+  Loader2,
+  Trash2,
+  Edit2,
 } from "lucide-react";
 
 function formatPrice(price: number) {
@@ -27,18 +30,24 @@ function formatPrice(price: number) {
 const tabs = ["Description", "Specifications", "Reviews"] as const;
 type TabType = (typeof tabs)[number];
 
-const mockReviews = [
-  { name: "Rahul S.", rating: 5, comment: "Absolutely love this product! Build quality is top-notch.", date: "12 Mar 2024" },
-  { name: "Priya M.", rating: 4, comment: "Great value for money. Delivery was fast too.", date: "28 Feb 2024" },
-  { name: "Aakash T.", rating: 5, comment: "Best purchase this year. Highly recommend!", date: "14 Jan 2024" },
-];
-
 type AddState = "idle" | "busy" | "added" | "error";
+
+function formatReviewDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { status } = useAuth();
+  const { user, status } = useAuth();
   const slug =
     typeof params?.slug === "string"
       ? params.slug
@@ -59,6 +68,20 @@ export default function ProductDetailPage() {
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
   const wishlisted = product ? isWishlisted(product.id) : false;
+
+  // Reviews state.
+  const [reviewsResp, setReviewsResp] = useState<ReviewListResponse | null>(null);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [formRating, setFormRating] = useState(5);
+  const [formText, setFormText] = useState("");
+  const [formBusy, setFormBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+
+  const myReview = reviewsResp?.items.find((r) => r.userId === user?.id) ?? null;
 
   useEffect(() => {
     if (!slug) return;
@@ -87,6 +110,115 @@ export default function ProductDetailPage() {
       });
     return () => ac.abort();
   }, [slug]);
+
+  // Fetch reviews when slug resolves (public endpoint, doesn't depend on auth).
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    reviewsApi
+      .listForProduct(slug, { limit: 50 })
+      .then((resp) => {
+        if (!cancelled) {
+          setReviewsResp(resp);
+          setReviewsError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setReviewsError(
+            isApiError(err) ? err.displayMessage : "Could not load reviews",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  const refreshReviews = useCallback(async () => {
+    if (!slug) return;
+    try {
+      const resp = await reviewsApi.listForProduct(slug, { limit: 50 });
+      setReviewsResp(resp);
+    } catch {
+      // Best-effort refresh — keep prior list on failure.
+    }
+  }, [slug]);
+
+  const openReviewForm = (existing: Review | null) => {
+    if (existing) {
+      setEditingReviewId(existing.id);
+      setFormRating(existing.rating);
+      setFormText(existing.text ?? "");
+    } else {
+      setEditingReviewId(null);
+      setFormRating(5);
+      setFormText("");
+    }
+    setFormError(null);
+    setShowReviewForm(true);
+  };
+
+  const closeReviewForm = () => {
+    if (formBusy) return;
+    setShowReviewForm(false);
+    setFormText("");
+    setEditingReviewId(null);
+    setFormError(null);
+  };
+
+  const handleReviewSubmit = useCallback(async () => {
+    if (!product) return;
+    if (formRating < 1 || formRating > 5) {
+      setFormError("Please pick a rating from 1 to 5.");
+      return;
+    }
+    setFormBusy(true);
+    setFormError(null);
+    try {
+      const text = formText.trim() || undefined;
+      if (editingReviewId) {
+        await reviewsApi.update(editingReviewId, {
+          rating: formRating,
+          text,
+        });
+      } else {
+        await reviewsApi.create({
+          productId: product.id,
+          rating: formRating,
+          text,
+        });
+      }
+      await refreshReviews();
+      setShowReviewForm(false);
+      setEditingReviewId(null);
+      setFormText("");
+    } catch (err) {
+      setFormError(
+        isApiError(err) ? err.displayMessage : "Could not submit review",
+      );
+    } finally {
+      setFormBusy(false);
+    }
+  }, [product, formRating, formText, editingReviewId, refreshReviews]);
+
+  const handleReviewDelete = useCallback(
+    async (id: string) => {
+      setDeleteBusyId(id);
+      try {
+        await reviewsApi.remove(id);
+        await refreshReviews();
+      } catch {
+        // No toast surface — silently ignore for now.
+      } finally {
+        setDeleteBusyId(null);
+      }
+    },
+    [refreshReviews],
+  );
 
   if (loading) {
     return <PdpSkeleton />;
@@ -202,16 +334,39 @@ export default function ProductDetailPage() {
 
               <h1 className="text-2xl font-bold text-gray-900 mb-3 leading-snug">{product.name}</h1>
 
-              {/* Rating (placeholder until reviews API ships) */}
-              <div className="flex items-center gap-2 mb-4">
+              {/* Rating (live from reviewsResp.aggregate) */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("Reviews")}
+                className="flex items-center gap-2 mb-4 group"
+              >
                 <div className="flex">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} size={16} className="fill-gray-200 text-gray-200" />
-                  ))}
+                  {[...Array(5)].map((_, i) => {
+                    const filled =
+                      i < Math.round(reviewsResp?.aggregate.average ?? 0);
+                    return (
+                      <Star
+                        key={i}
+                        size={16}
+                        className={
+                          filled
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "fill-gray-200 text-gray-200"
+                        }
+                      />
+                    );
+                  })}
                 </div>
-                <span className="text-sm font-semibold text-gray-700">0</span>
-                <span className="text-sm text-gray-500">(0 reviews)</span>
-              </div>
+                <span className="text-sm font-semibold text-gray-700">
+                  {reviewsResp?.aggregate.count
+                    ? reviewsResp.aggregate.average.toFixed(1)
+                    : "0"}
+                </span>
+                <span className="text-sm text-gray-500 group-hover:text-[#129cd3] group-hover:underline">
+                  ({reviewsResp?.aggregate.count ?? 0} review
+                  {reviewsResp?.aggregate.count === 1 ? "" : "s"})
+                </span>
+              </button>
 
               {/* Pricing */}
               <div className="flex items-baseline gap-3 mb-2">
@@ -394,37 +549,227 @@ export default function ProductDetailPage() {
 
               {activeTab === "Reviews" && (
                 <div className="space-y-5">
+                  {/* Aggregate */}
                   <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
-                    <div className="text-5xl font-bold text-[#129cd3]">0</div>
+                    <div className="text-5xl font-bold text-[#129cd3]">
+                      {reviewsResp?.aggregate.count
+                        ? reviewsResp.aggregate.average.toFixed(1)
+                        : "—"}
+                    </div>
                     <div>
                       <div className="flex mb-1">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} size={18} className="fill-gray-200 text-gray-200" />
-                        ))}
+                        {[...Array(5)].map((_, i) => {
+                          const filled =
+                            i < Math.round(reviewsResp?.aggregate.average ?? 0);
+                          return (
+                            <Star
+                              key={i}
+                              size={18}
+                              className={
+                                filled
+                                  ? "fill-yellow-400 text-yellow-400"
+                                  : "fill-gray-200 text-gray-200"
+                              }
+                            />
+                          );
+                        })}
                       </div>
-                      <p className="text-sm text-gray-500">0 verified reviews</p>
+                      <p className="text-sm text-gray-500">
+                        {reviewsResp?.aggregate.count ?? 0} review
+                        {reviewsResp?.aggregate.count === 1 ? "" : "s"}
+                      </p>
                     </div>
                   </div>
-                  {mockReviews.map((review, i) => (
-                    <div key={i} className="pb-4 border-b border-gray-100 last:border-0">
-                      <div className="flex items-start justify-between mb-1">
-                        <div>
-                          <span className="font-semibold text-sm text-gray-800">{review.name}</span>
-                          <div className="flex mt-0.5">
-                            {[...Array(5)].map((_, j) => (
+
+                  {/* CTA / Your review */}
+                  {status === "authenticated" ? (
+                    myReview ? (
+                      <div className="bg-[#e8f7fc] border border-[#129cd3]/30 rounded-lg p-4 flex items-start justify-between gap-3">
+                        <div className="text-xs">
+                          <p className="font-semibold text-gray-800 mb-0.5">
+                            Your review
+                          </p>
+                          <p className="text-gray-600">
+                            Submitted {formatReviewDate(myReview.createdAt)}
+                            {myReview.updatedAt !== myReview.createdAt
+                              ? " · edited"
+                              : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => openReviewForm(myReview)}
+                            className="flex items-center gap-1 text-xs text-[#129cd3] border border-[#129cd3] px-2.5 py-1.5 rounded-lg hover:bg-white transition-colors"
+                          >
+                            <Edit2 size={12} /> Edit
+                          </button>
+                          <button
+                            onClick={() => handleReviewDelete(myReview.id)}
+                            disabled={deleteBusyId === myReview.id}
+                            className="flex items-center gap-1 text-xs text-red-500 border border-red-400 px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                          >
+                            {deleteBusyId === myReview.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={12} />
+                            )}{" "}
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => openReviewForm(null)}
+                        className="inline-flex items-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+                      >
+                        <Star size={14} /> Write a Review
+                      </button>
+                    )
+                  ) : (
+                    <div className="text-xs text-gray-500">
+                      <Link href="/login" className="text-[#129cd3] hover:underline">
+                        Sign in
+                      </Link>{" "}
+                      to leave a review.
+                    </div>
+                  )}
+
+                  {/* Inline review form */}
+                  {showReviewForm && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <div className="mb-3">
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">
+                          Rating
+                        </label>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setFormRating(n)}
+                              className="p-1"
+                            >
                               <Star
-                                key={j}
-                                size={12}
-                                className={j < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-gray-200 text-gray-200"}
+                                size={22}
+                                className={
+                                  n <= formRating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "fill-gray-200 text-gray-300"
+                                }
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mb-3">
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">
+                          Comments{" "}
+                          <span className="font-normal text-gray-400">
+                            (optional)
+                          </span>
+                        </label>
+                        <textarea
+                          rows={4}
+                          maxLength={2000}
+                          value={formText}
+                          onChange={(e) => setFormText(e.target.value)}
+                          placeholder="Share your experience with this product…"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 resize-none bg-white"
+                        />
+                      </div>
+                      {formError && (
+                        <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                          {formError}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleReviewSubmit}
+                          disabled={formBusy}
+                          className="flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                        >
+                          {formBusy && (
+                            <Loader2 size={14} className="animate-spin" />
+                          )}
+                          {editingReviewId ? "Save Changes" : "Submit Review"}
+                        </button>
+                        <button
+                          onClick={closeReviewForm}
+                          disabled={formBusy}
+                          className="border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-white transition-colors disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* List */}
+                  {reviewsLoading ? (
+                    <div className="space-y-3">
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="h-20 bg-gray-100 rounded-lg animate-pulse"
+                        />
+                      ))}
+                    </div>
+                  ) : reviewsError ? (
+                    <p className="text-sm text-red-600">{reviewsError}</p>
+                  ) : !reviewsResp || reviewsResp.items.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      No reviews yet. Be the first to share your thoughts!
+                    </p>
+                  ) : (
+                    reviewsResp.items.map((review) => (
+                      <div
+                        key={review.id}
+                        className="pb-4 border-b border-gray-100 last:border-0"
+                      >
+                        <div className="flex items-start justify-between mb-1">
+                          <div>
+                            <span className="font-semibold text-sm text-gray-800">
+                              {review.user.name}
+                            </span>
+                            <div className="flex mt-0.5">
+                              {[...Array(5)].map((_, j) => (
+                                <Star
+                                  key={j}
+                                  size={12}
+                                  className={
+                                    j < review.rating
+                                      ? "fill-yellow-400 text-yellow-400"
+                                      : "fill-gray-200 text-gray-200"
+                                  }
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {formatReviewDate(review.createdAt)}
+                          </span>
+                        </div>
+                        {review.text && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            {review.text}
+                          </p>
+                        )}
+                        {review.photoUrls.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {review.photoUrls.map((url, idx) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={idx}
+                                src={url}
+                                alt=""
+                                className="w-16 h-16 object-cover rounded border border-gray-200"
                               />
                             ))}
                           </div>
-                        </div>
-                        <span className="text-xs text-gray-400">{review.date}</span>
+                        )}
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">{review.comment}</p>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               )}
             </div>

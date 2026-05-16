@@ -1,27 +1,54 @@
 import { request, s3Put } from "../client";
 import type {
+  ActivityLogResponse,
   AdminCategory,
   AdminCategoryListItem,
   AdminCouponDetail,
   AdminCouponRow,
   AdminCouponsList,
+  AdminOrderDetail,
+  AdminOrderListResponse,
+  AdminOrderStatusPatchResponse,
   AdminPartner,
   AdminPartnerDetail,
   AdminPartnersList,
   AdminProduct,
   AdminProductDetail,
   AdminProductsList,
+  AdminRegenerateInvoiceResponse,
+  AdminUserDetail,
+  AdminUserRow,
+  AdminUsersListResponse,
   AdminVariant,
   AttachedSlotResponse,
+  Banner,
+  BannerPresignResponse,
   CouponStatus,
   CouponType,
+  DashboardSummary,
   ImportJobAccepted,
   ImportJobStatus,
   KycStatus,
+  OrderStatus,
+  PartnersReport,
   ProductCouponSlot,
   ProductImagePresignResponse,
   ProductImagesConfirmResponse,
   ProductStatus,
+  ProductsReport,
+  ProductsReportSort,
+  ReportExportDetail,
+  ReportExportListResponse,
+  ReportExportType,
+  ReportGroupBy,
+  Role,
+  SalesReport,
+  Ticket,
+  TicketDetail,
+  TicketListResponse,
+  TicketMessage,
+  TicketStatus,
+  UserStatus,
 } from "../types";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -130,6 +157,128 @@ export type CreateCouponBody = {
 export type UpdateCouponBody = {
   name?: string;
   status?: CouponStatus;
+};
+
+export type ListAdminOrdersQuery = {
+  status?: OrderStatus;
+  userId?: string;
+  q?: string;
+  from?: string; // ISO date
+  to?: string; // ISO date
+  limit?: number;
+  offset?: number;
+};
+
+export type PatchOrderStatusBody = {
+  toStatus: OrderStatus;
+  note?: string;
+};
+
+// ── Activity log + admin users + dashboard + reports (Sprint 5a) ─────────
+
+export type ListActivityLogsQuery = {
+  actorUserId?: string;
+  targetType?: string;
+  targetId?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type ListAdminUsersQuery = {
+  role?: Role;
+  status?: UserStatus;
+  kycStatus?: KycStatus;
+  q?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type PatchUserRoleBody = { role: Role };
+export type PatchUserStatusBody = { status: "ACTIVE" | "SUSPENDED" };
+
+export type SalesReportQuery = {
+  from: string;
+  to: string;
+  groupBy?: ReportGroupBy;
+};
+
+export type PartnersReportQuery = {
+  from?: string;
+  to?: string;
+};
+
+export type ProductsReportQuery = {
+  from?: string;
+  to?: string;
+  sort?: ProductsReportSort;
+  limit?: number;
+};
+
+export type SalesExportBody = {
+  from: string;
+  to: string;
+  groupBy?: ReportGroupBy;
+};
+
+export type PartnersExportBody = {
+  from?: string;
+  to?: string;
+};
+
+export type ProductsExportBody = {
+  from?: string;
+  to?: string;
+  sort?: ProductsReportSort;
+  limit?: number;
+};
+
+export type ListAdminTicketsQuery = {
+  status?: TicketStatus;
+  assigneeId?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type UpdateTicketBody = {
+  status?: TicketStatus;
+  assigneeId?: string | null;
+};
+
+export type AdminTicketMessageBody = {
+  body: string;
+  attachments?: string[];
+  isInternalNote?: boolean;
+};
+
+export type BannerPresignContentType = "image/jpeg" | "image/png" | "image/webp";
+
+export type BannerPresignBody = {
+  contentType: BannerPresignContentType;
+  contentLength: number;
+};
+
+export type CreateBannerBody = {
+  imageObjectKey: string;
+  position: string;
+  linkUrl?: string;
+  sortOrder?: number;
+  activeFrom?: string | null;
+  activeTo?: string | null;
+  isActive?: boolean;
+};
+
+// PATCH allows nulling out linkUrl / activeFrom / activeTo per the spec.
+export type UpdateBannerBody = {
+  imageObjectKey?: string;
+  position?: string;
+  linkUrl?: string | null;
+  sortOrder?: number;
+  activeFrom?: string | null;
+  activeTo?: string | null;
+  isActive?: boolean;
 };
 
 export type AttachProductCouponBody = {
@@ -314,5 +463,170 @@ export const adminApi = {
     return request<void>(`/admin/products/${productId}/coupons/${slot}`, {
       method: "DELETE",
     });
+  },
+
+  // ── Orders (Sprint 4) ───────────────────────────────────────────────────
+  listOrders(query: ListAdminOrdersQuery = {}) {
+    return request<AdminOrderListResponse>("/admin/orders", { query });
+  },
+  getOrder(id: string) {
+    return request<AdminOrderDetail>(
+      `/admin/orders/${encodeURIComponent(id)}`,
+    );
+  },
+  patchOrderStatus(id: string, body: PatchOrderStatusBody) {
+    return request<AdminOrderStatusPatchResponse>(
+      `/admin/orders/${encodeURIComponent(id)}/status`,
+      { method: "PATCH", body },
+    );
+  },
+  regenerateInvoice(id: string) {
+    return request<AdminRegenerateInvoiceResponse>(
+      `/admin/orders/${encodeURIComponent(id)}/regenerate-invoice`,
+      { method: "POST" },
+    );
+  },
+
+  // ── Banners (Sprint 5b) ─────────────────────────────────────────────────
+  listBanners() {
+    return request<Banner[]>("/admin/banners");
+  },
+  getBanner(id: string) {
+    return request<Banner>(`/admin/banners/${encodeURIComponent(id)}`);
+  },
+  createBanner(body: CreateBannerBody) {
+    return request<Banner>("/admin/banners", { method: "POST", body });
+  },
+  updateBanner(id: string, body: UpdateBannerBody) {
+    return request<Banner>(`/admin/banners/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body,
+    });
+  },
+  deleteBanner(id: string) {
+    return request<{ id: string }>(
+      `/admin/banners/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+  },
+  presignBanner(body: BannerPresignBody) {
+    return request<BannerPresignResponse>("/admin/banners/presign", {
+      method: "POST",
+      body,
+    });
+  },
+  // Convenience: presign + S3 PUT, returns objectKey ready to attach.
+  async uploadBannerImage(
+    file: File,
+  ): Promise<{ objectKey: string; publicUrl: string | null }> {
+    const ct = file.type as BannerPresignContentType;
+    const presigned = await this.presignBanner({
+      contentType: ct,
+      contentLength: file.size,
+    });
+    await s3Put(presigned.uploadUrl, file);
+    return {
+      objectKey: presigned.objectKey,
+      publicUrl: presigned.publicUrl,
+    };
+  },
+
+  // ── Activity logs (Sprint 5a) ───────────────────────────────────────────
+  listActivityLogs(query: ListActivityLogsQuery = {}) {
+    return request<ActivityLogResponse>("/admin/activity-logs", { query });
+  },
+
+  // ── Admin users (Sprint 5a) ─────────────────────────────────────────────
+  listAdminUsers(query: ListAdminUsersQuery = {}) {
+    return request<AdminUsersListResponse>("/admin/users", { query });
+  },
+  getAdminUser(id: string) {
+    return request<AdminUserDetail>(
+      `/admin/users/${encodeURIComponent(id)}`,
+    );
+  },
+  patchUserRole(id: string, body: PatchUserRoleBody) {
+    return request<AdminUserRow>(
+      `/admin/users/${encodeURIComponent(id)}/role`,
+      { method: "PATCH", body },
+    );
+  },
+  patchUserStatus(id: string, body: PatchUserStatusBody) {
+    return request<AdminUserRow>(
+      `/admin/users/${encodeURIComponent(id)}/status`,
+      { method: "PATCH", body },
+    );
+  },
+
+  // ── Dashboard (Sprint 5a) ───────────────────────────────────────────────
+  getDashboard() {
+    return request<DashboardSummary>("/admin/dashboard");
+  },
+
+  // ── Reports (Sprint 5a) ─────────────────────────────────────────────────
+  getSalesReport(query: SalesReportQuery) {
+    return request<SalesReport>("/admin/reports/sales", { query });
+  },
+  getPartnersReport(query: PartnersReportQuery = {}) {
+    return request<PartnersReport>("/admin/reports/partners", { query });
+  },
+  getProductsReport(query: ProductsReportQuery = {}) {
+    return request<ProductsReport>("/admin/reports/products", { query });
+  },
+
+  // ── Report exports (Sprint 5a) ──────────────────────────────────────────
+  enqueueSalesExport(body: SalesExportBody) {
+    return request<ReportExportDetail>("/admin/reports/sales/export", {
+      method: "POST",
+      body,
+    });
+  },
+  enqueuePartnersExport(body: PartnersExportBody) {
+    return request<ReportExportDetail>("/admin/reports/partners/export", {
+      method: "POST",
+      body,
+    });
+  },
+  enqueueProductsExport(body: ProductsExportBody) {
+    return request<ReportExportDetail>("/admin/reports/products/export", {
+      method: "POST",
+      body,
+    });
+  },
+  listReportExports() {
+    return request<ReportExportListResponse>("/admin/reports/exports");
+  },
+  getReportExport(id: string) {
+    return request<ReportExportDetail>(
+      `/admin/reports/exports/${encodeURIComponent(id)}`,
+    );
+  },
+  // Convenience: tell TypeScript which export type returned. (Same shape.)
+  enqueueReportExport(
+    type: ReportExportType,
+    body: SalesExportBody | PartnersExportBody | ProductsExportBody,
+  ) {
+    const path = `/admin/reports/${type}/export`;
+    return request<ReportExportDetail>(path, { method: "POST", body });
+  },
+
+  // ── Support tickets (Sprint 5b — admin side) ────────────────────────────
+  listTickets(query: ListAdminTicketsQuery = {}) {
+    return request<TicketListResponse>("/admin/tickets", { query });
+  },
+  getTicket(id: string) {
+    return request<TicketDetail>(`/admin/tickets/${encodeURIComponent(id)}`);
+  },
+  updateTicket(id: string, body: UpdateTicketBody) {
+    return request<Ticket>(`/admin/tickets/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body,
+    });
+  },
+  postTicketMessage(id: string, body: AdminTicketMessageBody) {
+    return request<TicketMessage>(
+      `/admin/tickets/${encodeURIComponent(id)}/messages`,
+      { method: "POST", body },
+    );
   },
 };

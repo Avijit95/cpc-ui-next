@@ -370,12 +370,12 @@ export default function CartPage() {
                     </span>
                   </div>
 
-                  <a
-                    href="/invoice"
+                  <Link
+                    href="/checkout"
                     className="w-full flex items-center justify-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] text-white font-semibold py-3.5 rounded-xl transition-colors"
                   >
-                    Proceed to Invoice <ChevronRight size={16} />
-                  </a>
+                    Proceed to Checkout <ChevronRight size={16} />
+                  </Link>
 
                   <div className="flex items-center justify-center gap-2 mt-3 text-xs text-gray-400">
                     <ShieldCheck size={13} /> Secure Checkout — SSL Encrypted
