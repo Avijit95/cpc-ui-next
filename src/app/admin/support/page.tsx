@@ -1,9 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
-import { adminApi, isApiError } from "@/lib/api";
-import type { Ticket, TicketDetail, TicketStatus } from "@/lib/api";
+import { adminApi, isApiError, ticketsApi } from "@/lib/api";
+import {
+  TICKET_ATTACHMENT_MAX_BYTES,
+  TICKET_ATTACHMENT_MAX_COUNT,
+  TICKET_ATTACHMENT_TYPES,
+} from "@/lib/api/endpoints/tickets";
+import type {
+  AdminUserRow,
+  Ticket,
+  TicketDetail,
+  TicketStatus,
+} from "@/lib/api";
 import {
   LifeBuoy,
   Clock,
@@ -14,7 +24,10 @@ import {
   StickyNote,
   Search,
   Paperclip,
+  X,
 } from "lucide-react";
+
+type PendingAttachment = { key: string; name: string };
 
 const STATUS_FILTERS: { value: TicketStatus | "ALL"; label: string }[] = [
   { value: "ALL", label: "All" },
@@ -69,8 +82,34 @@ export default function AdminSupportPage() {
   const [replyIsInternal, setReplyIsInternal] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>(
+    [],
+  );
+  const [attachBusy, setAttachBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [statusBusy, setStatusBusy] = useState(false);
+
+  // Cached admin list — used to populate the assignee picker. Loaded once
+  // on page mount (small N, refresh on hard reload is fine).
+  const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([]);
+  const [assigneeBusy, setAssigneeBusy] = useState(false);
+
+  // Load admin list once on mount for the assignee picker.
+  useEffect(() => {
+    let cancelled = false;
+    adminApi
+      .listAdminUsers({ role: "ADMIN", limit: 100 })
+      .then((resp) => {
+        if (!cancelled) setAdminUsers(resp.rows);
+      })
+      .catch(() => {
+        if (!cancelled) setAdminUsers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Debounce search input (250ms).
   useEffect(() => {
@@ -177,6 +216,49 @@ export default function AdminSupportPage() {
     setReplyBody("");
     setReplyIsInternal(false);
     setReplyError(null);
+    setPendingAttachments([]);
+  };
+
+  const handleAttachSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (!file) return;
+      if (pendingAttachments.length >= TICKET_ATTACHMENT_MAX_COUNT) {
+        setReplyError(
+          `Attach up to ${TICKET_ATTACHMENT_MAX_COUNT} files per message.`,
+        );
+        return;
+      }
+      if (!TICKET_ATTACHMENT_TYPES.includes(file.type as never)) {
+        setReplyError("Attachment must be a JPG, PNG, WebP, or PDF.");
+        return;
+      }
+      if (file.size > TICKET_ATTACHMENT_MAX_BYTES) {
+        setReplyError("Attachment must be 5 MB or smaller.");
+        return;
+      }
+      setAttachBusy(true);
+      setReplyError(null);
+      try {
+        const { objectKey } = await ticketsApi.uploadAttachment(file);
+        setPendingAttachments((prev) => [
+          ...prev,
+          { key: objectKey, name: file.name },
+        ]);
+      } catch (err) {
+        setReplyError(
+          isApiError(err) ? err.displayMessage : "Attachment upload failed",
+        );
+      } finally {
+        setAttachBusy(false);
+      }
+    },
+    [pendingAttachments.length],
+  );
+
+  const handleAttachRemove = (key: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   };
 
   const handleStatusChange = useCallback(
@@ -197,6 +279,24 @@ export default function AdminSupportPage() {
     [detail, refreshDetail],
   );
 
+  const handleAssigneeChange = useCallback(
+    async (next: string | null) => {
+      if (!detail || (detail.assigneeId ?? null) === next) return;
+      setAssigneeBusy(true);
+      try {
+        await adminApi.updateTicket(detail.id, { assigneeId: next });
+        await refreshDetail();
+      } catch (err) {
+        setDetailError(
+          isApiError(err) ? err.displayMessage : "Could not update assignee",
+        );
+      } finally {
+        setAssigneeBusy(false);
+      }
+    },
+    [detail, refreshDetail],
+  );
+
   const handleReply = useCallback(async () => {
     if (!detail || !replyBody.trim()) return;
     setReplyBusy(true);
@@ -205,9 +305,13 @@ export default function AdminSupportPage() {
       await adminApi.postTicketMessage(detail.id, {
         body: replyBody.trim(),
         isInternalNote: replyIsInternal || undefined,
+        attachments: pendingAttachments.length
+          ? pendingAttachments.map((a) => a.key)
+          : undefined,
       });
       setReplyBody("");
       setReplyIsInternal(false);
+      setPendingAttachments([]);
       await refreshDetail();
     } catch (err) {
       setReplyError(
@@ -216,7 +320,7 @@ export default function AdminSupportPage() {
     } finally {
       setReplyBusy(false);
     }
-  }, [detail, replyBody, replyIsInternal, refreshDetail]);
+  }, [detail, replyBody, replyIsInternal, pendingAttachments, refreshDetail]);
 
   const statusCounts = STATUS_FILTERS.slice(1).reduce<Record<string, number>>(
     (acc, f) => {
@@ -393,22 +497,31 @@ export default function AdminSupportPage() {
                       {formatDateTime(detail.createdAt)}
                     </p>
                   </div>
-                  <select
-                    value={detail.status}
-                    onChange={(e) =>
-                      handleStatusChange(e.target.value as TicketStatus)
-                    }
-                    disabled={statusBusy}
-                    className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-[#129cd3] bg-white text-gray-700 disabled:opacity-50"
-                  >
-                    {(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as TicketStatus[]).map(
-                      (s) => (
-                        <option key={s} value={s}>
-                          {STATUS_LABEL[s]}
-                        </option>
-                      ),
-                    )}
-                  </select>
+                  <div className="flex flex-col gap-1.5 items-stretch min-w-[180px]">
+                    <select
+                      value={detail.status}
+                      onChange={(e) =>
+                        handleStatusChange(e.target.value as TicketStatus)
+                      }
+                      disabled={statusBusy}
+                      className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-[#129cd3] bg-white text-gray-700 disabled:opacity-50"
+                    >
+                      {(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as TicketStatus[]).map(
+                        (s) => (
+                          <option key={s} value={s}>
+                            {STATUS_LABEL[s]}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                    <AssigneePicker
+                      ticketAssigneeId={detail.assigneeId}
+                      ticketAssigneeName={detail.assignee?.name ?? null}
+                      admins={adminUsers}
+                      busy={assigneeBusy}
+                      onChange={handleAssigneeChange}
+                    />
+                  </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[500px] bg-gray-50/40">
@@ -449,7 +562,53 @@ export default function AdminSupportPage() {
                       {replyError}
                     </div>
                   )}
+                  {pendingAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {pendingAttachments.map((a) => (
+                        <span
+                          key={a.key}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded bg-gray-100 text-gray-700"
+                        >
+                          <Paperclip size={11} />
+                          {a.name.length > 32
+                            ? `${a.name.slice(0, 29)}…`
+                            : a.name}
+                          <button
+                            type="button"
+                            onClick={() => handleAttachRemove(a.key)}
+                            className="text-gray-500 hover:text-red-500"
+                            aria-label="Remove attachment"
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={
+                        attachBusy ||
+                        pendingAttachments.length >= TICKET_ATTACHMENT_MAX_COUNT
+                      }
+                      title="Attach a file (JPG/PNG/WebP/PDF, max 5 MB)"
+                      className="w-10 h-10 border border-gray-200 rounded-lg flex items-center justify-center text-gray-500 hover:text-[#129cd3] hover:border-[#129cd3] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {attachBusy ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Paperclip size={14} />
+                      )}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      className="hidden"
+                      onChange={handleAttachSelect}
+                    />
                     <textarea
                       rows={2}
                       placeholder={
@@ -604,4 +763,46 @@ function attachmentLabel(key: string | undefined, i: number): string {
   if (!key) return `Attachment ${i + 1}`;
   const base = key.split("/").pop() ?? key;
   return base.length > 32 ? `${base.slice(0, 29)}…` : base;
+}
+
+function AssigneePicker({
+  ticketAssigneeId,
+  ticketAssigneeName,
+  admins,
+  busy,
+  onChange,
+}: {
+  ticketAssigneeId: string | null;
+  ticketAssigneeName: string | null;
+  admins: AdminUserRow[];
+  busy: boolean;
+  onChange: (next: string | null) => void;
+}) {
+  // If the current assignee isn't in the loaded admins list (e.g., they
+  // were demoted from ADMIN), surface them as a disabled extra option so
+  // the dropdown reflects actual state.
+  const inList = ticketAssigneeId
+    ? admins.some((a) => a.id === ticketAssigneeId)
+    : true;
+  return (
+    <select
+      value={ticketAssigneeId ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      disabled={busy || admins.length === 0}
+      title="Assignee"
+      className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-[#129cd3] bg-white text-gray-700 disabled:opacity-50"
+    >
+      <option value="">Unassigned</option>
+      {admins.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.name}
+        </option>
+      ))}
+      {ticketAssigneeId && !inList && (
+        <option value={ticketAssigneeId} disabled>
+          {ticketAssigneeName ?? "Former admin"} (not admin)
+        </option>
+      )}
+    </select>
+  );
 }
