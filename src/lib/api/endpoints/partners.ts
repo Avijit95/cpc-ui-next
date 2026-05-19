@@ -2,6 +2,7 @@ import { request, s3Put } from "../client";
 import type {
   KycDocType,
   KycPresignResponse,
+  PartnerDashboardResponse,
   PublicUser,
 } from "../types";
 
@@ -43,6 +44,11 @@ export const partnersApi = {
       method: "POST",
       body: { documents },
     });
+  },
+  // 2026-05-18 sweep — Gap #9 (GET /me/partner/dashboard).
+  // 403 with `PARTNER_NOT_VERIFIED` if kycStatus != VERIFIED.
+  dashboard() {
+    return request<PartnerDashboardResponse>("/me/partner/dashboard");
   },
   // presign + S3 PUT in one shot, returning the objectKey ready for confirmKycDocs.
   async uploadKycDoc(docType: KycDocType, file: File): Promise<KycConfirmDoc> {

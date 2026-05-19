@@ -12,7 +12,7 @@ import type {
   ListCard,
   ProductListResponse,
 } from "@/lib/api";
-import { SlidersHorizontal, ChevronDown } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, Star } from "lucide-react";
 
 const categoryOptions = [
   "Smartphones",
@@ -30,10 +30,13 @@ type SortOption = {
 
 const sortOptions: SortOption[] = [
   { label: "Featured", value: undefined },
+  { label: "Top Rated", value: "top-rated" },
   { label: "Price: Low to High", value: "price-asc" },
   { label: "Price: High to Low", value: "price-desc" },
   { label: "Newest", value: "newest" },
 ];
+
+const ratingOptions = [4, 3, 2, 1] as const;
 
 const PAGE_LIMIT = 24;
 
@@ -41,6 +44,7 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [priceRange, setPriceRange] = useState(200000);
+  const [minRating, setMinRating] = useState<number | null>(null);
   const [sortLabel, setSortLabel] = useState<string>("Featured");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -58,6 +62,7 @@ export default function ProductsPage() {
           category: selectedCategory ?? undefined,
           brand: selectedBrand ?? undefined,
           priceMax: priceRange < 200000 ? priceRange : undefined,
+          minRating: minRating ?? undefined,
           sort: sortValue,
           limit: PAGE_LIMIT,
         },
@@ -79,7 +84,7 @@ export default function ProductsPage() {
       });
 
     return () => ac.abort();
-  }, [selectedCategory, selectedBrand, priceRange, sortLabel]);
+  }, [selectedCategory, selectedBrand, priceRange, minRating, sortLabel]);
 
   const items: ListCard[] = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -165,12 +170,52 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {/* Rating */}
+      <div>
+        <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2">
+          Rating
+        </h3>
+        <div className="space-y-2">
+          {ratingOptions.map((r) => (
+            <label
+              key={r}
+              className="flex items-center gap-2.5 cursor-pointer group"
+            >
+              <input
+                type="radio"
+                name="rating"
+                checked={minRating === r}
+                onChange={() => setMinRating(minRating === r ? null : r)}
+                className="w-4 h-4 accent-[#129cd3] cursor-pointer"
+              />
+              <span className="flex items-center gap-1 text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    size={11}
+                    className={
+                      i < r
+                        ? "text-yellow-400 fill-yellow-400"
+                        : "text-gray-200 fill-gray-200"
+                    }
+                  />
+                ))}
+                <span className="ml-1 text-xs text-gray-500">&amp; up</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
       {/* Clear Filters */}
-      {(selectedCategory !== null || selectedBrand !== null) && (
+      {(selectedCategory !== null ||
+        selectedBrand !== null ||
+        minRating !== null) && (
         <button
           onClick={() => {
             setSelectedCategory(null);
             setSelectedBrand(null);
+            setMinRating(null);
           }}
           className="w-full py-2 border border-[#129cd3] text-[#129cd3] text-sm rounded hover:bg-[#e8f7fc] transition-colors"
         >

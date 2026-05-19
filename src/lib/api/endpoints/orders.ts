@@ -10,6 +10,7 @@ import type {
 
 export type ListOrdersQuery = {
   status?: OrderStatus;
+  q?: string; // orderNumber prefix — 2026-05-18 sweep
   limit?: number;
   offset?: number;
 };

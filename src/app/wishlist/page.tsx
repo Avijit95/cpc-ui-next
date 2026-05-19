@@ -100,16 +100,13 @@ export default function WishlistPage() {
   const handleClearAll = useCallback(async () => {
     setClearBusy(true);
     try {
-      // Snapshot ids — items array may change during fan-out.
-      const ids = items.map((it) => it.wishlistItemId);
-      await Promise.all(ids.map((id) => wishlistApi.removeItem(id)));
-      // Refresh once at the end so we land on whatever the server now reports.
+      await wishlistApi.clear();
       await refresh();
     } finally {
       setClearBusy(false);
       setConfirmClear(false);
     }
-  }, [items, refresh]);
+  }, [refresh]);
 
   if (status === "loading" || status === "unauthenticated") {
     return <WishlistSkeleton />;

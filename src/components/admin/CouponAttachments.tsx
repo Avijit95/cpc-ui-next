@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Tag, X } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
-import type { AdminCouponRow, ProductCouponSlot } from "@/lib/api";
+import type {
+  AdminCouponRow,
+  AdminProductDetail,
+  ProductCouponSlot,
+} from "@/lib/api";
 
 type AttachmentSnapshot = {
   couponId: string;
@@ -47,49 +51,49 @@ function attachErrorMessage(err: unknown, slot: ProductCouponSlot): string {
   }
 }
 
-export default function CouponAttachments({ productId }: { productId: string }) {
+export default function CouponAttachments({
+  productId,
+  initialCoupons,
+}: {
+  productId: string;
+  initialCoupons: AdminProductDetail["coupons"];
+}) {
   const [coupons, setCoupons] = useState<AdminCouponRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [customer, setCustomer] = useState<SlotState>(initialSlot);
-  const [retail, setRetail] = useState<SlotState>(initialSlot);
+  const [customer, setCustomer] = useState<SlotState>(() => ({
+    ...initialSlot,
+    current: initialCoupons.customer
+      ? {
+          couponId: initialCoupons.customer.id,
+          couponName: initialCoupons.customer.name,
+          value: initialCoupons.customer.value,
+        }
+      : null,
+  }));
+  const [retail, setRetail] = useState<SlotState>(() => ({
+    ...initialSlot,
+    current: initialCoupons.retail
+      ? {
+          couponId: initialCoupons.retail.id,
+          couponName: initialCoupons.retail.name,
+          value: initialCoupons.retail.value,
+        }
+      : null,
+  }));
 
-  const reloadCurrent = useCallback(async () => {
+  // Load ACTIVE coupons for the slot dropdowns. Currently-attached coupons
+  // come from the parent product-detail payload — no client-side scan.
+  const loadCoupons = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // 1) All ACTIVE coupons for the dropdowns.
       const list = await adminApi.listCoupons({
         status: "ACTIVE",
         limit: 100,
       });
       setCoupons(list.items);
-
-      // 2) Find what's currently attached to this product:
-      //    fan out getCoupon for any coupon with attachmentCount > 0.
-      //    Backend doesn't expose attached-to-product directly (see docs/backend-gaps.md).
-      const candidates = list.items.filter((c) => c.attachmentCount > 0);
-      const details = await Promise.all(
-        candidates.map((c) =>
-          adminApi.getCoupon(c.id).catch(() => null),
-        ),
-      );
-
-      let cur: AttachmentSnapshot | null = null;
-      let ret: AttachmentSnapshot | null = null;
-      for (const d of details) {
-        if (!d) continue;
-        const att = d.attachments.find((a) => a.productId === productId);
-        if (!att) continue;
-        if (d.type === "CUSTOMER_FIXED") {
-          cur = { couponId: d.id, couponName: d.name, value: att.value };
-        } else if (d.type === "RETAIL_PERCENT") {
-          ret = { couponId: d.id, couponName: d.name, value: att.value };
-        }
-      }
-      setCustomer((s) => ({ ...s, current: cur, error: null }));
-      setRetail((s) => ({ ...s, current: ret, error: null }));
     } catch (err) {
       setError(
         isApiError(err)
@@ -99,11 +103,11 @@ export default function CouponAttachments({ productId }: { productId: string }) 
     } finally {
       setLoading(false);
     }
-  }, [productId]);
+  }, []);
 
   useEffect(() => {
-    void reloadCurrent();
-  }, [reloadCurrent]);
+    void loadCoupons();
+  }, [loadCoupons]);
 
   const customerOptions = useMemo(
     () => coupons.filter((c) => c.type === "CUSTOMER_FIXED"),

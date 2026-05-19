@@ -21,6 +21,7 @@ import {
   Eye,
   FileText,
   Package,
+  Search,
 } from "lucide-react";
 
 type SidebarItem = {
@@ -97,6 +98,8 @@ export default function OrdersPage() {
   const { user, status } = useAuth();
 
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [items, setItems] = useState<OrderListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -110,6 +113,15 @@ export default function OrdersPage() {
     }
   }, [status, router]);
 
+  // Debounce search input → searchQuery (250ms).
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
   // Fetch list when filter/offset/auth change.
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -117,6 +129,7 @@ export default function OrdersPage() {
     ordersApi
       .list({
         status: statusFilter === "ALL" ? undefined : statusFilter,
+        q: searchQuery || undefined,
         limit: PAGE_SIZE,
         offset,
       })
@@ -138,7 +151,7 @@ export default function OrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [status, statusFilter, offset]);
+  }, [status, statusFilter, searchQuery, offset]);
 
   const onFilterChange = (next: OrderStatus | "ALL") => {
     if (next === statusFilter) return;
@@ -209,6 +222,19 @@ export default function OrdersPage() {
                 <span className="text-sm text-gray-500">
                   {loading ? "Loading…" : `${total} order${total === 1 ? "" : "s"}`}
                 </span>
+              </div>
+
+              {/* Search */}
+              <div className="px-6 py-3 border-b border-gray-100">
+                <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
+                  <Search size={14} className="text-gray-400" />
+                  <input
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Search by order number, e.g. CPC-ORD-26-27"
+                    className="bg-transparent outline-none text-sm text-gray-700 flex-1"
+                  />
+                </div>
               </div>
 
               {/* Status filter chips */}

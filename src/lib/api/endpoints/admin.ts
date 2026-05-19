@@ -28,6 +28,7 @@ import type {
   DashboardSummary,
   ImportJobAccepted,
   ImportJobStatus,
+  KycDocDownloadResponse,
   KycStatus,
   OrderStatus,
   PartnersReport,
@@ -238,6 +239,7 @@ export type ProductsExportBody = {
 export type ListAdminTicketsQuery = {
   status?: TicketStatus;
   assigneeId?: string;
+  q?: string; // subject contains — 2026-05-18 sweep
   limit?: number;
   offset?: number;
 };
@@ -304,6 +306,12 @@ export const adminApi = {
       method: "POST",
       body: { reason },
     });
+  },
+  // 2026-05-18 sweep — Gap #8
+  downloadKycDoc(userId: string, docId: string) {
+    return request<KycDocDownloadResponse>(
+      `/admin/partners/${encodeURIComponent(userId)}/kyc-docs/${encodeURIComponent(docId)}/download`,
+    );
   },
 
   // ── Categories ──────────────────────────────────────────────────────────

@@ -71,7 +71,7 @@ export default function EditProductPage({
       {!loading && product && (
         <>
           <ProductForm mode={{ kind: "edit", productId: id, initial: product }} />
-          <CouponAttachments productId={id} />
+          <CouponAttachments productId={id} initialCoupons={product.coupons} />
         </>
       )}
     </>

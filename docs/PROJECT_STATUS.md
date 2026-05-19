@@ -1,7 +1,7 @@
 # cpc-ui-next — Project Status
 
-_Snapshot: 2026-05-16 · audited against the `cell-phone-nest` API after Sprint 6 close-out (commit `8e13c75`)._
-_Last updated: 2026-05-16. **S4–S6 UI catch-up complete** (Phases 6–11 shipped 2026-05-15 → 2026-05-16). The UI is now wired end-to-end against every shipped backend surface. Backend gaps surfaced during S3 wiring are tracked at `../../../docs/backend-gaps.md`._
+_Snapshot: 2026-05-18 · audited against the `cell-phone-nest` API after the 2026-05-18 backend-gaps sweep (commit `6ba418c`) + the UI catch-up that wired its outputs (this branch)._
+_Last updated: 2026-05-18. **UI catch-up for the 2026-05-18 backend sweep complete** (Phases A–J). Every field/endpoint the sweep shipped now has a UI surface, plus the older Gap #2 inline-coupons follow-up. Outstanding backend gaps tracked at `../../../docs/backend-gaps.md`._
 
 This doc maps every endpoint the backend currently exposes to its wiring state in the UI, so we know what's safe to demo, what's still on mocks, and where backend work hasn't reached the UI yet.
 
@@ -26,8 +26,9 @@ Legend: ✅ wired in UI · 🟡 client exists but UI still uses mocks · ❌ mis
 | **S5a — Admin Ops** | ✅ shipped 2026-05-14 | ✅ extended `adminApi` (+14 methods) | ✅ `/admin` dashboard live, `/admin/analytics` reports + exports live, `/admin/logs` activity feed live, `/admin/users` extended with role/suspend |
 | **S5b — CMS / Support / Shipping** | ✅ shipped 2026-05-14 | ✅ `bannersApi` + `ticketsApi` + admin extensions | ✅ home `HeroBanner` consumes `/banners/active`; `/admin/cms` full CRUD; `/admin/support` + `/account/support` ticket flow wired |
 | **S6 — Reviews + Transactional Emails + Password Reset** | ✅ shipped 2026-05-15 | ✅ `reviewsApi` + auth `passwordForgot`/`passwordReset` | ✅ PDP reviews tab live; PDP + ProductCard rating shows live aggregate; `/forgot-password` + `/reset-password` flow wired |
+| **2026-05-18 sweep — Cart/Wishlist/PLP/Tickets/KYC/Partner dashboard** | ✅ shipped 2026-05-18 (Gaps #1, #4, #7–#12) | ✅ extended `cartApi`/`wishlistApi`/`catalogApi`/`ordersApi`/`partnersApi`/`adminApi` types & methods | ✅ `/cart` image + shipping hint; `/wishlist` bulk clear; `/products` Top-Rated sort + rating filter + live `ProductCard` stars; `/account/orders` q-search; `/admin/support` q-search + attachment chips; `/account/support/[id]` attachment chips; `/admin/users` KYC doc downloads; `/dealer` partner dashboard live; `CouponAttachments` reads inline coupons |
 
-**Status (2026-05-16):** S4–S6 UI catch-up complete. Every shipped backend endpoint now has a UI surface. Outstanding work is now polish + the remaining genuine backend gaps in Section 6.
+**Status (2026-05-18):** UI catch-up for the 2026-05-18 backend sweep complete (Phases A–J). Every field/endpoint the sweep shipped now has a UI surface, plus the older Gap #2 inline-coupons follow-up. Outstanding work is the remaining backend gaps in Section 6 (Pricing rules / Campaigns, Ops OOM cron, redeem-by-code product decision) + a few UI polish items (admin reviews moderation page, `/account` recent-orders widget).
 
 ---
 
@@ -234,12 +235,12 @@ No controller. PricingService is consumed server-side by `/products`, `/products
 |---|---|---|---|
 | `authApi` | `endpoints/auth.ts` | ✅ all 8 endpoints | Used by `AuthProvider`, `/login`, `/admin/login`, `/dealer/register` |
 | `meApi` | `endpoints/me.ts` | ✅ all 7 + `uploadProfilePic` helper | Used by `AuthProvider` |
-| `partnersApi` | `endpoints/partners.ts` | ✅ all 3 + `uploadKycDoc` helper | Used by `/dealer/register` |
+| `partnersApi` | `endpoints/partners.ts` | ✅ all 3 + `uploadKycDoc` helper + `dashboard()` | Used by `/dealer/register` + `/dealer` (dashboard since 2026-05-18) |
 | `adminApi` | `endpoints/admin.ts` | ✅ partners + categories + products + variants + images + import | Used by all `/admin/*` CRUD pages |
 | `catalogApi` | `endpoints/catalog.ts` | ✅ all 3 public endpoints typed | Used by `/products`, `/products/[slug]`, `ProductSection` |
 | `healthApi` | `endpoints/health.ts` | ✅ | Not currently called from any page |
 | `cartApi` | `endpoints/cart.ts` | ✅ all 4 endpoints typed | No callers yet — Phase 2 |
-| `wishlistApi` | `endpoints/wishlist.ts` | ✅ all 4 endpoints typed | No callers yet — Phase 3 |
+| `wishlistApi` | `endpoints/wishlist.ts` | ✅ view/add/remove/moveToCart + `clear()` (DELETE /wishlist) | Used by `/wishlist` + `WishlistProvider` |
 | `adminApi` (coupons) | `endpoints/admin.ts` | ✅ list/get/create/update/delete + product-coupon attach/detach | No callers yet — Phase 4 / 5 |
 | `addressesApi` | `endpoints/addresses.ts` | ✅ all 5 endpoints | Used by `/account/addresses` + `/checkout` |
 | `checkoutApi` | `endpoints/checkout.ts` | ✅ `submit({ addressId, idempotencyKey })` | Used by `/checkout` |
@@ -253,7 +254,12 @@ No controller. PricingService is consumed server-side by `/products`, `/products
 | `adminApi` (tickets) | `endpoints/admin.ts` | ✅ list/get/updateTicket/postTicketMessage | Used by `/admin/support` |
 | `authApi` (password reset) | `endpoints/auth.ts` | ✅ `passwordForgot` + `passwordReset` | Used by `/forgot-password` + `/reset-password` |
 | `reviewsApi` | `endpoints/reviews.ts` | ✅ list/create/update/remove/presignPhoto | Used by `/products/[slug]` Reviews tab |
-| `shippingApi` (cart quote) | — | ❌ not yet | S5b shipped; cart summary doesn't surface shipping yet (deferred polish) |
+| `shippingApi` (cart quote) | — | 🟡 | Direct `/shipping/quote` not wired (used server-side at checkout commit). Cart-time preview comes via `cart.shippingHint` from `cartApi.view` (2026-05-18 sweep). |
+| Cart `primaryImageUrl` + `shippingHint` types | `lib/api/types.ts` | ✅ | `PricedCartLine.primaryImageUrl` + `CartView.shippingHint: ShippingHint \| null` — added 2026-05-18 (Phase A). |
+| Catalog `ratingAverage`/`reviewCount` + `top-rated` sort + `minRating` filter | `lib/api/types.ts`, `endpoints/catalog.ts` | ✅ | Added 2026-05-18 (Phase A). |
+| `Ticket.attachmentUrls` / `TicketMessage.attachmentUrls` | `lib/api/types.ts` | ✅ | Signed-URL field added 2026-05-18; rendered in both customer and admin support pages. |
+| Admin KYC doc download | `endpoints/admin.ts` `downloadKycDoc` | ✅ | Used by `/admin/users` partners tab "Docs" modal. |
+| `AdminProductDetail.coupons` inline | `lib/api/types.ts`, `CouponAttachments` | ✅ | `ProductCouponInline` per slot; consumed by `<CouponAttachments>` — no more `getCoupon` fan-out. |
 | `emailApi` (unsubscribe) | — | ❌ not yet | `GET /email/unsubscribe` is hit by the one-click footer link in emails — no in-app surface needed |
 
 Types in `lib/api/types.ts` cover the full shipped backend surface: auth, me, partners, admin (partners + categories + products + variants + images + import + coupons + orders + banners + activity logs + admin users + dashboard + reports + exports + tickets), catalog, cart, wishlist, addresses, orders, invoices, checkout, banners, reviews, tickets, password reset.
@@ -266,41 +272,41 @@ Types in `lib/api/types.ts` cover the full shipped backend surface: auth, me, pa
 | Route | API used | Status | Notes |
 |---|---|---|---|
 | `/` (home) | `catalogApi.listProducts` + `bannersApi.getActive` | ✅ | `ProductSection` wired (BESTSELLING→`popular`, NEW ARRIVALS→`newest`). `HeroBanner` consumes `/banners/active` with two slots (`home_hero`, `home_side`); falls back to static design when no banners are configured. `DealsSection`, `BrandSection`, `CategorySection` still static |
-| `/products` (PLP) | `catalogApi.listProducts(query)` | ✅ | Single-select category + brand (radios). Brand list is dynamic from `facets.brands`. Price slider → `priceMax`. Sort: Featured / Price asc / Price desc / Newest. Skeleton grid loading. "Top Rated" sort + rating filter hidden (`GET /products` doesn't expose per-product aggregates yet — see `backend-gaps.md` §5 follow-up) |
+| `/products` (PLP) | `catalogApi.listProducts(query)` | ✅ | Single-select category + brand (radios). Brand list is dynamic from `facets.brands`. Price slider → `priceMax`. **Rating filter (4/3/2/1★ & up) → `minRating`**. Sort: Featured / **Top Rated** / Price asc / Price desc / Newest (`top-rated` ordering live since the 2026-05-18 sweep added `ratingAverage` to the catalog list). Skeleton grid loading. |
 | `/products/[slug]` (PDP) | `catalogApi.getProduct(slug)` + `reviewsApi.listForProduct(slug)` | ✅ | Image gallery, description, specs, breadcrumbs, variants all live. Rating row reads `reviewsResp.aggregate` (live count + average). Reviews tab shows aggregate header, write/edit/delete-your-review CTA (auth gated), inline 5-star form, real review list with photo thumbnails |
-| `/cart` | `cartApi.{view,addItem,updateItem,removeItem}` | ✅ | Auth-gated → redirects to `/login?next=/cart`. Optimistic qty updates with rollback. Per-line coupon chips driven by `availableCoupons` / `appliedCoupons` (PATCH with `customerCouponApplied`/`retailCouponApplied`). Summary uses API `subtotal`/`discountTotal`/`gstTotal`/`grandTotal`. Stock warnings + stale-application banner from API. **Known gap:** API doesn't return product image on cart line — UI shows gray placeholder box. Add to Cart on PDP + ProductCard quick-add wired with inline 'Added ✓' confirmation; logged-out clicks redirect to `/login?next=<current>` |
-| `/wishlist` | `wishlistApi.{view,addItem,removeItem,moveToCart}` | ✅ | Auth-gated → redirects to `/login?next=/wishlist`. Tile shape uses live API (`primaryImageUrl`, `finalPrice`/`basePrice`, `brand` label, `badges[0]`). Move-to-cart shows inline "Moved ✓" then tile leaves the grid. Clear All triggers a confirm modal then fans out N parallel `removeItem` calls. State synced via `WishlistProvider` so heart icons stay accurate across surfaces |
+| `/cart` | `cartApi.{view,addItem,updateItem,removeItem}` | ✅ | Auth-gated → redirects to `/login?next=/cart`. Optimistic qty updates with rollback. Per-line coupon chips driven by `availableCoupons` / `appliedCoupons` (PATCH with `customerCouponApplied`/`retailCouponApplied`). Summary uses API `subtotal`/`discountTotal`/`gstTotal`/`grandTotal`; **Shipping row gated on `cart.shippingHint`** (Free / ₹rate + "Add ₹X for free shipping" hint). Stock warnings + stale-application banner from API. **Cart line image** reads `line.primaryImageUrl` (gray box fallback). Add to Cart on PDP + ProductCard quick-add wired with inline 'Added ✓' confirmation; logged-out clicks redirect to `/login?next=<current>` |
+| `/wishlist` | `wishlistApi.{view,addItem,removeItem,moveToCart,clear}` | ✅ | Auth-gated → redirects to `/login?next=/wishlist`. Tile shape uses live API (`primaryImageUrl`, `finalPrice`/`basePrice`, `brand` label, `badges[0]`). Move-to-cart shows inline "Moved ✓" then tile leaves the grid. **Clear All now calls a single `DELETE /wishlist`** (replaced the N-parallel `removeItem` fan-out). State synced via `WishlistProvider` so heart icons stay accurate across surfaces |
 | `/login` | `authApi.requestOtp/verifyOtp/loginEmail/google` | ✅ | |
 | `/dealer/register` | `authApi` + `partnersApi.upgrade` | ✅ | |
-| `/dealer` (dashboard) | none | ❌ | All static; no partner-dashboard endpoints in S1–S3 anyway |
+| `/dealer` (dashboard) | `partnersApi.dashboard` | ✅ | Wired to `GET /me/partner/dashboard` (Phase I — 2026-05-18). Auth-gated → `/login?next=/dealer`. Sidebar header populated from `useAuth().user`. Stat tiles show `orderCount` / `discountClaimed` / `gross`. Recent-orders table shows real `OrderStatus` enum badges + thumbnail + grandTotal, View → `/account/orders/[id]`. `PARTNER_NOT_VERIFIED` 403 → amber empty-state panel with CTA to `/dealer/register`. |
 | `/account` | `useAuth()` (→ `meApi.get`) | 🟡 | Profile is live. The "recent orders" widget on the dashboard still hard-codes `[]` — could be wired to `ordersApi.list({ limit: 3 })` as polish |
-| `/account/orders` | `ordersApi.list` | ✅ | Status filter chips (9 options), 20/page pagination, loading skeleton, empty state, real product thumbnails via `primaryImageUrl`. Rows link to detail |
+| `/account/orders` | `ordersApi.list` | ✅ | Status filter chips (9 options), **debounced search by order-number prefix (`q?`)**, 20/page pagination, loading skeleton, empty state, real product thumbnails via `primaryImageUrl`. Rows link to detail |
 | `/account/orders/[id]` | `ordersApi.{get,cancel,returnRequest}` | ✅ | Items table with HSN/GST split, shipping address snapshot, status history timeline, invoice download with auto-polling (1.5s × 20). Cancel modal (allowed in `PENDING_PAYMENT` / `CONFIRMED`). Return modal (allowed when `DELIVERED` AND ≤7 days from `deliveredAt`) |
 | `/account/addresses` | `addressesApi.{list,create,update,setDefault,remove}` | ✅ | Auth-gated. Loading skeleton, empty state, Add/Edit modal with `<select>` of 35 ISO 3166-2:IN state codes (defaulted to WB per [[project_seller_state]]), set-default with optimistic flip + rollback, delete with confirm modal (surfaces `ADDRESS_IN_USE` 409) |
 | `/checkout` | `cartApi.view` + `addressesApi.list` + `addressesApi.create` + `checkoutApi.submit` | ✅ | Parallel cart + addresses load, default address auto-picked, inline "Add new address" modal, UUID idempotency key generated once per page mount. Stale-coupon + stock-warning preflight banners. Place Order → `router.replace('/account/orders/<id>')` on success. `STOCK_INSUFFICIENT` 409 best-effort-parses shortages list from message |
 | `/invoice` | (redirect helper) | ✅ | Repurposed from static demo. `?orderId=X` query → redirects to `/account/orders/X#invoice`. No-arg fallback shows "Go to My Orders" CTA |
-| `/account/support` + `/account/support/[id]` | `ticketsApi.{list,get,create,postMessage}` | ✅ | List page with status badges + reply count + "New Ticket" modal. Detail page shows chat-style thread (initial body + replies); reply box disabled when ticket is `RESOLVED`/`CLOSED` |
+| `/account/support` + `/account/support/[id]` | `ticketsApi.{list,get,create,postMessage}` | ✅ | List page with status badges + reply count + "New Ticket" modal. Detail page shows chat-style thread (initial body + replies); **attachments render as Paperclip chips linking to signed `attachmentUrls[]`** (Phase G — 2026-05-18). Reply box disabled when ticket is `RESOLVED`/`CLOSED` |
 | `/forgot-password` | `authApi.passwordForgot` | ✅ | Email input → constant-shape success message. Linked from `/login`'s "Forgot password?" |
 | `/reset-password?token=X` | `authApi.passwordReset` | ✅ | Token from query string, new-password validation (≥8 + uppercase + digit, matches register-email rule), success → `router.replace('/login')` |
-| Cart shipping line | none | ❌ | `GET /shipping/quote` (S5b) exists but cart summary doesn't surface a shipping line yet (deferred polish — `shippingTotal` lands on order post-commit) |
+| Cart shipping line | `cartApi.view` `shippingHint` | ✅ | Cart summary now renders a Shipping row from `cart.shippingHint` (Phase B — 2026-05-18). Hidden when no default `DeliveryZone` is configured. `grandTotal` still excludes shipping at cart stage per API contract — actual shipping commits at `/checkout`. |
 
 ### Admin
 | Route | API used | Status | Notes |
 |---|---|---|---|
 | `/admin` (dashboard) | `adminApi.{getDashboard,listOrders}` | ✅ | Today's orders + revenue, MTD revenue, pending partners, top-5 products, low-stock alerts panel, recent-5-orders table |
 | `/admin/login` | `authApi.loginEmail` | ✅ | |
-| `/admin/users` | `adminApi.listAdminUsers/patchUserRole/patchUserStatus` + partner-approval | ✅ | Customers tab: real `listAdminUsers({ role: 'CUSTOMER' })`. Admins tab: `role: 'ADMIN'`. Partners tab: kept from S1. Suspend/Unsuspend + Make-admin/Demote actions with self-edit guard |
+| `/admin/users` | `adminApi.listAdminUsers/patchUserRole/patchUserStatus` + partner-approval + `downloadKycDoc` | ✅ | Customers tab: real `listAdminUsers({ role: 'CUSTOMER' })`. Admins tab: `role: 'ADMIN'`. Partners tab: kept from S1; **each row now has a "Docs" button that opens a modal fetching `getPartner(id)` and downloads each KYC doc via signed URL** (Phase H — 2026-05-18). Suspend/Unsuspend + Make-admin/Demote actions with self-edit guard |
 | `/admin/categories` (+ add/edit) | `adminApi.{list,get,create,update,delete}Category` | ✅ | |
 | `/admin/products` (+ add/edit) | `adminApi.{list,get,create,update,archive}Product` + variant + image presign/confirm | ✅ | |
 | `/admin/pricing` | `adminApi.{listCoupons,createCoupon,updateCoupon,deleteCoupon}` | ✅ | Coupons tab live with full CRUD. Pricing rules + Campaigns tabs disabled — no API |
-| `/admin/products/[id]/edit` | `adminApi.{attachProductCoupon,detachProductCoupon}` + product CRUD | 🟡 | `<CouponAttachments>` works but still uses the client-side coupon scan (see `backend-gaps.md` §2 — resolved). Swap for the inline `coupons` payload as polish |
+| `/admin/products/[id]/edit` | `adminApi.{attachProductCoupon,detachProductCoupon}` + product CRUD | ✅ | `<CouponAttachments>` now reads inline `product.coupons.{customer,retail}` from the product-detail payload (Phase J — 2026-05-18); the per-coupon `getCoupon` fan-out is gone. |
 | `/admin/orders` | `adminApi.listOrders` | ✅ | Real list with 4 server-side filters (status, q-prefix, from, to), clickable summary cards, pagination, parallel count fetches per status |
 | `/admin/orders/[id]` | `adminApi.{getOrder,patchOrderStatus,regenerateInvoice}` | ✅ | State-machine action buttons driven by `legalTransitions[]`, transition modal (note required on `→ CANCELLED`), invoice download + regenerate, items table, address snapshot, status history |
 | `/admin/invoices` | (pointer page) | ✅ | Collapsed to a pointer card CTA → `/admin/orders` (invoice data lives on Order; no standalone endpoint) |
 | `/admin/analytics` | `adminApi.{getSalesReport,getPartnersReport,getProductsReport,enqueue*Export,listReportExports,getReportExport}` | ✅ | 3 tabs (Sales/Partners/Products), date range filters, group-by/sort selectors, CSS bar chart, full report tables, async CSV export with optimistic enqueue + background poll, Recent exports panel |
 | `/admin/cms` | `adminApi.{listBanners,createBanner,updateBanner,deleteBanner,uploadBannerImage,presignBanner}` | ✅ | Full banner CRUD grouped by position, image upload via presign + S3 PUT, datetime-local active window, active toggle, delete-with-confirm |
 | `/admin/logs` | `adminApi.listActivityLogs` | ✅ | Paginated feed (25/page), filters: action substring + target type + from/to date, collapsible rows showing target/IP/UA/diff JSON |
-| `/admin/support` | `adminApi.{listTickets,getTicket,updateTicket,postTicketMessage}` | ✅ | Two-pane layout. Status filter cards, ticket list, full thread, status `<select>`, reply box with optional internal-note toggle |
+| `/admin/support` | `adminApi.{listTickets,getTicket,updateTicket,postTicketMessage}` | ✅ | Two-pane layout. Status filter cards, ticket list with **debounced subject search (`q?`)** (Phase F — 2026-05-18), full thread, status `<select>`, reply box with optional internal-note toggle. **Thread messages render `attachmentUrls[]` as Paperclip chips** (Phase G). |
 | `/admin/reviews` (moderation) | none | ❌ | **API shipped (S6)** — `/admin/reviews` + hide/unhide. UI page doesn't exist yet (out of scope for this catch-up) |
 
 ---
@@ -346,10 +352,14 @@ The "Top Rated" sort and rating-filter sidebar on `/products` stay deferred unti
 
 ## 6. Out-of-scope for current backend
 
-As of 2026-05-15, almost every page that was previously "API gap ahead of UI" has flipped to "API shipped, UI not wired" (S4–S6). See Section 3 for the page-by-page status. The remaining genuine backend gaps are:
+As of 2026-05-18, the 2026-05-18 backend-gaps sweep + the UI catch-up wiring it (Phases A–J) closed most of the previously-listed gaps. The remaining backend gaps are:
 
-- `/dealer` (partner dashboard) — partner-side read endpoints (own orders summary, payouts, etc.) still not shipped. The partner KYC + GST upgrade flow exists, but there's no dashboard data API.
-- `ProductCard` "Top Rated" sort + rating sidebar filter on `/products` (PLP) — Reviews API ships per-product aggregates on `GET /products/:slug/reviews`, but `GET /products` list facets don't carry a `ratingAverage` per row yet. Tracked as a follow-up under `backend-gaps.md` §5.
-- Pricing rules / Campaigns tabs on `/admin/pricing` — Sprint 4+ feature, tabs still disabled.
+- **Pricing rules / Campaigns tabs on `/admin/pricing`** — Sprint 4+ feature design, tabs still disabled with tooltip. (`backend-gaps.md` §6.)
+- **Coupon redeem-by-code on `/cart`** — product decision, not engineering. By design the system uses per-line auto-attached coupons. (`backend-gaps.md` §3.)
+- **Weekly OOM / memory-pressure cron** — Ops concern, not UI-surfaced. (`backend-gaps.md` §13.)
 
-Everything else listed in the old Section 6 (orders, addresses, invoices, CMS, support, activity logs, analytics, reviews) has backend now — the work is **UI wiring**, not API gap.
+**UI-side leftovers (not backend gaps):**
+- `/admin/reviews` moderation page — S6 API shipped (`GET/PATCH /admin/reviews`), but no admin page exists yet. Tracked here, not in `backend-gaps.md`.
+- `/account` dashboard recent-orders widget still hard-codes `[]` (could be wired to `ordersApi.list({ limit: 3 })` as polish).
+- `/dealer` "Active Orders" tile was replaced with "Total Spent" (Phase I) because the partner dashboard endpoint doesn't expose an in-progress count; if product wants the original card back, either the backend would need to add it or the page would need an extra client-side fan-out.
+- Partner row's `MoreHorizontal` button on `/admin/users` is still a no-op placeholder (out of Phase H's scope).

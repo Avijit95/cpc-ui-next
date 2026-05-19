@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Send,
   Loader2,
+  Paperclip,
 } from "lucide-react";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -178,6 +179,8 @@ export default function CustomerTicketDetailPage() {
                     authorName={userName}
                     isMine
                     createdAt={detail.createdAt}
+                    attachments={detail.attachments}
+                    attachmentUrls={detail.attachmentUrls}
                   />
                   {detail.messages.map((m) => (
                     <ThreadMessage
@@ -186,6 +189,8 @@ export default function CustomerTicketDetailPage() {
                       authorName={m.author?.name ?? "Support"}
                       isMine={m.author?.id === user?.id}
                       createdAt={m.createdAt}
+                      attachments={m.attachments}
+                      attachmentUrls={m.attachmentUrls}
                     />
                   ))}
                 </div>
@@ -240,11 +245,15 @@ function ThreadMessage({
   authorName,
   isMine,
   createdAt,
+  attachments,
+  attachmentUrls,
 }: {
   body: string;
   authorName: string;
   isMine: boolean;
   createdAt: string;
+  attachments?: string[];
+  attachmentUrls?: string[];
 }) {
   return (
     <div className={`max-w-[80%] ${isMine ? "ml-auto" : "mr-auto"}`}>
@@ -256,6 +265,26 @@ function ThreadMessage({
         }`}
       >
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+        {attachmentUrls && attachmentUrls.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {attachmentUrls.map((url, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded ${
+                  isMine
+                    ? "bg-white/15 text-white hover:bg-white/25"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <Paperclip size={11} />
+                {attachmentLabel(attachments?.[i], i)}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
       <p
         className={`text-[10px] text-gray-400 mt-1 px-1 ${isMine ? "text-right" : ""}`}
@@ -264,4 +293,10 @@ function ThreadMessage({
       </p>
     </div>
   );
+}
+
+function attachmentLabel(key: string | undefined, i: number): string {
+  if (!key) return `Attachment ${i + 1}`;
+  const base = key.split("/").pop() ?? key;
+  return base.length > 32 ? `${base.slice(0, 29)}…` : base;
 }

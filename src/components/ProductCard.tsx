@@ -109,19 +109,30 @@ export default function ProductCard({ product }: { product: ListCard }) {
           </h3>
         </Link>
 
-        {/* Rating (placeholder until reviews API ships) */}
-        <div className="flex items-center gap-1 mb-2">
-          <div className="flex">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                size={11}
-                className="text-gray-200 fill-gray-200"
-              />
-            ))}
+        {/* Rating — live from catalog aggregate (Gap #12) */}
+        {product.ratingAverage !== null && (
+          <div className="flex items-center gap-1 mb-2">
+            <div className="flex">
+              {[...Array(5)].map((_, i) => {
+                const filled = i < Math.round(product.ratingAverage ?? 0);
+                return (
+                  <Star
+                    key={i}
+                    size={11}
+                    className={
+                      filled
+                        ? "text-yellow-400 fill-yellow-400"
+                        : "text-gray-200 fill-gray-200"
+                    }
+                  />
+                );
+              })}
+            </div>
+            <span className="text-[10px] text-gray-500">
+              ({product.reviewCount})
+            </span>
           </div>
-          <span className="text-[10px] text-gray-500">(0)</span>
-        </div>
+        )}
 
         {/* Price */}
         <div className="flex items-baseline gap-2 mb-3 mt-auto">

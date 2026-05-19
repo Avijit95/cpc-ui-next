@@ -11,6 +11,7 @@ export type ListProductsQuery = {
   brand?: string;
   priceMin?: number;
   priceMax?: number;
+  minRating?: number; // 1-5; 2026-05-18 sweep
   search?: string;
   sort?: CatalogSort;
   limit?: number;

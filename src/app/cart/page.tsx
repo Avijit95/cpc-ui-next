@@ -223,8 +223,17 @@ export default function CartPage() {
                       key={id}
                       className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4"
                     >
-                      {/* Image placeholder (API doesn't return image on cart line yet) */}
-                      <div className="w-24 h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100" />
+                      {/* Image */}
+                      <div className="w-24 h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100 overflow-hidden">
+                        {line.primaryImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={line.primaryImageUrl}
+                            alt={line.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : null}
+                      </div>
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
@@ -345,6 +354,34 @@ export default function CartPage() {
                         {formatPrice(cart.gstTotal)}
                       </span>
                     </div>
+                    {cart.shippingHint && (
+                      <div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Shipping</span>
+                          <span
+                            className={`font-semibold ${
+                              cart.shippingHint.estimatedRate === 0
+                                ? "text-green-600"
+                                : "text-gray-800"
+                            }`}
+                          >
+                            {cart.shippingHint.estimatedRate === 0
+                              ? "Free"
+                              : formatPrice(cart.shippingHint.estimatedRate)}
+                          </span>
+                        </div>
+                        {cart.shippingHint.amountAwayFromFree !== null &&
+                          cart.shippingHint.amountAwayFromFree > 0 && (
+                            <p className="text-[10px] text-gray-500 mt-0.5">
+                              Add{" "}
+                              {formatPrice(
+                                cart.shippingHint.amountAwayFromFree,
+                              )}{" "}
+                              more for free shipping
+                            </p>
+                          )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="border-t border-gray-100 pt-3 mb-4">

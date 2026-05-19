@@ -1,5 +1,9 @@
 import { request } from "../client";
-import type { WishlistMoveToCartResponse, WishlistView } from "../types";
+import type {
+  WishlistClearResponse,
+  WishlistMoveToCartResponse,
+  WishlistView,
+} from "../types";
 
 export type AddWishlistItemBody = {
   productId: string;
@@ -22,6 +26,9 @@ export const wishlistApi = {
       `/wishlist/items/${encodeURIComponent(itemId)}`,
       { method: "DELETE" },
     );
+  },
+  clear() {
+    return request<WishlistClearResponse>("/wishlist", { method: "DELETE" });
   },
   moveToCart(itemId: string, body: MoveToCartBody = {}) {
     return request<WishlistMoveToCartResponse>(

@@ -103,7 +103,12 @@ export type HealthResponse = {
 // ────────────────────────────────────────────────────────────────────────────
 
 export type ProductStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
-export type CatalogSort = "price-asc" | "price-desc" | "newest" | "popular";
+export type CatalogSort =
+  | "price-asc"
+  | "price-desc"
+  | "newest"
+  | "popular"
+  | "top-rated";
 
 export type CategoryNode = {
   id: string;
@@ -124,6 +129,8 @@ export type ListCard = {
   lowestVariantPrice: number | null;
   primaryImageUrl: string | null;
   badges: string[];
+  ratingAverage: number | null;
+  reviewCount: number;
 };
 
 export type PriceBucket = {
@@ -250,9 +257,20 @@ export type AdminVariant = {
   updatedAt: string;
 };
 
+export type ProductCouponInline = {
+  id: string;
+  name: string;
+  status: CouponStatus;
+  value: number;
+};
+
 export type AdminProductDetail = AdminProduct & {
   variants: AdminVariant[];
   category: AdminCategory & { breadcrumb?: Crumb[] };
+  coupons: {
+    customer?: ProductCouponInline;
+    retail?: ProductCouponInline;
+  };
 };
 
 export type ProductImagePresignResponse = {
@@ -322,12 +340,20 @@ export type PricedCartLine = {
   name: string;
   qty: number;
   unitPrice: number;
+  primaryImageUrl: string | null;
   availableCoupons: { customer?: CouponPreview; retail?: CouponPreview };
   appliedCoupons: { customer?: AppliedCoupon; retail?: AppliedCoupon };
   discount: { customer: number; retail: number; total: number };
   lineSubtotal: number;
   gst: CartGstLine;
   lineGrandTotal: number;
+};
+
+export type ShippingHint = {
+  zone: string;
+  estimatedRate: number;
+  freeShipThreshold: number | null;
+  amountAwayFromFree: number | null;
 };
 
 export type StaleApplication = {
@@ -350,6 +376,7 @@ export type CartView = {
   grandTotal: number;
   staleApplications: StaleApplication[];
   stockWarnings: StockWarning[];
+  shippingHint: ShippingHint | null;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -812,6 +839,7 @@ export type TicketMessage = {
   author: TicketAuthor;
   body: string;
   attachments: string[];
+  attachmentUrls?: string[];
   isInternalNote: boolean;
   createdAt: string;
 };
@@ -825,6 +853,7 @@ export type Ticket = {
   subject: string;
   body: string;
   attachments: string[];
+  attachmentUrls?: string[];
   status: TicketStatus;
   messageCount: number;
   lastMessageAt: string | null;
@@ -919,3 +948,38 @@ export type ReviewPhotoPresignResponse = {
 
 export type PasswordForgotResponse = { message: string };
 export type PasswordResetResponse = { message: string };
+
+// ────────────────────────────────────────────────────────────────────────────
+// Partner dashboard — 2026-05-18 sweep (GET /me/partner/dashboard)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type PartnerRecentOrder = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  grandTotal: number;
+  createdAt: string;
+  itemCount: number;
+  primaryImageUrl: string | null;
+};
+
+export type PartnerDashboardResponse = {
+  orderCount: number;
+  gross: number;
+  discountClaimed: number;
+  lastOrderAt: string | null;
+  recentOrders: PartnerRecentOrder[];
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// KYC doc download — 2026-05-18 sweep
+// (GET /admin/partners/:userId/kyc-docs/:docId/download)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type KycDocDownloadResponse = { url: string; expiresIn: number };
+
+// ────────────────────────────────────────────────────────────────────────────
+// Wishlist bulk clear — 2026-05-18 sweep (DELETE /wishlist)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type WishlistClearResponse = { deletedCount: number };

@@ -15,11 +15,14 @@ import {
   Loader2,
   Ban,
   RotateCcw,
+  FileText,
+  Download,
 } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type {
   AdminPartner,
+  AdminPartnerDetail,
   AdminUserRow,
   KycStatus,
   Role,
@@ -90,6 +93,7 @@ export default function UsersPage() {
   const [partnersErr, setPartnersErr] = useState<string | null>(null);
   const [partnersLoading, setPartnersLoading] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [docsPartner, setDocsPartner] = useState<AdminPartner | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -460,6 +464,12 @@ export default function UsersPage() {
                                   </button>
                                 </>
                               )}
+                              <button
+                                onClick={() => setDocsPartner(p)}
+                                className="text-[11px] font-semibold px-2.5 py-1 rounded bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 inline-flex items-center gap-1"
+                              >
+                                <FileText size={11} /> Docs
+                              </button>
                               <button className="text-gray-400 hover:text-[#129cd3]">
                                 <MoreHorizontal size={16} />
                               </button>
@@ -486,7 +496,113 @@ export default function UsersPage() {
           </div>
         </div>
       </div>
+      {docsPartner && (
+        <KycDocsModal
+          partner={docsPartner}
+          onClose={() => setDocsPartner(null)}
+        />
+      )}
     </>
+  );
+}
+
+function KycDocsModal({
+  partner,
+  onClose,
+}: {
+  partner: AdminPartner;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<AdminPartnerDetail | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminApi
+      .getPartner(partner.id)
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch((e) => {
+        if (!cancelled)
+          setErr(isApiError(e) ? e.displayMessage : "Could not load documents");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [partner.id]);
+
+  const handleDownload = async (docId: string) => {
+    setDownloading(docId);
+    try {
+      const { url } = await adminApi.downloadKycDoc(partner.id, docId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setErr(isApiError(e) ? e.displayMessage : "Could not get download link");
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl border border-gray-200 max-w-md w-full p-6 shadow-xl">
+        <h3 className="text-lg font-bold text-gray-800 mb-1">
+          KYC documents
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">
+          {partner.companyName ?? partner.name}
+        </p>
+        {err && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {err}
+          </div>
+        )}
+        {!detail && !err ? (
+          <p className="text-sm text-gray-500 flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin" /> Loading…
+          </p>
+        ) : detail && detail.kycDocuments.length === 0 ? (
+          <p className="text-sm text-gray-500">No documents uploaded.</p>
+        ) : detail ? (
+          <ul className="divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden">
+            {detail.kycDocuments.map((d) => (
+              <li
+                key={d.id}
+                className="flex items-center justify-between px-3 py-2.5"
+              >
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <FileText size={14} className="text-gray-400" />
+                  {d.docType}
+                </div>
+                <button
+                  onClick={() => handleDownload(d.id)}
+                  disabled={downloading === d.id}
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded bg-[#e8f7fc] text-[#129cd3] border border-[#bde4f3] hover:bg-[#d4eff8] inline-flex items-center gap-1 disabled:opacity-50"
+                >
+                  {downloading === d.id ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <Download size={11} />
+                  )}
+                  Download
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="flex justify-end mt-5">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -12,6 +12,8 @@ import {
   Send,
   Loader2,
   StickyNote,
+  Search,
+  Paperclip,
 } from "lucide-react";
 
 const STATUS_FILTERS: { value: TicketStatus | "ALL"; label: string }[] = [
@@ -51,6 +53,8 @@ function formatDateTime(iso: string) {
 
 export default function AdminSupportPage() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "ALL">("ALL");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
   const [loadingList, setLoadingList] = useState(true);
@@ -68,12 +72,21 @@ export default function AdminSupportPage() {
 
   const [statusBusy, setStatusBusy] = useState(false);
 
+  // Debounce search input (250ms).
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
   // Initial + filter-change list fetch.
   useEffect(() => {
     let cancelled = false;
     adminApi
       .listTickets({
         status: statusFilter === "ALL" ? undefined : statusFilter,
+        q: searchQuery || undefined,
         limit: 100,
       })
       .then((resp) => {
@@ -99,7 +112,7 @@ export default function AdminSupportPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter]);
+  }, [statusFilter, searchQuery]);
 
   // Detail fetch when selection changes. We do NOT synchronously clear
   // `detail` to null here — that would trip React 19's set-state-in-effect
@@ -266,7 +279,16 @@ export default function AdminSupportPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5">
           {/* List */}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-gray-100">
+            <div className="px-4 py-3 border-b border-gray-100 space-y-2">
+              <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
+                <Search size={14} className="text-gray-400" />
+                <input
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search by subject"
+                  className="bg-transparent outline-none text-sm text-gray-700 flex-1"
+                />
+              </div>
               <select
                 value={statusFilter}
                 onChange={(e) =>
@@ -397,6 +419,8 @@ export default function AdminSupportPage() {
                     isInternal={false}
                     role="customer"
                     createdAt={detail.createdAt}
+                    attachments={detail.attachments}
+                    attachmentUrls={detail.attachmentUrls}
                   />
                   {detail.messages.length === 0 ? (
                     <p className="text-center text-gray-400 text-xs">
@@ -412,6 +436,8 @@ export default function AdminSupportPage() {
                         isInternal={m.isInternalNote}
                         role={m.author?.role === "CUSTOMER" ? "customer" : "agent"}
                         createdAt={m.createdAt}
+                        attachments={m.attachments}
+                        attachmentUrls={m.attachmentUrls}
                       />
                     ))
                   )}
@@ -510,6 +536,8 @@ function ThreadMessage({
   isInternal,
   role,
   createdAt,
+  attachments,
+  attachmentUrls,
 }: {
   body: string;
   authorName: string;
@@ -517,7 +545,10 @@ function ThreadMessage({
   isInternal: boolean;
   role: "customer" | "agent";
   createdAt: string;
+  attachments?: string[];
+  attachmentUrls?: string[];
 }) {
+  const onDark = role === "agent" && !isInternal;
   return (
     <div className={`max-w-[75%] ${role === "agent" ? "ml-auto" : "mr-auto"}`}>
       {isInternal && (
@@ -535,6 +566,26 @@ function ThreadMessage({
         }`}
       >
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+        {attachmentUrls && attachmentUrls.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {attachmentUrls.map((url, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded ${
+                  onDark
+                    ? "bg-white/15 text-white hover:bg-white/25"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <Paperclip size={11} />
+                {attachmentLabel(attachments?.[i], i)}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
       <p
         className={`text-[10px] text-gray-400 mt-1 px-1 ${role === "agent" ? "text-right" : ""}`}
@@ -547,4 +598,10 @@ function ThreadMessage({
       </p>
     </div>
   );
+}
+
+function attachmentLabel(key: string | undefined, i: number): string {
+  if (!key) return `Attachment ${i + 1}`;
+  const base = key.split("/").pop() ?? key;
+  return base.length > 32 ? `${base.slice(0, 29)}…` : base;
 }
