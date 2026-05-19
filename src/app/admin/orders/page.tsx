@@ -19,6 +19,7 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 
 const STATUS_FILTERS: { value: OrderStatus | "ALL"; label: string }[] = [
@@ -185,6 +186,16 @@ export default function AdminOrdersPage() {
       />
 
       <div className="p-6 space-y-5">
+        {/* Header actions */}
+        <div className="flex justify-end">
+          <Link
+            href="/admin/orders/new"
+            className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={14} /> Manual order
+          </Link>
+        </div>
+
         {/* Summary */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {summaryCardsConfig.map((c) => {

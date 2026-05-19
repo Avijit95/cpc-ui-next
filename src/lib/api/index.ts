@@ -29,6 +29,9 @@ export type {
   AttachProductCouponBody,
   ListAdminOrdersQuery,
   PatchOrderStatusBody,
+  CreateAdminOrderBody,
+  CreateAdminOrderItem,
+  CreateAdminOrderResponse,
   BannerPresignContentType,
   BannerPresignBody,
   CreateBannerBody,
@@ -46,6 +49,8 @@ export type {
   ListAdminTicketsQuery,
   UpdateTicketBody,
   AdminTicketMessageBody,
+  ListAdminReviewsQuery,
+  PatchAdminReviewBody,
 } from "./endpoints/admin";
 export { bannersApi } from "./endpoints/banners";
 export { ticketsApi } from "./endpoints/tickets";

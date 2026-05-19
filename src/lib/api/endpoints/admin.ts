@@ -1,11 +1,14 @@
 import { request, s3Put } from "../client";
 import type {
   ActivityLogResponse,
+  Address,
   AdminCategory,
   AdminCategoryListItem,
   AdminCouponDetail,
   AdminCouponRow,
   AdminCouponsList,
+  AdminReviewRow,
+  AdminReviewsListResponse,
   AdminOrderDetail,
   AdminOrderListResponse,
   AdminOrderStatusPatchResponse,
@@ -175,6 +178,26 @@ export type PatchOrderStatusBody = {
   note?: string;
 };
 
+export type CreateAdminOrderItem = {
+  productId: string;
+  variantId?: string;
+  qty: number;
+};
+
+export type CreateAdminOrderBody = {
+  userId: string;
+  addressId: string;
+  items: CreateAdminOrderItem[];
+  idempotencyKey?: string;
+};
+
+export type CreateAdminOrderResponse = {
+  orderId: string;
+  orderNumber: string;
+  status: OrderStatus;
+  grandTotal: number;
+};
+
 // ── Activity log + admin users + dashboard + reports (Sprint 5a) ─────────
 
 export type ListActivityLogsQuery = {
@@ -254,6 +277,16 @@ export type AdminTicketMessageBody = {
   attachments?: string[];
   isInternalNote?: boolean;
 };
+
+// ── Reviews moderation (Sprint 6) ───────────────────────────────────────
+export type ListAdminReviewsQuery = {
+  productId?: string;
+  isApproved?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+export type PatchAdminReviewBody = { isApproved: boolean };
 
 export type BannerPresignContentType = "image/jpeg" | "image/png" | "image/webp";
 
@@ -494,6 +527,12 @@ export const adminApi = {
       { method: "POST" },
     );
   },
+  createOrder(body: CreateAdminOrderBody) {
+    return request<CreateAdminOrderResponse>("/admin/orders", {
+      method: "POST",
+      body,
+    });
+  },
 
   // ── Banners (Sprint 5b) ─────────────────────────────────────────────────
   listBanners() {
@@ -551,6 +590,22 @@ export const adminApi = {
   getAdminUser(id: string) {
     return request<AdminUserDetail>(
       `/admin/users/${encodeURIComponent(id)}`,
+    );
+  },
+  listUserAddresses(userId: string) {
+    return request<Address[]>(
+      `/admin/users/${encodeURIComponent(userId)}/addresses`,
+    );
+  },
+
+  // ── Reviews moderation (Sprint 6) ─────────────────────────────────────
+  listReviews(query: ListAdminReviewsQuery = {}) {
+    return request<AdminReviewsListResponse>("/admin/reviews", { query });
+  },
+  patchReview(id: string, body: PatchAdminReviewBody) {
+    return request<AdminReviewRow>(
+      `/admin/reviews/${encodeURIComponent(id)}`,
+      { method: "PATCH", body },
     );
   },
   patchUserRole(id: string, body: PatchUserRoleBody) {
