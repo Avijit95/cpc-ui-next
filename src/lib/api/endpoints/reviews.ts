@@ -1,10 +1,17 @@
-import { request } from "../client";
+import { request, s3Put } from "../client";
 import type {
   Review,
   ReviewDeleteResponse,
   ReviewListResponse,
   ReviewPhotoPresignResponse,
 } from "../types";
+
+export type ReviewPhotoContentType =
+  | "image/jpeg"
+  | "image/png"
+  | "image/webp";
+
+export const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 export type ListProductReviewsQuery = {
   limit?: number;
@@ -56,5 +63,14 @@ export const reviewsApi = {
       method: "POST",
       body,
     });
+  },
+  // Convenience: presign + S3 PUT, returns the objectKey to attach.
+  async uploadPhoto(file: File): Promise<{ objectKey: string }> {
+    const presigned = await reviewsApi.presignPhoto({
+      contentType: file.type as ReviewPhotoContentType,
+      contentLength: file.size,
+    });
+    await s3Put(presigned.uploadUrl, file);
+    return { objectKey: presigned.objectKey };
   },
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
@@ -21,7 +21,19 @@ import {
   Loader2,
   Trash2,
   Edit2,
+  ImagePlus,
+  X,
 } from "lucide-react";
+
+const MAX_REVIEW_PHOTOS = 5;
+const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const REVIEW_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+type ReviewFormPhoto = {
+  key: string;
+  previewUrl: string;
+  isBlob: boolean; // true when previewUrl is a URL.createObjectURL we own
+};
 
 function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
@@ -77,9 +89,23 @@ export default function ProductDetailPage() {
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [formRating, setFormRating] = useState(5);
   const [formText, setFormText] = useState("");
+  const [formPhotos, setFormPhotos] = useState<ReviewFormPhoto[]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Revoke any blob: URLs we still own when the page unmounts.
+  useEffect(() => {
+    return () => {
+      formPhotos.forEach((p) => {
+        if (p.isBlob) URL.revokeObjectURL(p.previewUrl);
+      });
+    };
+    // formPhotos intentionally omitted — we only want unmount cleanup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const myReview = reviewsResp?.items.find((r) => r.userId === user?.id) ?? null;
 
@@ -150,15 +176,30 @@ export default function ProductDetailPage() {
     }
   }, [slug]);
 
+  const releaseBlobPreviews = (photos: ReviewFormPhoto[]) => {
+    photos.forEach((p) => {
+      if (p.isBlob) URL.revokeObjectURL(p.previewUrl);
+    });
+  };
+
   const openReviewForm = (existing: Review | null) => {
+    releaseBlobPreviews(formPhotos);
     if (existing) {
       setEditingReviewId(existing.id);
       setFormRating(existing.rating);
       setFormText(existing.text ?? "");
+      setFormPhotos(
+        existing.photos.map((key, i) => ({
+          key,
+          previewUrl: existing.photoUrls[i] ?? "",
+          isBlob: false,
+        })),
+      );
     } else {
       setEditingReviewId(null);
       setFormRating(5);
       setFormText("");
+      setFormPhotos([]);
     }
     setFormError(null);
     setShowReviewForm(true);
@@ -166,10 +207,57 @@ export default function ProductDetailPage() {
 
   const closeReviewForm = () => {
     if (formBusy) return;
+    releaseBlobPreviews(formPhotos);
+    setFormPhotos([]);
     setShowReviewForm(false);
     setFormText("");
     setEditingReviewId(null);
     setFormError(null);
+  };
+
+  const handlePhotoSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      if (!file) return;
+      if (formPhotos.length >= MAX_REVIEW_PHOTOS) {
+        setFormError(`You can attach up to ${MAX_REVIEW_PHOTOS} photos.`);
+        return;
+      }
+      if (!REVIEW_PHOTO_TYPES.includes(file.type as (typeof REVIEW_PHOTO_TYPES)[number])) {
+        setFormError("Photo must be JPG, PNG, or WebP.");
+        return;
+      }
+      if (file.size > REVIEW_PHOTO_MAX_BYTES) {
+        setFormError("Photo must be 5 MB or smaller.");
+        return;
+      }
+      setPhotoBusy(true);
+      setFormError(null);
+      try {
+        const { objectKey } = await reviewsApi.uploadPhoto(file);
+        const previewUrl = URL.createObjectURL(file);
+        setFormPhotos((prev) => [
+          ...prev,
+          { key: objectKey, previewUrl, isBlob: true },
+        ]);
+      } catch (err) {
+        setFormError(
+          isApiError(err) ? err.displayMessage : "Photo upload failed",
+        );
+      } finally {
+        setPhotoBusy(false);
+      }
+    },
+    [formPhotos.length],
+  );
+
+  const handlePhotoRemove = (key: string) => {
+    setFormPhotos((prev) => {
+      const removed = prev.find((p) => p.key === key);
+      if (removed?.isBlob) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((p) => p.key !== key);
+    });
   };
 
   const handleReviewSubmit = useCallback(async () => {
@@ -182,19 +270,24 @@ export default function ProductDetailPage() {
     setFormError(null);
     try {
       const text = formText.trim() || undefined;
+      const photos = formPhotos.map((p) => p.key);
       if (editingReviewId) {
         await reviewsApi.update(editingReviewId, {
           rating: formRating,
           text,
+          photos,
         });
       } else {
         await reviewsApi.create({
           productId: product.id,
           rating: formRating,
           text,
+          photos,
         });
       }
       await refreshReviews();
+      releaseBlobPreviews(formPhotos);
+      setFormPhotos([]);
       setShowReviewForm(false);
       setEditingReviewId(null);
       setFormText("");
@@ -205,7 +298,7 @@ export default function ProductDetailPage() {
     } finally {
       setFormBusy(false);
     }
-  }, [product, formRating, formText, editingReviewId, refreshReviews]);
+  }, [product, formRating, formText, formPhotos, editingReviewId, refreshReviews]);
 
   const handleReviewDelete = useCallback(
     async (id: string) => {
@@ -678,6 +771,58 @@ export default function ProductDetailPage() {
                           placeholder="Share your experience with this product…"
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 resize-none bg-white"
                         />
+                      </div>
+                      <div className="mb-3">
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">
+                          Photos{" "}
+                          <span className="font-normal text-gray-400">
+                            (up to {MAX_REVIEW_PHOTOS}, optional)
+                          </span>
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {formPhotos.map((p) => (
+                            <div key={p.key} className="relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={p.previewUrl}
+                                alt=""
+                                className="w-16 h-16 object-cover rounded border border-gray-200"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handlePhotoRemove(p.key)}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white border border-gray-300 rounded-full flex items-center justify-center text-gray-600 hover:text-red-500 hover:border-red-300 shadow-sm"
+                                aria-label="Remove photo"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          ))}
+                          {formPhotos.length < MAX_REVIEW_PHOTOS && (
+                            <button
+                              type="button"
+                              onClick={() => photoInputRef.current?.click()}
+                              disabled={photoBusy}
+                              className="w-16 h-16 border border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-500 hover:border-[#129cd3] hover:text-[#129cd3] transition-colors disabled:opacity-50"
+                            >
+                              {photoBusy ? (
+                                <Loader2 size={16} className="animate-spin" />
+                              ) : (
+                                <>
+                                  <ImagePlus size={16} />
+                                  <span className="text-[10px] mt-0.5">Add</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                          <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={handlePhotoSelect}
+                          />
+                        </div>
                       </div>
                       {formError && (
                         <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
