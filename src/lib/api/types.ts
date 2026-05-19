@@ -936,6 +936,17 @@ export type ReviewListResponse = {
 
 export type ReviewDeleteResponse = { id: string };
 
+export type AdminReviewProduct = { id: string; slug: string; name: string };
+
+export type AdminReviewRow = Review & { product: AdminReviewProduct };
+
+export type AdminReviewsListResponse = {
+  items: AdminReviewRow[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type ReviewPhotoPresignResponse = {
   uploadUrl: string;
   objectKey: string;

@@ -18,6 +18,7 @@ import {
   LogOut,
   ChevronRight,
   Loader2,
+  Star,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -33,6 +34,7 @@ const navGroups = [
       { href: "/admin/categories", label: "Categories", icon: FolderTree },
       { href: "/admin/products", label: "Products", icon: Package },
       { href: "/admin/pricing", label: "Pricing & Discounts", icon: Tag },
+      { href: "/admin/reviews", label: "Reviews", icon: Star },
     ],
   },
   {
