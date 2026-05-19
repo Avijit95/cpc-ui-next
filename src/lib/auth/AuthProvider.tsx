@@ -13,6 +13,7 @@ import {
   authApi,
   configureApiClient,
   meApi,
+  refreshAccessToken,
   type LoginResponse,
   type PublicUser,
 } from "@/lib/api";
@@ -56,10 +57,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     bootstrapped.current = true;
     let cancelled = false;
     (async () => {
+      // Cross-tab single-flighted: N tabs opened together share 1 /auth/refresh call.
+      // refreshAccessToken writes the new token via the setter we configured above,
+      // so accessTokenRef.current is updated as a side effect.
+      const refreshed = await refreshAccessToken();
+      if (cancelled) return;
+      if (!refreshed) {
+        setState({ user: null, status: "unauthenticated" });
+        return;
+      }
       try {
-        const refreshed = await authApi.refresh();
-        if (cancelled) return;
-        accessTokenRef.current = refreshed.accessToken;
         const user = await meApi.get();
         if (cancelled) return;
         setState({ user, status: "authenticated" });

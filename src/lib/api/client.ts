@@ -1,8 +1,11 @@
 // Browser-only fetch wrapper for the Cell Phone Crowd API.
 // - Reads access token from a getter installed by AuthProvider (kept in memory).
-// - On 401 it tries POST /auth/refresh once, stores the new token, and replays.
+// - On 401 it tries POST /auth/refresh, stores the new token, and replays.
+//   The refresh is single-flighted across tabs via singleFlightRefresh
+//   (Web Locks + BroadcastChannel) so N tabs share 1 network call.
 // - Always sends credentials so the httpOnly `rt` cookie reaches /auth/*.
 
+import { singleFlightRefresh } from "@/lib/auth/cross-tab-refresh";
 import { ApiError, type ApiErrorPayload } from "./errors";
 import type { RefreshResponse } from "./types";
 
@@ -42,31 +45,24 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
-let inflightRefresh: Promise<string | null> | null = null;
-
-async function refreshOnce(): Promise<string | null> {
-  if (!inflightRefresh) {
-    inflightRefresh = (async () => {
-      try {
-        const res = await fetch(`${BASE_URL}/auth/refresh`, {
-          method: "POST",
-          credentials: "include",
-        });
-        if (!res.ok) return null;
-        const data = (await res.json()) as RefreshResponse;
-        setAccessToken(data.accessToken);
-        return data.accessToken;
-      } catch {
-        return null;
-      } finally {
-        // Allow a fresh refresh attempt next time.
-        setTimeout(() => {
-          inflightRefresh = null;
-        }, 0);
-      }
-    })();
-  }
-  return inflightRefresh;
+// Single-flight refresh, shared across tabs (see cross-tab-refresh.ts).
+// On success, writes the token through setAccessToken so the same call site
+// works for both the bootstrap path (AuthProvider) and the 401-replay below.
+export async function refreshAccessToken(): Promise<RefreshResponse | null> {
+  const result = await singleFlightRefresh(async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as RefreshResponse;
+    } catch {
+      return null;
+    }
+  });
+  if (result) setAccessToken(result.accessToken);
+  return result;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -131,9 +127,9 @@ export async function request<T>(
   let res = await fetch(url, init);
 
   if (res.status === 401 && !opts.skipAuthRefresh && !opts.anonymous) {
-    const newToken = await refreshOnce();
-    if (newToken) {
-      headers["Authorization"] = `Bearer ${newToken}`;
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      headers["Authorization"] = `Bearer ${refreshed.accessToken}`;
       res = await fetch(url, { ...init, headers });
     } else {
       // Refresh failed — caller's auth state is gone.

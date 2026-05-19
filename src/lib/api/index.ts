@@ -3,6 +3,7 @@ export type { ApiErrorPayload } from "./errors";
 export {
   configureApiClient,
   getApiBaseUrl,
+  refreshAccessToken,
   request,
   s3Put,
 } from "./client";
