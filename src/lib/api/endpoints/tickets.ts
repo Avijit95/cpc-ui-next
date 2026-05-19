@@ -1,4 +1,4 @@
-import { request } from "../client";
+import { request, s3Put } from "../client";
 import type {
   Ticket,
   TicketAttachmentPresignResponse,
@@ -6,6 +6,21 @@ import type {
   TicketListResponse,
   TicketMessage,
 } from "../types";
+
+export type TicketAttachmentContentType =
+  | "image/jpeg"
+  | "image/png"
+  | "image/webp"
+  | "application/pdf";
+
+export const TICKET_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+export const TICKET_ATTACHMENT_TYPES: readonly TicketAttachmentContentType[] = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+];
+export const TICKET_ATTACHMENT_MAX_COUNT = 5;
 
 export type ListMyTicketsQuery = {
   limit?: number;
@@ -50,5 +65,16 @@ export const ticketsApi = {
       "/me/tickets/attachments/presign",
       { method: "POST", body },
     );
+  },
+  // Convenience: presign + S3 PUT, returns the objectKey to attach.
+  // The admin-side reply box uses this same endpoint — keys are scoped to the
+  // current user but the backend accepts any valid key on admin message posts.
+  async uploadAttachment(file: File): Promise<{ objectKey: string }> {
+    const presigned = await ticketsApi.presignAttachment({
+      contentType: file.type as TicketAttachmentContentType,
+      contentLength: file.size,
+    });
+    await s3Put(presigned.uploadUrl, file);
+    return { objectKey: presigned.objectKey };
   },
 };

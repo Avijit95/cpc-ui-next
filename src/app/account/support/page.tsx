@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { isApiError, ticketsApi } from "@/lib/api";
+import {
+  TICKET_ATTACHMENT_MAX_BYTES,
+  TICKET_ATTACHMENT_MAX_COUNT,
+  TICKET_ATTACHMENT_TYPES,
+} from "@/lib/api/endpoints/tickets";
 import type { Ticket, TicketStatus } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -21,7 +26,10 @@ import {
   Loader2,
   X,
   MessageCircle,
+  Paperclip,
 } from "lucide-react";
+
+type PendingAttachment = { key: string; name: string };
 
 const sidebarItems = [
   { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} />, href: "/account" },
@@ -70,8 +78,11 @@ export default function CustomerSupportPage() {
   const [showNew, setShowNew] = useState(false);
   const [newSubject, setNewSubject] = useState("");
   const [newBody, setNewBody] = useState("");
+  const [newAttachments, setNewAttachments] = useState<PendingAttachment[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -102,6 +113,48 @@ export default function CustomerSupportPage() {
     };
   }, [status]);
 
+  const handleAttachSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (!file) return;
+      if (newAttachments.length >= TICKET_ATTACHMENT_MAX_COUNT) {
+        setCreateError(
+          `You can attach up to ${TICKET_ATTACHMENT_MAX_COUNT} files.`,
+        );
+        return;
+      }
+      if (!TICKET_ATTACHMENT_TYPES.includes(file.type as never)) {
+        setCreateError("Attachment must be a JPG, PNG, WebP, or PDF.");
+        return;
+      }
+      if (file.size > TICKET_ATTACHMENT_MAX_BYTES) {
+        setCreateError("Attachment must be 5 MB or smaller.");
+        return;
+      }
+      setAttachBusy(true);
+      setCreateError(null);
+      try {
+        const { objectKey } = await ticketsApi.uploadAttachment(file);
+        setNewAttachments((prev) => [
+          ...prev,
+          { key: objectKey, name: file.name },
+        ]);
+      } catch (err) {
+        setCreateError(
+          isApiError(err) ? err.displayMessage : "Attachment upload failed",
+        );
+      } finally {
+        setAttachBusy(false);
+      }
+    },
+    [newAttachments.length],
+  );
+
+  const handleAttachRemove = (key: string) => {
+    setNewAttachments((prev) => prev.filter((a) => a.key !== key));
+  };
+
   const handleCreate = useCallback(async () => {
     if (!newSubject.trim()) {
       setCreateError("Subject is required.");
@@ -117,10 +170,14 @@ export default function CustomerSupportPage() {
       const t = await ticketsApi.create({
         subject: newSubject.trim(),
         body: newBody.trim(),
+        attachments: newAttachments.length
+          ? newAttachments.map((a) => a.key)
+          : undefined,
       });
       setShowNew(false);
       setNewSubject("");
       setNewBody("");
+      setNewAttachments([]);
       router.push(`/account/support/${encodeURIComponent(t.id)}`);
     } catch (err) {
       setCreateError(
@@ -129,7 +186,7 @@ export default function CustomerSupportPage() {
     } finally {
       setCreateBusy(false);
     }
-  }, [newSubject, newBody, router]);
+  }, [newSubject, newBody, newAttachments, router]);
 
   const userName = user?.name ?? "Account";
   const userContact = user?.email ?? user?.phone ?? "";
@@ -191,6 +248,7 @@ export default function CustomerSupportPage() {
                   setCreateError(null);
                   setNewSubject("");
                   setNewBody("");
+                  setNewAttachments([]);
                 }}
                 className="flex items-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
               >
@@ -310,6 +368,55 @@ export default function CustomerSupportPage() {
                   placeholder="Tell us what happened, the order number if applicable, and what you've tried…"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 resize-none"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Attachments{" "}
+                  <span className="font-normal text-gray-400">
+                    (up to {TICKET_ATTACHMENT_MAX_COUNT}, optional)
+                  </span>
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {newAttachments.map((a) => (
+                    <span
+                      key={a.key}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded bg-gray-100 text-gray-700"
+                    >
+                      <Paperclip size={11} />
+                      {a.name.length > 28 ? `${a.name.slice(0, 25)}…` : a.name}
+                      <button
+                        type="button"
+                        onClick={() => handleAttachRemove(a.key)}
+                        className="text-gray-500 hover:text-red-500"
+                        aria-label="Remove attachment"
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                  {newAttachments.length < TICKET_ATTACHMENT_MAX_COUNT && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={attachBusy}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border border-dashed border-gray-300 text-gray-600 hover:text-[#129cd3] hover:border-[#129cd3] transition-colors disabled:opacity-50"
+                    >
+                      {attachBusy ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : (
+                        <Paperclip size={11} />
+                      )}
+                      Add file
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="hidden"
+                    onChange={handleAttachSelect}
+                  />
+                </div>
               </div>
             </div>
 

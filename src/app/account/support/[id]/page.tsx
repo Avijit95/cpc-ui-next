@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { isApiError, ticketsApi } from "@/lib/api";
+import {
+  TICKET_ATTACHMENT_MAX_BYTES,
+  TICKET_ATTACHMENT_MAX_COUNT,
+  TICKET_ATTACHMENT_TYPES,
+} from "@/lib/api/endpoints/tickets";
 import type { TicketDetail, TicketStatus } from "@/lib/api";
 import {
   ChevronLeft,
@@ -14,7 +19,10 @@ import {
   Send,
   Loader2,
   Paperclip,
+  X,
 } from "lucide-react";
+
+type PendingAttachment = { key: string; name: string };
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   OPEN: "Open",
@@ -57,6 +65,11 @@ export default function CustomerTicketDetailPage() {
   const [replyBody, setReplyBody] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>(
+    [],
+  );
+  const [attachBusy, setAttachBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -98,13 +111,61 @@ export default function CustomerTicketDetailPage() {
     }
   }, [id]);
 
+  const handleAttachSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (!file) return;
+      if (pendingAttachments.length >= TICKET_ATTACHMENT_MAX_COUNT) {
+        setReplyError(
+          `You can attach up to ${TICKET_ATTACHMENT_MAX_COUNT} files per message.`,
+        );
+        return;
+      }
+      if (!TICKET_ATTACHMENT_TYPES.includes(file.type as never)) {
+        setReplyError("Attachment must be a JPG, PNG, WebP, or PDF.");
+        return;
+      }
+      if (file.size > TICKET_ATTACHMENT_MAX_BYTES) {
+        setReplyError("Attachment must be 5 MB or smaller.");
+        return;
+      }
+      setAttachBusy(true);
+      setReplyError(null);
+      try {
+        const { objectKey } = await ticketsApi.uploadAttachment(file);
+        setPendingAttachments((prev) => [
+          ...prev,
+          { key: objectKey, name: file.name },
+        ]);
+      } catch (err) {
+        setReplyError(
+          isApiError(err) ? err.displayMessage : "Attachment upload failed",
+        );
+      } finally {
+        setAttachBusy(false);
+      }
+    },
+    [pendingAttachments.length],
+  );
+
+  const handleAttachRemove = (key: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
+  };
+
   const handleReply = useCallback(async () => {
     if (!detail || !replyBody.trim()) return;
     setReplyBusy(true);
     setReplyError(null);
     try {
-      await ticketsApi.postMessage(detail.id, { body: replyBody.trim() });
+      await ticketsApi.postMessage(detail.id, {
+        body: replyBody.trim(),
+        attachments: pendingAttachments.length
+          ? pendingAttachments.map((a) => a.key)
+          : undefined,
+      });
       setReplyBody("");
+      setPendingAttachments([]);
       await refresh();
     } catch (err) {
       setReplyError(
@@ -113,7 +174,7 @@ export default function CustomerTicketDetailPage() {
     } finally {
       setReplyBusy(false);
     }
-  }, [detail, replyBody, refresh]);
+  }, [detail, replyBody, pendingAttachments, refresh]);
 
   const userName = user?.name ?? "You";
   const replyDisabled =
@@ -207,26 +268,74 @@ export default function CustomerTicketDetailPage() {
                       new ticket if you need further help.
                     </p>
                   ) : (
-                    <div className="flex items-end gap-2">
-                      <textarea
-                        rows={2}
-                        placeholder="Type a reply…"
-                        value={replyBody}
-                        onChange={(e) => setReplyBody(e.target.value)}
-                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-none"
-                      />
-                      <button
-                        onClick={handleReply}
-                        disabled={replyBusy || !replyBody.trim()}
-                        className="bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white px-4 py-2.5 rounded-lg flex items-center gap-1.5 text-sm font-semibold"
-                      >
-                        {replyBusy ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Send size={14} />
-                        )}{" "}
-                        Reply
-                      </button>
+                    <div className="space-y-2">
+                      {pendingAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {pendingAttachments.map((a) => (
+                            <span
+                              key={a.key}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded bg-gray-100 text-gray-700"
+                            >
+                              <Paperclip size={11} />
+                              {a.name.length > 32
+                                ? `${a.name.slice(0, 29)}…`
+                                : a.name}
+                              <button
+                                type="button"
+                                onClick={() => handleAttachRemove(a.key)}
+                                className="text-gray-500 hover:text-red-500"
+                                aria-label="Remove attachment"
+                              >
+                                <X size={11} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={
+                            attachBusy ||
+                            pendingAttachments.length >= TICKET_ATTACHMENT_MAX_COUNT
+                          }
+                          title="Attach a file (JPG/PNG/WebP/PDF, max 5 MB)"
+                          className="w-10 h-10 border border-gray-200 rounded-lg flex items-center justify-center text-gray-500 hover:text-[#129cd3] hover:border-[#129cd3] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {attachBusy ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Paperclip size={14} />
+                          )}
+                        </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          className="hidden"
+                          onChange={handleAttachSelect}
+                        />
+                        <textarea
+                          rows={2}
+                          placeholder="Type a reply…"
+                          value={replyBody}
+                          onChange={(e) => setReplyBody(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-none"
+                        />
+                        <button
+                          onClick={handleReply}
+                          disabled={replyBusy || !replyBody.trim()}
+                          className="bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white px-4 py-2.5 rounded-lg flex items-center gap-1.5 text-sm font-semibold"
+                        >
+                          {replyBusy ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Send size={14} />
+                          )}{" "}
+                          Reply
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
