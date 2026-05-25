@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
@@ -36,6 +36,24 @@ const ratingOptions = [4, 3, 2, 1] as const;
 const PAGE_LIMIT = 24;
 
 export default function ProductsPage() {
+  return (
+    <Suspense fallback={<ProductsPageFallback />}>
+      <ProductsPageInner />
+    </Suspense>
+  );
+}
+
+function ProductsPageFallback() {
+  return (
+    <>
+      <Header />
+      <main className="bg-gray-50 min-h-screen" />
+      <Footer />
+    </>
+  );
+}
+
+function ProductsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlCategory = searchParams.get("category");
