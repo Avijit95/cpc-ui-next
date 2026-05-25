@@ -7,14 +7,17 @@ import DealsSection from "@/components/DealsSection";
 import PromoBanners from "@/components/PromoBanners";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
-import { serverListProducts } from "@/lib/api/server";
+import { serverGetNavLinks, serverListProducts } from "@/lib/api/server";
 
 export default async function Home() {
-  const tabsInitial = await serverListProducts({ sort: "popular", limit: 8 });
+  const [tabsInitial, navLinks] = await Promise.all([
+    serverListProducts({ sort: "popular", limit: 8 }),
+    serverGetNavLinks(),
+  ]);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <Header initialNavLinks={navLinks} />
       <main>
         <HeroBanner />
         <CategorySection />

@@ -44,16 +44,28 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export default function Header() {
+type HeaderProps = {
+  /** Category-derived links to render between HOME and DEALS. If provided, no
+   * client fetch happens; if omitted (legacy call sites), Header falls back to
+   * fetching /categories itself. */
+  initialNavLinks?: NavLink[];
+};
+
+export default function Header({ initialNavLinks }: HeaderProps = {}) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [navLinks, setNavLinks] = useState<NavLink[]>([HOME_LINK, DEALS_LINK]);
+  const [navLinks, setNavLinks] = useState<NavLink[]>(
+    initialNavLinks
+      ? [HOME_LINK, ...initialNavLinks, DEALS_LINK]
+      : [HOME_LINK, DEALS_LINK],
+  );
   const router = useRouter();
   const { user, status } = useAuth();
   const isAuthed = status === "authenticated" && !!user;
   const accountHref = "/account";
 
   useEffect(() => {
+    if (initialNavLinks) return;
     const ac = new AbortController();
     catalogApi
       .getCategories(ac.signal)
@@ -74,7 +86,7 @@ export default function Header() {
         /* keep HOME + DEALS fallback */
       });
     return () => ac.abort();
-  }, []);
+  }, [initialNavLinks]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

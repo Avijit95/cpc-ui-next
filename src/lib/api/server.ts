@@ -41,6 +41,27 @@ export const serverGetCategories = cache(async (): Promise<CategoryNode[]> => {
   }
 });
 
+export type ServerNavLink = {
+  name: string;
+  href: string;
+  hasDropdown: boolean;
+};
+
+const NAV_CATEGORY_LIMIT = 5;
+
+export const serverGetNavLinks = cache(async (): Promise<ServerNavLink[]> => {
+  const all = await serverGetCategories();
+  return all
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .slice(0, NAV_CATEGORY_LIMIT)
+    .map((c) => ({
+      name: c.name.toUpperCase(),
+      href: `/products?category=${encodeURIComponent(c.slug.toLowerCase())}`,
+      hasDropdown: c.children.length > 0,
+    }));
+});
+
 export const serverListProducts = cache(
   async (opts: {
     sort?: CatalogSort;
