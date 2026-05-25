@@ -2,17 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Tag } from "lucide-react";
 import { heroSlides } from "@/data/products";
-import { bannersApi } from "@/lib/api";
-import type { Banner } from "@/lib/api";
+import { bannersApi, catalogApi } from "@/lib/api";
+import type { Banner, CategoryNode } from "@/lib/api";
 
-const sidebarCategories = [
-  { icon: "📱", name: "Phone" },
-  { icon: "📷", name: "Camera" },
-  { icon: "🔊", name: "Speakers" },
-  { icon: "📺", name: "TV" },
-  { icon: "🔌", name: "Accessories" },
-];
+type SidebarCategory = {
+  slug: string;
+  name: string;
+  imageUrl: string | null;
+};
 
 const fallbackRightBanners = [
   { id: "fallback-1", imageUrl: "/1.webp", linkUrl: null as string | null },
@@ -21,9 +20,13 @@ const fallbackRightBanners = [
 
 const HOME_HERO_SLOT = "home_hero";
 const HOME_SIDE_SLOT = "home_side";
+const SIDEBAR_CATEGORY_LIMIT = 5;
 
 export default function HeroBanner() {
   const [apiBanners, setApiBanners] = useState<Banner[] | null>(null);
+  const [sidebarCategories, setSidebarCategories] = useState<
+    SidebarCategory[] | null
+  >(null);
   const [current, setCurrent] = useState(0);
 
   useEffect(() => {
@@ -39,6 +42,30 @@ export default function HeroBanner() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    catalogApi
+      .getCategories(ac.signal)
+      .then((all: CategoryNode[]) => {
+        if (ac.signal.aborted) return;
+        setSidebarCategories(
+          all
+            .slice()
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .slice(0, SIDEBAR_CATEGORY_LIMIT)
+            .map((c) => ({
+              slug: c.slug.toLowerCase(),
+              name: c.name,
+              imageUrl: c.imageUrl,
+            })),
+        );
+      })
+      .catch(() => {
+        if (!ac.signal.aborted) setSidebarCategories([]);
+      });
+    return () => ac.abort();
   }, []);
 
   const apiHero = useMemo(
@@ -86,17 +113,38 @@ export default function HeroBanner() {
             <span className="text-lg leading-none">☰</span> ALL CATEGORIES
           </div>
           <ul>
-            {sidebarCategories.map((cat, i) => (
-              <li key={i}>
-                <a
-                  href={`/products?category=${encodeURIComponent(cat.name)}`}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:text-[#129cd3] hover:bg-[#e8f7fc] border-b border-gray-100 transition-colors"
-                >
-                  <span className="text-base w-5 text-center">{cat.icon}</span>
-                  {cat.name}
-                </a>
-              </li>
-            ))}
+            {sidebarCategories === null
+              ? Array.from({ length: SIDEBAR_CATEGORY_LIMIT }).map((_, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100"
+                  >
+                    <span className="w-5 h-5 bg-gray-100 rounded animate-pulse" />
+                    <span className="h-3 w-20 bg-gray-100 rounded animate-pulse" />
+                  </li>
+                ))
+              : sidebarCategories.map((cat) => (
+                  <li key={cat.slug}>
+                    <a
+                      href={`/products?category=${encodeURIComponent(cat.slug)}`}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:text-[#129cd3] hover:bg-[#e8f7fc] border-b border-gray-100 transition-colors"
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                        {cat.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={cat.imageUrl}
+                            alt=""
+                            className="w-5 h-5 object-cover rounded"
+                          />
+                        ) : (
+                          <Tag size={14} className="text-gray-400" />
+                        )}
+                      </span>
+                      {cat.name}
+                    </a>
+                  </li>
+                ))}
           </ul>
         </div>
 
