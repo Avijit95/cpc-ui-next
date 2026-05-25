@@ -4,7 +4,12 @@
 // (revalidate seconds) dedupes across requests.
 
 import { cache } from "react";
-import type { Banner, CategoryNode } from "./types";
+import type {
+  Banner,
+  CatalogSort,
+  CategoryNode,
+  ProductListResponse,
+} from "./types";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
@@ -35,3 +40,21 @@ export const serverGetCategories = cache(async (): Promise<CategoryNode[]> => {
     return [];
   }
 });
+
+export const serverListProducts = cache(
+  async (opts: {
+    sort?: CatalogSort;
+    limit?: number;
+  }): Promise<ProductListResponse | null> => {
+    const params = new URLSearchParams();
+    if (opts.sort) params.set("sort", opts.sort);
+    if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    const path = `/products${qs ? `?${qs}` : ""}`;
+    try {
+      return await getJson<ProductListResponse>(path, 60);
+    } catch {
+      return null;
+    }
+  },
+);
