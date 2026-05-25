@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Tag } from "lucide-react";
 import { heroSlides } from "@/data/products";
 import { bannersApi, catalogApi } from "@/lib/api";
@@ -131,10 +132,11 @@ export default function HeroBanner() {
                     >
                       <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
                         {cat.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
+                          <Image
                             src={cat.imageUrl}
                             alt=""
+                            width={20}
+                            height={20}
                             className="w-5 h-5 object-cover rounded"
                           />
                         ) : (
@@ -158,10 +160,15 @@ export default function HeroBanner() {
             <ApiSlide banner={apiSlide} />
           ) : (
             // ── Static fallback when no API banners are configured ──
-            <div
-              className="h-full min-h-[320px] transition-all duration-700 bg-cover bg-center relative"
-              style={{ backgroundImage: `url(${staticSlide.image})` }}
-            >
+            <div className="h-full min-h-[320px] transition-all duration-700 relative">
+              <Image
+                src={staticSlide.image}
+                alt=""
+                fill
+                priority
+                sizes="(min-width: 1280px) 832px, (min-width: 1024px) 768px, 100vw"
+                className="object-cover object-center"
+              />
               <div className="relative z-10 flex flex-col justify-center h-full min-h-[320px] px-8 py-10 text-center md:text-left">
                 <span className="inline-block bg-yellow-400 text-gray-900 text-xs font-bold px-3 py-1 rounded mb-3 uppercase tracking-wider w-fit mx-auto md:mx-0">
                   {staticSlide.badge}
@@ -211,11 +218,12 @@ export default function HeroBanner() {
                 href={href}
                 className="flex-1 relative overflow-hidden border-b border-gray-200 block hover:opacity-90 transition-opacity"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={banner.imageUrl}
                   alt=""
-                  className="w-full h-full object-cover absolute inset-0"
+                  fill
+                  sizes="192px"
+                  className="object-cover"
                 />
               </a>
             );
@@ -228,10 +236,16 @@ export default function HeroBanner() {
 
 function ApiSlide({ banner }: { banner: Banner }) {
   const inner = (
-    <div
-      className="h-full min-h-[320px] bg-cover bg-center"
-      style={{ backgroundImage: `url(${banner.imageUrl})` }}
-    />
+    <div className="relative h-full min-h-[320px]">
+      <Image
+        src={banner.imageUrl}
+        alt=""
+        fill
+        priority
+        sizes="(min-width: 1280px) 832px, (min-width: 1024px) 768px, 100vw"
+        className="object-cover object-center"
+      />
+    </div>
   );
   if (banner.linkUrl) {
     return (
