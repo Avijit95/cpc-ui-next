@@ -40,9 +40,7 @@ export default function ProductsPage() {
   const searchParams = useSearchParams();
   const urlCategory = searchParams.get("category");
 
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(
-    urlCategory,
-  );
+  const selectedCategory = urlCategory;
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [priceRange, setPriceRange] = useState(200000);
   const [minRating, setMinRating] = useState<number | null>(null);
@@ -55,10 +53,6 @@ export default function ProductsPage() {
 
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
-
-  useEffect(() => {
-    setSelectedCategory(urlCategory);
-  }, [urlCategory]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -83,7 +77,6 @@ export default function ProductsPage() {
   }, []);
 
   const selectCategory = (slug: string | null) => {
-    setSelectedCategory(slug);
     const params = new URLSearchParams(searchParams.toString());
     if (slug) params.set("category", slug);
     else params.delete("category");
