@@ -82,7 +82,7 @@ function ProductsPageInner() {
           all
             .slice()
             .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((c) => ({ slug: c.slug, name: c.name })),
+            .map((c) => ({ slug: c.slug.toLowerCase(), name: c.name })),
         );
       })
       .catch(() => {
@@ -95,8 +95,9 @@ function ProductsPageInner() {
   }, []);
 
   const selectCategory = (slug: string | null) => {
+    const normalized = slug ? slug.toLowerCase() : null;
     const params = new URLSearchParams(searchParams.toString());
-    if (slug) params.set("category", slug);
+    if (normalized) params.set("category", normalized);
     else params.delete("category");
     const qs = params.toString();
     router.replace(qs ? `/products?${qs}` : "/products");

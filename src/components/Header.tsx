@@ -65,7 +65,7 @@ export default function Header() {
           .slice(0, CATEGORY_SLOTS)
           .map((c) => ({
             name: c.name.toUpperCase(),
-            href: `/products?category=${encodeURIComponent(c.slug)}`,
+            href: `/products?category=${encodeURIComponent(c.slug.toLowerCase())}`,
             hasDropdown: c.children.length > 0,
           }));
         setNavLinks([HOME_LINK, ...categoryLinks, DEALS_LINK]);

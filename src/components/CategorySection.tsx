@@ -64,7 +64,7 @@ export default function CategorySection() {
             : items.map((cat) => (
                 <a
                   key={cat.id}
-                  href={`/products?category=${encodeURIComponent(cat.slug)}`}
+                  href={`/products?category=${encodeURIComponent(cat.slug.toLowerCase())}`}
                   className="group flex flex-col items-center gap-2 hover:opacity-90 transition-opacity"
                 >
                   <div className="w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded">
