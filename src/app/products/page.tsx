@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard, { ProductCardSkeleton } from "@/components/ProductCard";
@@ -9,19 +10,13 @@ import { catalogApi, isApiError } from "@/lib/api";
 import type {
   BrandFacet,
   CatalogSort,
+  CategoryNode,
   ListCard,
   ProductListResponse,
 } from "@/lib/api";
 import { SlidersHorizontal, ChevronDown, Star } from "lucide-react";
 
-const categoryOptions = [
-  "Smartphones",
-  "Cameras",
-  "Speakers",
-  "Smartwatches",
-  "Earphones",
-  "Accessories",
-];
+type CategoryOption = { slug: string; name: string };
 
 type SortOption = {
   label: string;
@@ -41,7 +36,13 @@ const ratingOptions = [4, 3, 2, 1] as const;
 const PAGE_LIMIT = 24;
 
 export default function ProductsPage() {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlCategory = searchParams.get("category");
+
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(
+    urlCategory,
+  );
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [priceRange, setPriceRange] = useState(200000);
   const [minRating, setMinRating] = useState<number | null>(null);
@@ -51,6 +52,44 @@ export default function ProductsPage() {
   const [data, setData] = useState<ProductListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    setSelectedCategory(urlCategory);
+  }, [urlCategory]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    catalogApi
+      .getCategories(ac.signal)
+      .then((all: CategoryNode[]) => {
+        if (ac.signal.aborted) return;
+        setCategoryOptions(
+          all
+            .slice()
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((c) => ({ slug: c.slug, name: c.name })),
+        );
+      })
+      .catch(() => {
+        /* sidebar shows empty state */
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setCategoriesLoading(false);
+      });
+    return () => ac.abort();
+  }, []);
+
+  const selectCategory = (slug: string | null) => {
+    setSelectedCategory(slug);
+    const params = new URLSearchParams(searchParams.toString());
+    if (slug) params.set("category", slug);
+    else params.delete("category");
+    const qs = params.toString();
+    router.replace(qs ? `/products?${qs}` : "/products");
+  };
 
   useEffect(() => {
     const ac = new AbortController();
@@ -98,22 +137,28 @@ export default function ProductsPage() {
           Category
         </h3>
         <div className="space-y-2">
-          {categoryOptions.map((cat) => (
-            <label key={cat} className="flex items-center gap-2.5 cursor-pointer group">
-              <input
-                type="radio"
-                name="category"
-                checked={selectedCategory === cat}
-                onChange={() =>
-                  setSelectedCategory(selectedCategory === cat ? null : cat)
-                }
-                className="w-4 h-4 accent-[#129cd3] cursor-pointer"
-              />
-              <span className="text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
-                {cat}
-              </span>
-            </label>
-          ))}
+          {categoriesLoading ? (
+            <p className="text-xs text-gray-400">Loading…</p>
+          ) : categoryOptions.length === 0 ? (
+            <p className="text-xs text-gray-400">No categories available.</p>
+          ) : (
+            categoryOptions.map((cat) => (
+              <label key={cat.slug} className="flex items-center gap-2.5 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="category"
+                  checked={selectedCategory === cat.slug}
+                  onChange={() =>
+                    selectCategory(selectedCategory === cat.slug ? null : cat.slug)
+                  }
+                  className="w-4 h-4 accent-[#129cd3] cursor-pointer"
+                />
+                <span className="text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
+                  {cat.name}
+                </span>
+              </label>
+            ))
+          )}
         </div>
       </div>
 
@@ -213,7 +258,7 @@ export default function ProductsPage() {
         minRating !== null) && (
         <button
           onClick={() => {
-            setSelectedCategory(null);
+            selectCategory(null);
             setSelectedBrand(null);
             setMinRating(null);
           }}

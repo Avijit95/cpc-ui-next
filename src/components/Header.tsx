@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   ShoppingCart,
@@ -16,16 +16,23 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { catalogApi } from "@/lib/api";
 
-const navLinks = [
-  { name: "HOME", href: "/", hasDropdown: false },
-  { name: "SMARTPHONES", href: "/products", hasDropdown: true },
-  { name: "CAMERAS", href: "/products", hasDropdown: true },
-  { name: "AUDIO", href: "/products", hasDropdown: true },
-  { name: "WEARABLES", href: "/products", hasDropdown: false },
-  { name: "ACCESSORIES", href: "/products", hasDropdown: false },
-  { name: "DEALS", href: "/products", hasDropdown: false, badge: "hot" },
-];
+type NavLink = {
+  name: string;
+  href: string;
+  hasDropdown: boolean;
+  badge?: string;
+};
+
+const HOME_LINK: NavLink = { name: "HOME", href: "/", hasDropdown: false };
+const DEALS_LINK: NavLink = {
+  name: "DEALS",
+  href: "/products",
+  hasDropdown: false,
+  badge: "hot",
+};
+const CATEGORY_SLOTS = 5;
 
 function initials(name: string) {
   return name
@@ -40,10 +47,34 @@ function initials(name: string) {
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [navLinks, setNavLinks] = useState<NavLink[]>([HOME_LINK, DEALS_LINK]);
   const router = useRouter();
   const { user, status } = useAuth();
   const isAuthed = status === "authenticated" && !!user;
-  const accountHref = isAuthed && user.role === "ADMIN" ? "/admin" : "/account";
+  const accountHref = "/account";
+
+  useEffect(() => {
+    const ac = new AbortController();
+    catalogApi
+      .getCategories(ac.signal)
+      .then((all) => {
+        if (ac.signal.aborted) return;
+        const categoryLinks: NavLink[] = all
+          .slice()
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .slice(0, CATEGORY_SLOTS)
+          .map((c) => ({
+            name: c.name.toUpperCase(),
+            href: `/products?category=${encodeURIComponent(c.slug)}`,
+            hasDropdown: c.children.length > 0,
+          }));
+        setNavLinks([HOME_LINK, ...categoryLinks, DEALS_LINK]);
+      })
+      .catch(() => {
+        /* keep HOME + DEALS fallback */
+      });
+    return () => ac.abort();
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
