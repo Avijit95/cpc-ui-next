@@ -86,6 +86,7 @@ export default async function HeroBanner() {
                 <a
                   key={banner.id}
                   href={href}
+                  aria-label="Promotional banner"
                   className="flex-1 relative overflow-hidden border-b border-gray-200 block hover:opacity-90 transition-opacity"
                 >
                   <Image

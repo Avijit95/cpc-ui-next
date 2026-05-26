@@ -96,7 +96,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
   return (
     <header className="w-full sticky top-0 z-50 shadow-sm">
       {/* Top Bar */}
-      <div className="bg-gray-100 border-b border-gray-200 text-gray-500 text-xs py-1.5 px-4">
+      <div className="bg-gray-100 border-b border-gray-200 text-gray-700 text-xs py-1.5 px-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <span>Free 2-day delivery and free returns within India.</span>
           <div className="hidden sm:flex items-center gap-4">

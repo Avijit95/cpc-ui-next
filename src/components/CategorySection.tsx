@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { serverGetCategories } from "@/lib/api/server";
 
@@ -20,10 +21,18 @@ export default async function CategorySection() {
             FEATURED CATEGORIES
           </h2>
           <div className="flex gap-1.5">
-            <button className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors">
+            <button
+              type="button"
+              aria-label="Previous categories"
+              className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
+            >
               <ChevronLeft size={13} />
             </button>
-            <button className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors">
+            <button
+              type="button"
+              aria-label="Next categories"
+              className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
+            >
               <ChevronRight size={13} />
             </button>
           </div>
@@ -36,12 +45,13 @@ export default async function CategorySection() {
               href={`/products?category=${encodeURIComponent(cat.slug.toLowerCase())}`}
               className="group flex flex-col items-center gap-2 hover:opacity-90 transition-opacity"
             >
-              <div className="w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+              <div className="relative w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded">
+                <Image
                   src={cat.imageUrl ?? ""}
                   alt={cat.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  fill
+                  sizes="(min-width: 640px) 20vw, 33vw"
+                  className="object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               </div>
               <p className="text-xs font-semibold text-gray-700 group-hover:text-[#129cd3] transition-colors text-center">

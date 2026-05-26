@@ -53,6 +53,7 @@ export default function HeroSlider({ slides }: Props) {
             <a
               key={slide.id}
               href={slide.linkUrl}
+              aria-label={`Slide ${i + 1}`}
               className={isActive ? "block" : "hidden"}
             >
               {inner}
@@ -67,12 +68,17 @@ export default function HeroSlider({ slides }: Props) {
           {slides.map((_, i) => (
             <button
               key={i}
+              type="button"
               onClick={() => setCurrent(i)}
               aria-label={`Go to slide ${i + 1}`}
-              className={`rounded-full transition-all duration-300 ${
-                i === clampedIndex ? "w-8 h-3 bg-white" : "w-3 h-3 bg-white/40"
-              }`}
-            />
+              className="p-1.5 flex items-center justify-center"
+            >
+              <span
+                className={`block rounded-full transition-all duration-300 ${
+                  i === clampedIndex ? "w-8 h-3 bg-white" : "w-3 h-3 bg-white/40"
+                }`}
+              />
+            </button>
           ))}
         </div>
       )}

@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 const promos = [
   {
     id: 1,
@@ -40,10 +42,11 @@ export default function PromoBanners() {
                 ➤ SEE MORE
               </a>
             </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={promo.image}
               alt={promo.title}
+              width={144}
+              height={112}
               className="w-36 h-28 object-cover rounded hidden sm:block"
             />
           </div>

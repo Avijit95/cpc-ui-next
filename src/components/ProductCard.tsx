@@ -2,6 +2,7 @@
 
 import { Check, Heart, ShoppingCart, Star } from "lucide-react";
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cartApi, isApiError } from "@/lib/api";
@@ -38,12 +39,15 @@ export default function ProductCard({ product }: { product: ListCard }) {
         className="relative bg-gray-50 overflow-hidden block"
       >
         {product.primaryImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={product.primaryImageUrl}
-            alt={product.name}
-            className="w-full h-44 object-contain p-3 group-hover:scale-105 transition-transform duration-400"
-          />
+          <div className="relative w-full h-44">
+            <Image
+              src={product.primaryImageUrl}
+              alt={product.name}
+              fill
+              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+              className="object-contain p-3 group-hover:scale-105 transition-transform duration-400"
+            />
+          </div>
         ) : (
           <div className="w-full h-44" />
         )}
@@ -82,6 +86,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
               setWishlistBusy(false);
             }
           }}
+          aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
           className={`absolute top-2 right-2 w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-opacity hover:bg-[#e8f7fc] disabled:opacity-50 ${
             wishlisted ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           }`}

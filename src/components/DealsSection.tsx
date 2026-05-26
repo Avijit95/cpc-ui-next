@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { products } from "@/data/products";
 
@@ -99,10 +100,11 @@ export default function DealsSection() {
 
               {/* Product Image */}
               <div className="relative flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={deal.image}
                   alt={deal.name}
+                  width={160}
+                  height={160}
                   className="w-40 h-40 object-contain"
                 />
                 <span className="absolute top-1 right-1 bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center">
@@ -153,9 +155,14 @@ export default function DealsSection() {
                       : "border border-gray-200 hover:border-[#8dd4ee]"
                   }`}
                 >
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.image} alt={p.name} className="w-full h-16 object-contain" />
+                  <div className="relative w-full h-16">
+                    <Image
+                      src={p.image}
+                      alt={p.name}
+                      fill
+                      sizes="112px"
+                      className="object-contain"
+                    />
                     <span className="absolute top-0 right-0 bg-[#129cd3] text-white text-[10px] font-bold w-7 h-7 rounded-full flex items-center justify-center">
                       -{disc}%
                     </span>
@@ -174,10 +181,18 @@ export default function DealsSection() {
               BEST SELLERS
             </h2>
             <div className="flex gap-1">
-              <button className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors">
+              <button
+                type="button"
+                aria-label="Previous best sellers"
+                className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
+              >
                 <ChevronLeft size={13} />
               </button>
-              <button className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors">
+              <button
+                type="button"
+                aria-label="Next best sellers"
+                className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
+              >
                 <ChevronRight size={13} />
               </button>
             </div>
@@ -188,16 +203,17 @@ export default function DealsSection() {
                 key={product.id}
                 className="flex items-center gap-4 px-4 py-3 hover:bg-[#e8f7fc] transition-colors cursor-pointer"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={product.image}
                   alt={product.name}
+                  width={64}
+                  height={64}
                   className="w-16 h-16 object-cover rounded flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-semibold text-gray-800 line-clamp-2 mb-1 hover:text-[#129cd3] transition-colors">
+                  <h3 className="text-xs font-semibold text-gray-800 line-clamp-2 mb-1 hover:text-[#129cd3] transition-colors">
                     {product.name}
-                  </h4>
+                  </h3>
                   <StarRating rating={product.rating} />
                   <div className="flex items-baseline gap-2 mt-1">
                     <span className="text-sm font-bold text-[#129cd3]">{formatPrice(product.price)}</span>
