@@ -80,10 +80,18 @@ export default function ProductTabs({ title, initialItems }: Props) {
                 {tab.label}
               </button>
             ))}
-            <button className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors ml-2">
+            <button
+              type="button"
+              aria-label="Previous products"
+              className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors ml-2"
+            >
               <ChevronLeft size={12} />
             </button>
-            <button className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors">
+            <button
+              type="button"
+              aria-label="Next products"
+              className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
+            >
               <ChevronRight size={12} />
             </button>
           </div>

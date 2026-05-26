@@ -42,7 +42,8 @@ export default function HeroSlider({ slides }: Props) {
               src={slide.imageUrl}
               alt=""
               fill
-              priority={i === 0}
+              preload={i === 0}
+              fetchPriority={i === 0 ? "high" : "auto"}
               sizes="(min-width: 1280px) 832px, (min-width: 1024px) 768px, 100vw"
               className="object-cover object-center"
             />

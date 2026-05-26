@@ -141,7 +141,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
               placeholder="Search for products..."
               className="flex-1 outline-none text-sm px-4 py-2.5 text-gray-700 placeholder-gray-400"
             />
-            <button type="submit" className="bg-[#129cd3] hover:bg-[#0e87b5] text-white px-5 py-2.5 flex items-center gap-2 transition-colors flex-shrink-0">
+            <button type="submit" className="bg-[#0a6e99] hover:bg-[#08597f] text-white px-5 py-2.5 flex items-center gap-2 transition-colors flex-shrink-0">
               <Search size={16} />
               <span className="hidden sm:inline text-sm font-semibold tracking-wide">SEARCH</span>
             </button>
@@ -153,7 +153,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
               <Phone size={18} className="text-white" />
             </div>
             <div>
-              <p className="text-xs text-gray-400">Call us:</p>
+              <p className="text-xs text-gray-600">Call us:</p>
               <p className="text-sm font-semibold text-gray-800">+91 98765 43210</p>
             </div>
           </div>
