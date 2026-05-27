@@ -1,16 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import {
   Archive,
+  Check,
   Loader2,
   MoreHorizontal,
   Package,
   Pencil,
   Plus,
   Search,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
@@ -28,6 +30,64 @@ const STATUS_OPTIONS: { value: "" | ProductStatus; label: string }[] = [
   { value: "ACTIVE", label: "Active" },
   { value: "ARCHIVED", label: "Archived" },
 ];
+
+const BEST_SELLER_OPTIONS: { value: "" | "true" | "false"; label: string }[] = [
+  { value: "", label: "All products" },
+  { value: "true", label: "Best Sellers" },
+  { value: "false", label: "Normal" },
+];
+
+type Toast = { id: number; message: string; kind: "success" | "error" };
+
+function ProductToggle({
+  on,
+  busy,
+  onLabel,
+  offLabel,
+  onClick,
+}: {
+  on: boolean;
+  busy: boolean;
+  onLabel: string;
+  offLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      aria-pressed={on}
+      title={on ? onLabel : offLabel}
+      className="inline-flex items-center gap-2 group disabled:opacity-60"
+    >
+      <span
+        className={`relative inline-block h-5 w-9 rounded-full transition-colors ${
+          on ? "bg-[#129cd3]" : "bg-gray-300"
+        } group-hover:brightness-110`}
+      >
+        <span
+          className={`absolute top-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+            on ? "translate-x-[18px]" : "translate-x-0.5"
+          }`}
+        />
+        {busy && (
+          <Loader2
+            size={10}
+            className="absolute -right-4 top-1 animate-spin text-gray-400"
+          />
+        )}
+      </span>
+      <span
+        className={`text-[11px] font-semibold ${
+          on ? "text-[#129cd3]" : "text-gray-400"
+        }`}
+      >
+        {on ? onLabel : offLabel}
+      </span>
+    </button>
+  );
+}
 
 function formatPrice(n: number) {
   return n.toLocaleString("en-IN", {
@@ -57,6 +117,9 @@ export default function AdminProductsPage() {
   // Filters / pagination
   const [statusFilter, setStatusFilter] = useState<"" | ProductStatus>("");
   const [categoryFilter, setCategoryFilter] = useState<string>(""); // categoryId
+  const [bestSellerFilter, setBestSellerFilter] = useState<"" | "true" | "false">(
+    "",
+  );
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState(""); // debounced
   const [page, setPage] = useState(0); // zero-indexed
@@ -73,6 +136,22 @@ export default function AdminProductsPage() {
     useState<AdminProductListItem | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+
+  // Inline toggle state (status + best seller). Track which row is busy on which
+  // field so we can disable just that toggle while its PATCH is in flight.
+  const [busyToggles, setBusyToggles] = useState<
+    Record<string, "status" | "bestSeller" | undefined>
+  >({});
+
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastIdRef = useRef(0);
+  const pushToast = useCallback((message: string, kind: Toast["kind"]) => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, message, kind }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3000);
+  }, []);
 
   // Debounce search input → applied search.
   useEffect(() => {
@@ -113,6 +192,10 @@ export default function AdminProductsPage() {
         status: statusFilter || undefined,
         categoryId: categoryFilter || undefined,
         search: search || undefined,
+        isBestSeller:
+          bestSellerFilter === ""
+            ? undefined
+            : bestSellerFilter === "true",
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       })
@@ -136,13 +219,90 @@ export default function AdminProductsPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, categoryFilter, search, page, reloadKey]);
+  }, [statusFilter, categoryFilter, bestSellerFilter, search, page, reloadKey]);
 
   const categoryNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const c of categories) m.set(c.id, c.name);
     return m;
   }, [categories]);
+
+  const onToggleStatus = useCallback(
+    async (p: AdminProductListItem) => {
+      if (p.status === "ARCHIVED") return; // archived must un-archive via edit
+      const nextStatus: ProductStatus = p.status === "ACTIVE" ? "DRAFT" : "ACTIVE";
+      setBusyToggles((b) => ({ ...b, [p.id]: "status" }));
+      setItems((prev) =>
+        prev.map((row) =>
+          row.id === p.id ? { ...row, status: nextStatus } : row,
+        ),
+      );
+      try {
+        await adminApi.updateProduct(p.id, { status: nextStatus });
+        pushToast(
+          nextStatus === "ACTIVE"
+            ? `${p.name} is now Active`
+            : `${p.name} set to Inactive`,
+          "success",
+        );
+      } catch (err) {
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === p.id ? { ...row, status: p.status } : row,
+          ),
+        );
+        pushToast(
+          isApiError(err) ? err.displayMessage : "Couldn't update status",
+          "error",
+        );
+      } finally {
+        setBusyToggles((b) => {
+          const { [p.id]: _omit, ...rest } = b;
+          void _omit;
+          return rest;
+        });
+      }
+    },
+    [pushToast],
+  );
+
+  const onToggleBestSeller = useCallback(
+    async (p: AdminProductListItem) => {
+      const next = !p.isBestSeller;
+      setBusyToggles((b) => ({ ...b, [p.id]: "bestSeller" }));
+      setItems((prev) =>
+        prev.map((row) =>
+          row.id === p.id ? { ...row, isBestSeller: next } : row,
+        ),
+      );
+      try {
+        await adminApi.updateProduct(p.id, { isBestSeller: next });
+        pushToast(
+          next
+            ? `${p.name} marked as Best Seller`
+            : `${p.name} removed from Best Sellers`,
+          "success",
+        );
+      } catch (err) {
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === p.id ? { ...row, isBestSeller: p.isBestSeller } : row,
+          ),
+        );
+        pushToast(
+          isApiError(err) ? err.displayMessage : "Couldn't update Best Seller",
+          "error",
+        );
+      } finally {
+        setBusyToggles((b) => {
+          const { [p.id]: _omit, ...rest } = b;
+          void _omit;
+          return rest;
+        });
+      }
+    },
+    [pushToast],
+  );
 
   const onArchive = async () => {
     if (!archiveTarget) return;
@@ -273,6 +433,20 @@ export default function AdminProductsPage() {
               </option>
             ))}
           </select>
+          <select
+            value={bestSellerFilter}
+            onChange={(e) => {
+              setBestSellerFilter(e.target.value as "" | "true" | "false");
+              setPage(0);
+            }}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+          >
+            {BEST_SELLER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Top-level error */}
@@ -303,13 +477,16 @@ export default function AdminProductsPage() {
                   <th className="text-left font-semibold px-5 py-3">Stock</th>
                   <th className="text-left font-semibold px-5 py-3">Variants</th>
                   <th className="text-left font-semibold px-5 py-3">Status</th>
+                  <th className="text-left font-semibold px-5 py-3">
+                    Best&nbsp;Seller
+                  </th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center">
+                    <td colSpan={9} className="px-5 py-12 text-center">
                       <Loader2
                         className="animate-spin text-[#129cd3] inline-block"
                         size={22}
@@ -319,7 +496,7 @@ export default function AdminProductsPage() {
                 ) : items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       {total === 0
@@ -369,11 +546,30 @@ export default function AdminProductsPage() {
                           </span>
                         </td>
                         <td className="px-5 py-3">
-                          <span
-                            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${statusBadgeClass(p.status)}`}
-                          >
-                            {p.status}
-                          </span>
+                          {p.status === "ARCHIVED" ? (
+                            <span
+                              className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${statusBadgeClass(p.status)}`}
+                            >
+                              ARCHIVED
+                            </span>
+                          ) : (
+                            <ProductToggle
+                              on={p.status === "ACTIVE"}
+                              busy={busyToggles[p.id] === "status"}
+                              onLabel="Active"
+                              offLabel="Inactive"
+                              onClick={() => onToggleStatus(p)}
+                            />
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          <ProductToggle
+                            on={p.isBestSeller}
+                            busy={busyToggles[p.id] === "bestSeller"}
+                            onLabel="On"
+                            offLabel="Off"
+                            onClick={() => onToggleBestSeller(p)}
+                          />
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-1">
@@ -510,6 +706,27 @@ export default function AdminProductsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast notifications */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50 space-y-2 pointer-events-none">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-white text-sm font-medium pointer-events-auto ${
+                t.kind === "success" ? "bg-emerald-600" : "bg-red-500"
+              }`}
+            >
+              {t.kind === "success" ? (
+                <Check size={16} />
+              ) : (
+                <TriangleAlert size={16} />
+              )}
+              <span>{t.message}</span>
+            </div>
+          ))}
         </div>
       )}
     </>

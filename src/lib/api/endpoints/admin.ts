@@ -97,6 +97,7 @@ export type CreateProductBody = {
   status?: ProductStatus;
   brand?: string;
   hsnCode?: string;
+  isBestSeller?: boolean;
 };
 
 export type UpdateProductBody = Partial<CreateProductBody>;
@@ -106,6 +107,7 @@ export type ListProductsAdminQuery = {
   categoryId?: string;
   brand?: string;
   search?: string;
+  isBestSeller?: boolean;
   limit?: number;
   offset?: number;
 };

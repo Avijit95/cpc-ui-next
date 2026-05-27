@@ -138,6 +138,7 @@ export type ListCard = {
   badges: string[];
   ratingAverage: number | null;
   reviewCount: number;
+  isBestSeller: boolean;
   deal: DealPreview | null;
 };
 
@@ -239,6 +240,7 @@ export type AdminProduct = {
   specs: Record<string, unknown>;
   images: string[];
   imagesSortOrder: number[];
+  isBestSeller: boolean;
   createdAt: string;
   updatedAt: string;
 };
