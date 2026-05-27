@@ -22,6 +22,87 @@ const KNOWN_POSITIONS = ["home_hero", "home_side"] as const;
 
 type ImageContentType = "image/jpeg" | "image/png" | "image/webp";
 
+type BannerSpec = {
+  recommended: { w: number; h: number };
+  hardMin: { w: number; h: number };
+  aspectRatio: number | null;
+};
+
+const BANNER_SPECS: Record<string, BannerSpec> = {
+  home_hero: {
+    recommended: { w: 1920, h: 720 },
+    hardMin: { w: 1280, h: 400 },
+    aspectRatio: 1920 / 720,
+  },
+  home_side: {
+    recommended: { w: 600, h: 600 },
+    hardMin: { w: 320, h: 320 },
+    aspectRatio: 1,
+  },
+};
+
+const FALLBACK_SPEC: BannerSpec = {
+  recommended: { w: 1280, h: 480 },
+  hardMin: { w: 640, h: 320 },
+  aspectRatio: null,
+};
+
+const ASPECT_TOLERANCE = 0.15;
+
+function getBannerSpec(position: string): BannerSpec {
+  return BANNER_SPECS[position] ?? FALLBACK_SPEC;
+}
+
+function readImageDimensions(
+  file: File,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const dims = { width: img.naturalWidth, height: img.naturalHeight };
+      URL.revokeObjectURL(url);
+      resolve(dims);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read image"));
+    };
+    img.src = url;
+  });
+}
+
+function validateBannerImage(
+  width: number,
+  height: number,
+  position: string,
+): { blocked: string | null; warning: string | null } {
+  const spec = getBannerSpec(position);
+  if (width < spec.hardMin.w || height < spec.hardMin.h) {
+    return {
+      blocked: `Image is too small (${width}×${height}px). Minimum accepted size is ${spec.hardMin.w}×${spec.hardMin.h}px. Please upload an HD image.`,
+      warning: null,
+    };
+  }
+  if (width < spec.recommended.w || height < spec.recommended.h) {
+    return {
+      blocked: null,
+      warning: `Image is below the recommended HD size of ${spec.recommended.w}×${spec.recommended.h}px (uploaded ${width}×${height}px). It may look soft on large screens.`,
+    };
+  }
+  if (spec.aspectRatio !== null) {
+    const actualRatio = width / height;
+    const deviation = Math.abs(actualRatio - spec.aspectRatio) / spec.aspectRatio;
+    if (deviation > ASPECT_TOLERANCE) {
+      return {
+        blocked: null,
+        warning: `Aspect ratio (${actualRatio.toFixed(2)}:1) differs noticeably from the recommended ${spec.aspectRatio.toFixed(2)}:1 for this slot. The image may be cropped or stretched.`,
+      };
+    }
+  }
+  return { blocked: null, warning: null };
+}
+
 type FormState = {
   imageObjectKey: string;
   imageUrl: string | null;
@@ -88,6 +169,9 @@ export default function CmsPage() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [imageDims, setImageDims] = useState<{ w: number; h: number } | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [confirmDelete, setConfirmDelete] = useState<Banner | null>(null);
@@ -125,6 +209,36 @@ export default function CmsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (modalMode !== "edit" || !form.imageUrl || imageDims) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) {
+        setImageDims({ w: img.naturalWidth, h: img.naturalHeight });
+      }
+    };
+    img.src = form.imageUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [modalMode, form.imageUrl, imageDims]);
+
+  const imageWarning = useMemo(() => {
+    if (!imageDims) return null;
+    const { blocked, warning } = validateBannerImage(
+      imageDims.w,
+      imageDims.h,
+      form.position,
+    );
+    return blocked ?? warning;
+  }, [imageDims, form.position]);
+
+  const currentSpec = useMemo(
+    () => getBannerSpec(form.position),
+    [form.position],
+  );
+
   const groupedByPosition = useMemo(() => {
     const map = new Map<string, Banner[]>();
     for (const b of items) {
@@ -143,6 +257,7 @@ export default function CmsPage() {
     setEditId(null);
     setForm(EMPTY_FORM);
     setFormError(null);
+    setImageDims(null);
   };
 
   const openEdit = (banner: Banner) => {
@@ -150,6 +265,7 @@ export default function CmsPage() {
     setEditId(banner.id);
     setForm(toFormState(banner));
     setFormError(null);
+    setImageDims(null);
   };
 
   const closeModal = () => {
@@ -158,6 +274,7 @@ export default function CmsPage() {
     setEditId(null);
     setForm(EMPTY_FORM);
     setFormError(null);
+    setImageDims(null);
   };
 
   const handleFileChange = useCallback(
@@ -167,10 +284,34 @@ export default function CmsPage() {
       const ct = file.type as ImageContentType;
       if (!["image/jpeg", "image/png", "image/webp"].includes(ct)) {
         setFormError("Image must be JPG, PNG, or WebP.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-      setUploadBusy(true);
       setFormError(null);
+      setImageDims(null);
+      const currentPosition = form.position;
+
+      let dims: { width: number; height: number };
+      try {
+        dims = await readImageDimensions(file);
+      } catch {
+        setFormError("Could not read image dimensions. Try a different file.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
+      const { blocked } = validateBannerImage(
+        dims.width,
+        dims.height,
+        currentPosition,
+      );
+      if (blocked) {
+        setFormError(blocked);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
+      setUploadBusy(true);
       try {
         const result = await adminApi.uploadBannerImage(file);
         setForm((prev) => ({
@@ -178,6 +319,7 @@ export default function CmsPage() {
           imageObjectKey: result.objectKey,
           imageUrl: result.publicUrl ?? prev.imageUrl,
         }));
+        setImageDims({ w: dims.width, h: dims.height });
       } catch (err) {
         setFormError(
           isApiError(err) ? err.displayMessage : "Image upload failed",
@@ -187,7 +329,7 @@ export default function CmsPage() {
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     },
-    [],
+    [form.position],
   );
 
   const handleSave = useCallback(async () => {
@@ -518,8 +660,24 @@ export default function CmsPage() {
                     <p className="text-[10px] text-gray-400 mt-1">
                       JPG / PNG / WebP. Stored under banners/ — required.
                     </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      Recommended {currentSpec.recommended.w}×
+                      {currentSpec.recommended.h}px (HD). Minimum{" "}
+                      {currentSpec.hardMin.w}×{currentSpec.hardMin.h}px.
+                      {imageDims && (
+                        <span className="text-gray-400">
+                          {" "}
+                          Uploaded: {imageDims.w}×{imageDims.h}px.
+                        </span>
+                      )}
+                    </p>
                   </div>
                 </div>
+                {imageWarning && (
+                  <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {imageWarning}
+                  </div>
+                )}
               </div>
 
               {/* Position */}
