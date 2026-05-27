@@ -36,6 +36,9 @@ export type {
   BannerPresignBody,
   CreateBannerBody,
   UpdateBannerBody,
+  CreateDealBody,
+  UpdateDealBody,
+  ListAdminDealsQuery,
   ListActivityLogsQuery,
   ListAdminUsersQuery,
   PatchUserRoleBody,
@@ -53,6 +56,7 @@ export type {
   PatchAdminReviewBody,
 } from "./endpoints/admin";
 export { bannersApi } from "./endpoints/banners";
+export { dealsApi } from "./endpoints/deals";
 export { ticketsApi } from "./endpoints/tickets";
 export type {
   ListMyTicketsQuery,

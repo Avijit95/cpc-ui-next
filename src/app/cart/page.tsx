@@ -244,6 +244,16 @@ export default function CartPage() {
                           <span className="text-base font-bold text-[#129cd3]">
                             {formatPrice(line.unitPrice)}
                           </span>
+                          {line.deal && (
+                            <>
+                              <span className="text-xs text-gray-400 line-through">
+                                {formatPrice(line.deal.basePrice)}
+                              </span>
+                              <span className="text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded">
+                                DEAL -{line.deal.percentOff}%
+                              </span>
+                            </>
+                          )}
                         </div>
                         <div className="flex items-center gap-4">
                           {/* Qty */}

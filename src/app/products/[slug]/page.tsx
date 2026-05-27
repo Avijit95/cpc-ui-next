@@ -39,6 +39,44 @@ function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
 }
 
+function DealCountdown({ endsAt }: { endsAt: string }) {
+  const target = new Date(endsAt).getTime();
+  const [remainingMs, setRemainingMs] = useState(() =>
+    Math.max(0, target - Date.now()),
+  );
+  useEffect(() => {
+    const t = setInterval(() => {
+      setRemainingMs(Math.max(0, target - Date.now()));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [target]);
+  if (remainingMs <= 0) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const h = Math.floor(remainingMs / 3600000);
+  const m = Math.floor((remainingMs % 3600000) / 60000);
+  const s = Math.floor((remainingMs % 60000) / 1000);
+  return (
+    <div className="inline-flex items-center gap-2 mb-4 text-xs text-gray-600">
+      <span className="font-semibold text-[#129cd3] uppercase tracking-wide">
+        Deal ends in
+      </span>
+      <span className="inline-flex items-center gap-0.5 tabular-nums">
+        <span className="bg-[#129cd3] text-white font-bold px-1.5 py-0.5 rounded">
+          {pad(h)}
+        </span>
+        <span className="text-[#129cd3] font-bold">:</span>
+        <span className="bg-[#129cd3] text-white font-bold px-1.5 py-0.5 rounded">
+          {pad(m)}
+        </span>
+        <span className="text-[#129cd3] font-bold">:</span>
+        <span className="bg-[#129cd3] text-white font-bold px-1.5 py-0.5 rounded">
+          {pad(s)}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 const tabs = ["Description", "Specifications", "Reviews"] as const;
 type TabType = (typeof tabs)[number];
 
@@ -356,10 +394,12 @@ export default function ProductDetailPage() {
     );
   }
 
-  const { basePrice, finalPrice } = product.pricing;
-  const hasDiscount = basePrice > finalPrice;
+  const liveDeal = product.deal;
+  const displayBase = liveDeal ? liveDeal.basePrice : product.pricing.basePrice;
+  const displayFinal = liveDeal ? liveDeal.dealPrice : product.pricing.finalPrice;
+  const hasDiscount = displayBase > displayFinal;
   const discount = hasDiscount
-    ? Math.round(((basePrice - finalPrice) / basePrice) * 100)
+    ? Math.round(((displayBase - displayFinal) / displayBase) * 100)
     : 0;
   const immediateCategory = product.breadcrumbs[product.breadcrumbs.length - 1];
   const sortedImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -465,19 +505,20 @@ export default function ProductDetailPage() {
 
               {/* Pricing */}
               <div className="flex items-baseline gap-3 mb-2">
-                <span className="text-3xl font-bold text-[#129cd3]">{formatPrice(finalPrice)}</span>
+                <span className="text-3xl font-bold text-[#129cd3]">{formatPrice(displayFinal)}</span>
                 {hasDiscount && (
                   <>
-                    <span className="text-lg text-gray-400 line-through">{formatPrice(basePrice)}</span>
+                    <span className="text-lg text-gray-400 line-through">{formatPrice(displayBase)}</span>
                     <span className="bg-green-100 text-green-700 text-sm font-bold px-2 py-0.5 rounded">{discount}% OFF</span>
                   </>
                 )}
               </div>
               {hasDiscount && (
-                <p className="text-sm text-green-600 font-medium mb-4">
-                  You save {formatPrice(basePrice - finalPrice)}
+                <p className="text-sm text-green-600 font-medium mb-2">
+                  You save {formatPrice(displayBase - displayFinal)}
                 </p>
               )}
+              {liveDeal && <DealCountdown endsAt={liveDeal.endsAt} />}
 
               {/* Stock */}
               <div className="flex items-center gap-2 mb-5">

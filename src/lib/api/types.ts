@@ -119,6 +119,13 @@ export type CategoryNode = {
   children: CategoryNode[];
 };
 
+export type DealPreview = {
+  dealPrice: number;
+  basePrice: number;
+  endsAt: string;
+  percentOff: number;
+};
+
 export type ListCard = {
   id: string;
   slug: string;
@@ -131,6 +138,7 @@ export type ListCard = {
   badges: string[];
   ratingAverage: number | null;
   reviewCount: number;
+  deal: DealPreview | null;
 };
 
 export type PriceBucket = {
@@ -192,6 +200,7 @@ export type ProductDetail = {
   images: ProductImage[];
   breadcrumbs: Crumb[];
   pricing: CatalogPricingPreview;
+  deal: DealPreview | null;
   variants: Variant[];
   stock: number;
 };
@@ -341,6 +350,7 @@ export type PricedCartLine = {
   qty: number;
   unitPrice: number;
   primaryImageUrl: string | null;
+  deal: DealPreview | null;
   availableCoupons: { customer?: CouponPreview; retail?: CouponPreview };
   appliedCoupons: { customer?: AppliedCoupon; retail?: AppliedCoupon };
   discount: { customer: number; retail: number; total: number };
@@ -877,6 +887,41 @@ export type TicketAttachmentPresignResponse = {
   objectKey: string;
   expiresIn: number;
 };
+
+// ────────────────────────────────────────────────────────────────────────────
+// Today Deals — admin-managed, time-windowed product pricing
+// ────────────────────────────────────────────────────────────────────────────
+
+export type DealProductSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  primaryImageUrl: string | null;
+  status: ProductStatus;
+};
+
+export type Deal = {
+  id: string;
+  productId: string;
+  dealPrice: number;
+  basePrice: number;
+  percentOff: number;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  product: DealProductSummary;
+};
+
+export type DealListResponse = {
+  items: Deal[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type DealLifecycle = "live" | "upcoming" | "expired" | "all";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Banners — Sprint 5b (api-integration.md §17.3)

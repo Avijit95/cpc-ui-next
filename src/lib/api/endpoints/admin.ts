@@ -29,6 +29,9 @@ import type {
   CouponStatus,
   CouponType,
   DashboardSummary,
+  Deal,
+  DealLifecycle,
+  DealListResponse,
   ImportJobAccepted,
   ImportJobStatus,
   KycDocDownloadResponse,
@@ -321,6 +324,28 @@ export type AttachProductCouponBody = {
   value: number;
 };
 
+export type CreateDealBody = {
+  productId: string;
+  dealPrice: number;
+  startsAt: string;
+  endsAt: string;
+  isActive?: boolean;
+};
+
+export type UpdateDealBody = {
+  dealPrice?: number;
+  startsAt?: string;
+  endsAt?: string;
+  isActive?: boolean;
+};
+
+export type ListAdminDealsQuery = {
+  status?: DealLifecycle;
+  productId?: string;
+  limit?: number;
+  offset?: number;
+};
+
 export const adminApi = {
   // ── Partners ────────────────────────────────────────────────────────────
   listPartners(query: ListPartnersQuery = {}) {
@@ -531,6 +556,33 @@ export const adminApi = {
     return request<CreateAdminOrderResponse>("/admin/orders", {
       method: "POST",
       body,
+    });
+  },
+
+  // ── Today Deals ─────────────────────────────────────────────────────────
+  listDeals(query: ListAdminDealsQuery = {}) {
+    return request<DealListResponse>("/admin/deals", { query });
+  },
+  getDeal(id: string) {
+    return request<Deal>(`/admin/deals/${encodeURIComponent(id)}`);
+  },
+  createDeal(body: CreateDealBody) {
+    return request<Deal>("/admin/deals", { method: "POST", body });
+  },
+  updateDeal(id: string, body: UpdateDealBody) {
+    return request<Deal>(`/admin/deals/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body,
+    });
+  },
+  toggleDeal(id: string) {
+    return request<Deal>(`/admin/deals/${encodeURIComponent(id)}/toggle`, {
+      method: "POST",
+    });
+  },
+  deleteDeal(id: string) {
+    return request<{ id: string }>(`/admin/deals/${encodeURIComponent(id)}`, {
+      method: "DELETE",
     });
   },
 
