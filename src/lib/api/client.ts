@@ -34,6 +34,14 @@ export function getApiBaseUrl() {
   return BASE_URL;
 }
 
+/**
+ * Read the current in-memory access token. Used by direct-fetch callers
+ * (e.g. CSV downloads) that bypass the typed `request<T>` JSON pipeline.
+ */
+export function getCurrentAccessToken(): string | null {
+  return getAccessToken();
+}
+
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;

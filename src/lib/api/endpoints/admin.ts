@@ -78,6 +78,7 @@ export type CreateCategoryBody = {
   parentId?: string | null;
   sortOrder?: number;
   imageObjectKey?: string;
+  isActive?: boolean;
 };
 
 export type UpdateCategoryBody = Partial<CreateCategoryBody>;
@@ -98,16 +99,32 @@ export type CreateProductBody = {
   brand?: string;
   hsnCode?: string;
   isBestSeller?: boolean;
+  isFeatured?: boolean;
 };
 
 export type UpdateProductBody = Partial<CreateProductBody>;
 
-export type ListProductsAdminQuery = {
+/**
+ * Shared sort + date-range query params for admin list endpoints.
+ * Date strings are `YYYY-MM-DD` (from <input type="date">) and interpreted as
+ * IST day boundaries on the server.
+ */
+export type AdminListSortFilter = {
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  createdFrom?: string;
+  createdTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
+};
+
+export type ListProductsAdminQuery = AdminListSortFilter & {
   status?: ProductStatus;
   categoryId?: string;
   brand?: string;
   search?: string;
   isBestSeller?: boolean;
+  isFeatured?: boolean;
   limit?: number;
   offset?: number;
 };
@@ -150,7 +167,7 @@ export type ProductImagesConfirmBody = {
 // Coupons (Sprint 3)
 // ────────────────────────────────────────────────────────────────────────────
 
-export type ListCouponsQuery = {
+export type ListCouponsQuery = AdminListSortFilter & {
   type?: CouponType;
   status?: CouponStatus;
   limit?: number;
@@ -168,12 +185,12 @@ export type UpdateCouponBody = {
   status?: CouponStatus;
 };
 
-export type ListAdminOrdersQuery = {
+export type ListAdminOrdersQuery = AdminListSortFilter & {
   status?: OrderStatus;
   userId?: string;
   q?: string;
-  from?: string; // ISO date
-  to?: string; // ISO date
+  from?: string; // ISO date — legacy filter on createdAt
+  to?: string; // ISO date — legacy filter on createdAt
   limit?: number;
   offset?: number;
 };
@@ -205,7 +222,7 @@ export type CreateAdminOrderResponse = {
 
 // ── Activity log + admin users + dashboard + reports (Sprint 5a) ─────────
 
-export type ListActivityLogsQuery = {
+export type ListActivityLogsQuery = AdminListSortFilter & {
   actorUserId?: string;
   targetType?: string;
   targetId?: string;
@@ -216,7 +233,7 @@ export type ListActivityLogsQuery = {
   offset?: number;
 };
 
-export type ListAdminUsersQuery = {
+export type ListAdminUsersQuery = AdminListSortFilter & {
   role?: Role;
   status?: UserStatus;
   kycStatus?: KycStatus;
@@ -264,7 +281,7 @@ export type ProductsExportBody = {
   limit?: number;
 };
 
-export type ListAdminTicketsQuery = {
+export type ListAdminTicketsQuery = AdminListSortFilter & {
   status?: TicketStatus;
   assigneeId?: string;
   q?: string; // subject contains — 2026-05-18 sweep
@@ -284,7 +301,7 @@ export type AdminTicketMessageBody = {
 };
 
 // ── Reviews moderation (Sprint 6) ───────────────────────────────────────
-export type ListAdminReviewsQuery = {
+export type ListAdminReviewsQuery = AdminListSortFilter & {
   productId?: string;
   isApproved?: boolean;
   limit?: number;
@@ -341,11 +358,27 @@ export type UpdateDealBody = {
   isActive?: boolean;
 };
 
-export type ListAdminDealsQuery = {
+export type ListAdminDealsQuery = AdminListSortFilter & {
   status?: DealLifecycle;
   productId?: string;
   limit?: number;
   offset?: number;
+};
+
+// ── Brands (Sprint 8.5) — derived from Product.brand ──────────────────────
+export type AdminBrandRow = {
+  name: string;
+  productCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ListAdminBrandsQuery = {
+  search?: string;
+  sortBy?: "name" | "productCount" | "createdAt" | "updatedAt";
+  sortOrder?: "asc" | "desc";
+  createdFrom?: string;
+  createdTo?: string;
 };
 
 export const adminApi = {
@@ -559,6 +592,14 @@ export const adminApi = {
       method: "POST",
       body,
     });
+  },
+
+  // ── Brands (derived) ────────────────────────────────────────────────────
+  listBrands(query: ListAdminBrandsQuery = {}) {
+    return request<{ items: AdminBrandRow[]; total: number }>(
+      "/admin/brands",
+      { query },
+    );
   },
 
   // ── Today Deals ─────────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ const navGroups = [
     items: [
       { href: "/admin/users", label: "Users & Roles", icon: Users },
       { href: "/admin/categories", label: "Categories", icon: FolderTree },
+      { href: "/admin/brands", label: "Brands", icon: Tag },
       { href: "/admin/products", label: "Products", icon: Package },
       { href: "/admin/pricing", label: "Pricing & Discounts", icon: Tag },
       { href: "/admin/deals", label: "Today Deals", icon: Zap },

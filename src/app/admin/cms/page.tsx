@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
 import { adminApi, isApiError } from "@/lib/api";
 import type { Banner, CreateBannerBody, UpdateBannerBody } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
 import {
   Plus,
   Pencil,
@@ -420,12 +422,18 @@ export default function CmsPage() {
         title="CMS"
         subtitle="Banners — hero slides, side panels, scheduled campaigns"
         actions={
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={14} /> New banner
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportCsvButton
+              path="/admin/banners/export.csv"
+              filename="banners"
+            />
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={14} /> New banner
+            </button>
+          </div>
         }
       />
 
@@ -562,6 +570,12 @@ export default function CmsPage() {
                               : "open"}
                           </p>
                         )}
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          Added {formatTimestamp(b.createdAt)}
+                          {formatUpdated(b.createdAt, b.updatedAt) !== "—" && (
+                            <> · Updated {formatUpdated(b.createdAt, b.updatedAt)}</>
+                          )}
+                        </p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button

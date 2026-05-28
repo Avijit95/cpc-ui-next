@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortableHeader, {
+  type SortState,
+} from "@/components/admin/list/SortableHeader";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
 import {
   FolderTree,
   Loader2,
@@ -15,6 +25,16 @@ import {
 } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
 import type { AdminCategoryListItem } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+  { label: "Recently updated", sortBy: "updatedAt", sortOrder: "desc" },
+  { label: "Name (A → Z)", sortBy: "name", sortOrder: "asc" },
+  { label: "Name (Z → A)", sortBy: "name", sortOrder: "desc" },
+];
 
 function deleteErrorMessage(err: unknown): string {
   if (!isApiError(err)) return "Couldn't delete the category. Try again.";
@@ -32,12 +52,74 @@ export default function AdminCategoriesPage() {
   const [items, setItems] = useState<AdminCategoryListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [url, setUrl] = useUrlState({
+    q: "",
+    active: "" as "" | "true" | "false",
+    sortBy: "createdAt",
+    sortOrder: "desc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const query = url.q;
+  const activeFilter = url.active;
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
+  );
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const setSort = useCallback(
+    (s: SortState) => setUrl({ sortBy: s.field, sortOrder: s.order }),
+    [setUrl],
+  );
+  const setDateRange = useCallback(
+    (r: DateRange) =>
+      setUrl({
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+        updatedFrom: r.updatedFrom ?? "",
+        updatedTo: r.updatedTo ?? "",
+      }),
+    [setUrl],
+  );
+  const setQuery = useCallback((v: string) => setUrl({ q: v }), [setUrl]);
 
   const [confirmTarget, setConfirmTarget] =
     useState<AdminCategoryListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [busyToggle, setBusyToggle] = useState<string | null>(null);
+
+  const toggleActive = useCallback(
+    async (c: AdminCategoryListItem) => {
+      setBusyToggle(c.id);
+      const next = !c.isActive;
+      setItems((prev) =>
+        prev.map((row) => (row.id === c.id ? { ...row, isActive: next } : row)),
+      );
+      try {
+        await adminApi.updateCategory(c.id, { isActive: next });
+      } catch {
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === c.id ? { ...row, isActive: c.isActive } : row,
+          ),
+        );
+      } finally {
+        setBusyToggle(null);
+      }
+    },
+    [],
+  );
 
   const [reloadKey, setReloadKey] = useState(0);
   const reload = useCallback(() => {
@@ -76,15 +158,76 @@ export default function AdminCategoriesPage() {
     return m;
   }, [items]);
 
+  // Convert a YYYY-MM-DD date input (IST day boundary) into UTC instants for client-side filtering.
+  const dateFiltered = useMemo(() => {
+    const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+    function dayStart(s: string): number {
+      const [y, m, d] = s.split("-").map(Number) as [number, number, number];
+      return Date.UTC(y, m - 1, d) - IST_OFFSET_MS;
+    }
+    function dayEndExclusive(s: string): number {
+      return dayStart(s) + 24 * 60 * 60 * 1000;
+    }
+    return items.filter((c) => {
+      const created = new Date(c.createdAt).getTime();
+      const updated = new Date(c.updatedAt).getTime();
+      if (dateRange.createdFrom && created < dayStart(dateRange.createdFrom))
+        return false;
+      if (dateRange.createdTo && created >= dayEndExclusive(dateRange.createdTo))
+        return false;
+      if (dateRange.updatedFrom && updated < dayStart(dateRange.updatedFrom))
+        return false;
+      if (dateRange.updatedTo && updated >= dayEndExclusive(dateRange.updatedTo))
+        return false;
+      return true;
+    });
+  }, [items, dateRange]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.slug.toLowerCase().includes(q),
-    );
-  }, [items, query]);
+    const afterQ = q
+      ? dateFiltered.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            c.slug.toLowerCase().includes(q),
+        )
+      : dateFiltered;
+    const base =
+      activeFilter === ""
+        ? afterQ
+        : afterQ.filter((c) => c.isActive === (activeFilter === "true"));
+    const sorted = [...base].sort((a, b) => {
+      const av = (a as unknown as Record<string, unknown>)[sort.field];
+      const bv = (b as unknown as Record<string, unknown>)[sort.field];
+      const an =
+        sort.field === "createdAt" || sort.field === "updatedAt"
+          ? new Date(av as string).getTime()
+          : av;
+      const bn =
+        sort.field === "createdAt" || sort.field === "updatedAt"
+          ? new Date(bv as string).getTime()
+          : bv;
+      if ((an as number | string) < (bn as number | string))
+        return sort.order === "asc" ? -1 : 1;
+      if ((an as number | string) > (bn as number | string))
+        return sort.order === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [dateFiltered, query, activeFilter, sort]);
+
+  const exportQuery = useMemo(
+    () => ({
+      search: query.trim() || undefined,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [query, sort, dateRange],
+  );
 
   const productTotal = useMemo(
     () => items.reduce((sum, c) => sum + (c._count?.products ?? 0), 0),
@@ -116,12 +259,19 @@ export default function AdminCategoriesPage() {
         title="Categories"
         subtitle="Organize your storefront into a category tree"
         actions={
-          <Link
-            href="/admin/categories/add"
-            className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={14} /> Add category
-          </Link>
+          <div className="flex items-center gap-2">
+            <ExportCsvButton
+              path="/admin/categories/export.csv"
+              query={exportQuery}
+              filename="categories"
+            />
+            <Link
+              href="/admin/categories/add"
+              className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={14} /> Add category
+            </Link>
+          </div>
         }
       />
 
@@ -173,6 +323,23 @@ export default function AdminCategoriesPage() {
               className="bg-transparent outline-none text-sm text-gray-700 flex-1"
             />
           </div>
+          <select
+            value={activeFilter}
+            onChange={(e) =>
+              setUrl({ active: e.target.value as "" | "true" | "false" })
+            }
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+          >
+            <option value="">All categories</option>
+            <option value="true">Active only</option>
+            <option value="false">Inactive only</option>
+          </select>
+          <DateRangeFilter value={dateRange} onApply={setDateRange} />
+          <SortByDropdown
+            options={SORT_OPTIONS}
+            currentSort={sort}
+            onSort={setSort}
+          />
         </div>
 
         {/* Top-level error / loading */}
@@ -194,18 +361,41 @@ export default function AdminCategoriesPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="text-left font-semibold px-5 py-3">Name</th>
+                  <SortableHeader field="name" currentSort={sort} onSort={setSort}>
+                    Name
+                  </SortableHeader>
                   <th className="text-left font-semibold px-5 py-3">Slug</th>
                   <th className="text-left font-semibold px-5 py-3">Parent</th>
-                  <th className="text-left font-semibold px-5 py-3">Sort</th>
+                  <SortableHeader
+                    field="sortOrder"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Sort
+                  </SortableHeader>
                   <th className="text-left font-semibold px-5 py-3">Products</th>
+                  <th className="text-left font-semibold px-5 py-3">Active</th>
+                  <SortableHeader
+                    field="createdAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Added
+                  </SortableHeader>
+                  <SortableHeader
+                    field="updatedAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Updated
+                  </SortableHeader>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center">
+                    <td colSpan={9} className="px-5 py-12 text-center">
                       <Loader2
                         className="animate-spin text-[#129cd3] inline-block"
                         size={22}
@@ -215,7 +405,7 @@ export default function AdminCategoriesPage() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={9}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       {items.length === 0
@@ -265,6 +455,40 @@ export default function AdminCategoriesPage() {
                             {productCount}{" "}
                             {productCount === 1 ? "product" : "products"}
                           </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleActive(c)}
+                            disabled={busyToggle === c.id}
+                            className="inline-flex items-center gap-2 group disabled:opacity-60"
+                            aria-pressed={c.isActive}
+                          >
+                            <span
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
+                                c.isActive ? "bg-[#129cd3]" : "bg-gray-300"
+                              } group-hover:brightness-110`}
+                            >
+                              <span
+                                className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                                  c.isActive ? "translate-x-[18px]" : "translate-x-0.5"
+                                }`}
+                              />
+                            </span>
+                            <span
+                              className={`text-[11px] font-semibold ${
+                                c.isActive ? "text-[#129cd3]" : "text-gray-400"
+                              }`}
+                            >
+                              {c.isActive ? "Active" : "Inactive"}
+                            </span>
+                          </button>
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                          {formatTimestamp(c.createdAt)}
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                          {formatUpdated(c.createdAt, c.updatedAt)}
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-1">

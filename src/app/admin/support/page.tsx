@@ -1,8 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
+import type { SortState } from "@/components/admin/list/SortableHeader";
 import { adminApi, isApiError, ticketsApi } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+  { label: "Recently updated", sortBy: "updatedAt", sortOrder: "desc" },
+  { label: "Subject (A → Z)", sortBy: "subject", sortOrder: "asc" },
+  { label: "Status", sortBy: "status", sortOrder: "asc" },
+];
 import {
   TICKET_ATTACHMENT_MAX_BYTES,
   TICKET_ATTACHMENT_MAX_COUNT,
@@ -51,23 +69,51 @@ const STATUS_STYLE: Record<TicketStatus, string> = {
   CLOSED: "bg-gray-100 text-gray-600 border-gray-200",
 };
 
-function formatDateTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 export default function AdminSupportPage() {
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | "ALL">("ALL");
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [url, setUrl] = useUrlState({
+    status: "ALL" as TicketStatus | "ALL",
+    q: "",
+    sortBy: "createdAt",
+    sortOrder: "desc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const statusFilter = url.status;
+  const searchQuery = url.q;
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
+  );
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const setStatusFilter = useCallback(
+    (next: TicketStatus | "ALL") => setUrl({ status: next }),
+    [setUrl],
+  );
+  const setSort = useCallback(
+    (s: SortState) => setUrl({ sortBy: s.field, sortOrder: s.order }),
+    [setUrl],
+  );
+  const setDateRange = useCallback(
+    (r: DateRange) =>
+      setUrl({
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+        updatedFrom: r.updatedFrom ?? "",
+        updatedTo: r.updatedTo ?? "",
+      }),
+    [setUrl],
+  );
+  const [searchInput, setSearchInput] = useState(url.q);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
   const [loadingList, setLoadingList] = useState(true);
@@ -111,13 +157,15 @@ export default function AdminSupportPage() {
     };
   }, []);
 
-  // Debounce search input (250ms).
+  // Debounce search input (250ms) → URL.
   useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed === searchQuery) return;
     const t = window.setTimeout(() => {
-      setSearchQuery(searchInput.trim());
+      setUrl({ q: trimmed });
     }, 250);
     return () => window.clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, searchQuery, setUrl]);
 
   // Initial + filter-change list fetch.
   useEffect(() => {
@@ -126,6 +174,12 @@ export default function AdminSupportPage() {
       .listTickets({
         status: statusFilter === "ALL" ? undefined : statusFilter,
         q: searchQuery || undefined,
+        sortBy: sort.field,
+        sortOrder: sort.order,
+        createdFrom: dateRange.createdFrom,
+        createdTo: dateRange.createdTo,
+        updatedFrom: dateRange.updatedFrom,
+        updatedTo: dateRange.updatedTo,
         limit: 100,
       })
       .then((resp) => {
@@ -151,7 +205,21 @@ export default function AdminSupportPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, searchQuery]);
+  }, [statusFilter, searchQuery, sort, dateRange]);
+
+  const exportQuery = useMemo(
+    () => ({
+      status: statusFilter === "ALL" ? undefined : statusFilter,
+      q: searchQuery || undefined,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [statusFilter, searchQuery, sort, dateRange],
+  );
 
   // Detail fetch when selection changes. We do NOT synchronously clear
   // `detail` to null here — that would trip React 19's set-state-in-effect
@@ -335,6 +403,13 @@ export default function AdminSupportPage() {
       <AdminHeader
         title="Support"
         subtitle="Live support tickets — reply, change status, add internal notes"
+        actions={
+          <ExportCsvButton
+            path="/admin/tickets/export.csv"
+            query={exportQuery}
+            filename="support-tickets"
+          />
+        }
       />
 
       <div className="p-6 space-y-5">
@@ -393,19 +468,27 @@ export default function AdminSupportPage() {
                   className="bg-transparent outline-none text-sm text-gray-700 flex-1"
                 />
               </div>
-              <select
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as TicketStatus | "ALL")
-                }
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#129cd3] bg-white text-gray-700"
-              >
-                {STATUS_FILTERS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as TicketStatus | "ALL")
+                  }
+                  className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#129cd3] bg-white text-gray-700"
+                >
+                  {STATUS_FILTERS.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                <DateRangeFilter value={dateRange} onApply={setDateRange} />
+              </div>
+              <SortByDropdown
+                options={SORT_OPTIONS}
+                currentSort={sort}
+                onSort={setSort}
+              />
             </div>
             {loadingList ? (
               <div className="p-4 space-y-2">
@@ -453,6 +536,14 @@ export default function AdminSupportPage() {
                             {t.messageCount} msg
                           </span>
                         </div>
+                        <div className="flex items-center justify-between mt-1 text-[10px] text-gray-400">
+                          <span>Added {formatTimestamp(t.createdAt)}</span>
+                          <span>
+                            {formatUpdated(t.createdAt, t.updatedAt) === "—"
+                              ? ""
+                              : `Upd ${formatUpdated(t.createdAt, t.updatedAt)}`}
+                          </span>
+                        </div>
                       </button>
                     </li>
                   );
@@ -494,7 +585,7 @@ export default function AdminSupportPage() {
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">
                       {detail.user?.name ?? "—"} · opened{" "}
-                      {formatDateTime(detail.createdAt)}
+                      {formatTimestamp(detail.createdAt)}
                     </p>
                   </div>
                   <div className="flex flex-col gap-1.5 items-stretch min-w-[180px]">
@@ -753,7 +844,7 @@ function ThreadMessage({
         {authorRole && authorRole !== "CUSTOMER"
           ? ` (${authorRole.toLowerCase()})`
           : ""}{" "}
-        · {formatDateTime(createdAt)}
+        · {formatTimestamp(createdAt)}
       </p>
     </div>
   );

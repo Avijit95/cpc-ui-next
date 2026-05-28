@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   Plus,
@@ -14,6 +14,16 @@ import {
   Zap,
 } from "lucide-react";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortableHeader, {
+  type SortState,
+} from "@/components/admin/list/SortableHeader";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
 import { adminApi, catalogApi, isApiError } from "@/lib/api";
 import type {
   CreateDealBody,
@@ -22,6 +32,18 @@ import type {
   ListCard,
   UpdateDealBody,
 } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Ends soonest", sortBy: "endsAt", sortOrder: "asc" },
+  { label: "Ends latest", sortBy: "endsAt", sortOrder: "desc" },
+  { label: "Starts soonest", sortBy: "startsAt", sortOrder: "asc" },
+  { label: "Highest deal price", sortBy: "dealPrice", sortOrder: "desc" },
+  { label: "Lowest deal price", sortBy: "dealPrice", sortOrder: "asc" },
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+];
 
 type FormState = {
   productId: string;
@@ -76,17 +98,6 @@ function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
 }
 
-function formatDateTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 function lifecycleOf(d: Deal, now: number): DealLifecycle {
   const starts = new Date(d.startsAt).getTime();
   const ends = new Date(d.endsAt).getTime();
@@ -99,7 +110,47 @@ export default function AdminDealsPage() {
   const [items, setItems] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<DealLifecycle>("all");
+  const [url, setUrl] = useUrlState({
+    status: "all" as DealLifecycle,
+    sortBy: "endsAt",
+    sortOrder: "asc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const statusFilter = url.status;
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
+  );
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const setStatusFilter = useCallback(
+    (next: DealLifecycle) => setUrl({ status: next }),
+    [setUrl],
+  );
+  const setSort = useCallback(
+    (s: SortState) => setUrl({ sortBy: s.field, sortOrder: s.order }),
+    [setUrl],
+  );
+  const setDateRange = useCallback(
+    (r: DateRange) =>
+      setUrl({
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+        updatedFrom: r.updatedFrom ?? "",
+        updatedTo: r.updatedTo ?? "",
+      }),
+    [setUrl],
+  );
 
   const [modalMode, setModalMode] = useState<"closed" | "create" | "edit">(
     "closed",
@@ -134,6 +185,12 @@ export default function AdminDealsPage() {
       try {
         const resp = await adminApi.listDeals({
           status: status === "all" ? undefined : status,
+          sortBy: sort.field,
+          sortOrder: sort.order,
+          createdFrom: dateRange.createdFrom,
+          createdTo: dateRange.createdTo,
+          updatedFrom: dateRange.updatedFrom,
+          updatedTo: dateRange.updatedTo,
         });
         setItems(resp.items);
       } catch (e) {
@@ -142,7 +199,7 @@ export default function AdminDealsPage() {
         setLoading(false);
       }
     },
-    [],
+    [sort, dateRange],
   );
 
   useEffect(() => {
@@ -150,6 +207,12 @@ export default function AdminDealsPage() {
     void adminApi
       .listDeals({
         status: statusFilter === "all" ? undefined : statusFilter,
+        sortBy: sort.field,
+        sortOrder: sort.order,
+        createdFrom: dateRange.createdFrom,
+        createdTo: dateRange.createdTo,
+        updatedFrom: dateRange.updatedFrom,
+        updatedTo: dateRange.updatedTo,
       })
       .then((resp) => {
         if (!cancelled) {
@@ -166,7 +229,20 @@ export default function AdminDealsPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter]);
+  }, [statusFilter, sort, dateRange]);
+
+  const exportQuery = useMemo(
+    () => ({
+      status: statusFilter === "all" ? undefined : statusFilter,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [statusFilter, sort, dateRange],
+  );
 
   // Debounce product search.
   useEffect(() => {
@@ -339,7 +415,16 @@ export default function AdminDealsPage() {
 
   return (
     <>
-      <AdminHeader title="Today Deals" />
+      <AdminHeader
+        title="Today Deals"
+        actions={
+          <ExportCsvButton
+            path="/admin/deals/export.csv"
+            query={exportQuery}
+            filename="deals"
+          />
+        }
+      />
       <main className="p-6 space-y-6">
         {/* Filter chips + create */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -358,13 +443,21 @@ export default function AdminDealsPage() {
               </button>
             ))}
           </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-[#129cd3] text-white text-sm rounded-lg hover:bg-[#0e87b5] transition-colors"
-          >
-            <Plus size={16} />
-            New Deal
-          </button>
+          <div className="flex items-center gap-2">
+            <SortByDropdown
+              options={SORT_OPTIONS}
+              currentSort={sort}
+              onSort={setSort}
+            />
+            <DateRangeFilter value={dateRange} onApply={setDateRange} />
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-[#129cd3] text-white text-sm rounded-lg hover:bg-[#0e87b5] transition-colors"
+            >
+              <Plus size={16} />
+              New Deal
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -389,11 +482,48 @@ export default function AdminDealsPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr className="text-left text-xs font-bold text-gray-600 uppercase tracking-wide">
                   <th className="px-4 py-3">Product</th>
-                  <th className="px-4 py-3">Deal Price</th>
+                  <SortableHeader
+                    field="dealPrice"
+                    currentSort={sort}
+                    onSort={setSort}
+                    className="!px-4"
+                  >
+                    Deal Price
+                  </SortableHeader>
                   <th className="px-4 py-3">Base</th>
                   <th className="px-4 py-3">Off</th>
-                  <th className="px-4 py-3">Starts</th>
-                  <th className="px-4 py-3">Ends</th>
+                  <SortableHeader
+                    field="startsAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                    className="!px-4"
+                  >
+                    Starts
+                  </SortableHeader>
+                  <SortableHeader
+                    field="endsAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                    className="!px-4"
+                  >
+                    Ends
+                  </SortableHeader>
+                  <SortableHeader
+                    field="createdAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                    className="!px-4"
+                  >
+                    Added
+                  </SortableHeader>
+                  <SortableHeader
+                    field="updatedAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                    className="!px-4"
+                  >
+                    Updated
+                  </SortableHeader>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -428,11 +558,17 @@ export default function AdminDealsPage() {
                       <td className="px-4 py-3 text-green-600 font-medium">
                         -{d.percentOff}%
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">
-                        {formatDateTime(d.startsAt)}
+                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                        {formatTimestamp(d.startsAt)}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">
-                        {formatDateTime(d.endsAt)}
+                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                        {formatTimestamp(d.endsAt)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                        {formatTimestamp(d.createdAt)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                        {formatUpdated(d.createdAt, d.updatedAt)}
                       </td>
                       <td className="px-4 py-3">
                         <span

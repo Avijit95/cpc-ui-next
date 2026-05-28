@@ -139,6 +139,7 @@ export type ListCard = {
   ratingAverage: number | null;
   reviewCount: number;
   isBestSeller: boolean;
+  isFeatured: boolean;
   deal: DealPreview | null;
 };
 
@@ -216,6 +217,7 @@ export type AdminCategory = {
   slug: string;
   parentId: string | null;
   sortOrder: number;
+  isActive: boolean;
   imageObjectKey: string | null;
   imageUrl: string | null;
   createdAt: string;
@@ -241,6 +243,7 @@ export type AdminProduct = {
   images: string[];
   imagesSortOrder: number[];
   isBestSeller: boolean;
+  isFeatured: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -650,6 +653,7 @@ export type AdminOrderListItem = {
   status: OrderStatus;
   grandTotal: number;
   createdAt: string;
+  updatedAt: string;
   recipientName: string;
   recipientStateCode: StateCode;
   itemCount: number;
@@ -939,6 +943,8 @@ export type Banner = {
   activeFrom: string | null;
   activeTo: string | null;
   isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type BannerPresignResponse = {

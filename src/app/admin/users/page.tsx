@@ -1,7 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortableHeader, {
+  type SortState,
+} from "@/components/admin/list/SortableHeader";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
 import {
   MoreHorizontal,
   CheckCircle2,
@@ -28,6 +38,18 @@ import type {
   Role,
   UserStatus,
 } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+  { label: "Recently updated", sortBy: "updatedAt", sortOrder: "desc" },
+  { label: "Name (A → Z)", sortBy: "name", sortOrder: "asc" },
+  { label: "Name (Z → A)", sortBy: "name", sortOrder: "desc" },
+  { label: "Email (A → Z)", sortBy: "email", sortOrder: "asc" },
+  { label: "Last login (recent)", sortBy: "lastLoginAt", sortOrder: "desc" },
+];
 
 type Tab = "customers" | "partners" | "admins";
 
@@ -61,23 +83,47 @@ const userStatusBadge = (s: UserStatus) =>
     ? "bg-red-50 text-red-600 border-red-200"
     : "bg-gray-100 text-gray-600 border-gray-200";
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 export default function UsersPage() {
   const { user: me } = useAuth();
   const [tab, setTab] = useState<Tab>("customers");
-  const [query, setQuery] = useState("");
+  const [url, setUrl] = useUrlState({
+    q: "",
+    sortBy: "createdAt",
+    sortOrder: "desc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const query = url.q;
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
+  );
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const setQuery = useCallback((v: string) => setUrl({ q: v }), [setUrl]);
+  const setSort = useCallback(
+    (s: SortState) => setUrl({ sortBy: s.field, sortOrder: s.order }),
+    [setUrl],
+  );
+  const setDateRange = useCallback(
+    (r: DateRange) =>
+      setUrl({
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+        updatedFrom: r.updatedFrom ?? "",
+        updatedTo: r.updatedTo ?? "",
+      }),
+    [setUrl],
+  );
 
   // Live users — used by customers + admins tabs.
   const [users, setUsers] = useState<AdminUserRow[]>([]);
@@ -107,6 +153,12 @@ export default function UsersPage() {
       .listAdminUsers({
         role,
         q: query.trim() || undefined,
+        sortBy: sort.field,
+        sortOrder: sort.order,
+        createdFrom: dateRange.createdFrom,
+        createdTo: dateRange.createdTo,
+        updatedFrom: dateRange.updatedFrom,
+        updatedTo: dateRange.updatedTo,
         limit: 50,
       })
       .then((resp) => {
@@ -128,7 +180,21 @@ export default function UsersPage() {
     return () => {
       cancelled = true;
     };
-  }, [tab, query, reloadKey]);
+  }, [tab, query, sort, dateRange, reloadKey]);
+
+  const exportQuery = useMemo(
+    () => ({
+      role: tab === "customers" ? "CUSTOMER" : tab === "admins" ? "ADMIN" : undefined,
+      q: query.trim() || undefined,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [tab, query, sort, dateRange],
+  );
 
   // Partners tab.
   useEffect(() => {
@@ -265,6 +331,15 @@ export default function UsersPage() {
       <AdminHeader
         title="Users & Roles"
         subtitle="Manage customers, retail partners and admin accounts"
+        actions={
+          tab !== "partners" ? (
+            <ExportCsvButton
+              path="/admin/users/export.csv"
+              query={exportQuery}
+              filename={tab === "customers" ? "customers" : "admins"}
+            />
+          ) : undefined
+        }
       />
 
       <div className="p-6 space-y-5">
@@ -332,21 +407,33 @@ export default function UsersPage() {
                 className="bg-transparent outline-none text-sm text-gray-700 flex-1"
               />
             </div>
-            {tab === "partners" && (
-              <select
-                value={partnerStatus}
-                onChange={(e) => {
-                  setPartnerStatus(e.target.value as KycStatus);
-                  setPartnersLoading(true);
-                }}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
-              >
-                <option value="PENDING">Pending</option>
-                <option value="VERIFIED">Approved</option>
-                <option value="REJECTED">Rejected</option>
-                <option value="NONE">None</option>
-              </select>
-            )}
+            <div className="flex items-center gap-2">
+              {tab !== "partners" && (
+                <>
+                  <DateRangeFilter value={dateRange} onApply={setDateRange} />
+                  <SortByDropdown
+                    options={SORT_OPTIONS}
+                    currentSort={sort}
+                    onSort={setSort}
+                  />
+                </>
+              )}
+              {tab === "partners" && (
+                <select
+                  value={partnerStatus}
+                  onChange={(e) => {
+                    setPartnerStatus(e.target.value as KycStatus);
+                    setPartnersLoading(true);
+                  }}
+                  className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value="VERIFIED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="NONE">None</option>
+                </select>
+              )}
+            </div>
           </div>
 
           {usersErr && tab !== "partners" && (
@@ -369,6 +456,8 @@ export default function UsersPage() {
                 onSuspend={handleSuspend}
                 onPromote={handlePromoteAdmin}
                 meId={me?.id ?? null}
+                sort={sort}
+                onSort={setSort}
               />
             )}
 
@@ -491,6 +580,8 @@ export default function UsersPage() {
                 onDemote={handleDemoteToCustomer}
                 meId={me?.id ?? null}
                 showAdminBadge
+                sort={sort}
+                onSort={setSort}
               />
             )}
           </div>
@@ -615,6 +706,8 @@ function UsersTable({
   onDemote,
   meId,
   showAdminBadge,
+  sort,
+  onSort,
 }: {
   rows: AdminUserRow[];
   loading: boolean;
@@ -624,15 +717,30 @@ function UsersTable({
   onDemote?: (u: AdminUserRow) => Promise<void>;
   meId: string | null;
   showAdminBadge?: boolean;
+  sort: SortState;
+  onSort: (s: SortState) => void;
 }) {
   return (
     <table className="w-full text-sm">
       <thead className="bg-gray-50 text-xs uppercase text-gray-500">
         <tr>
-          <th className="text-left font-semibold px-5 py-3">User</th>
+          <SortableHeader field="name" currentSort={sort} onSort={onSort}>
+            User
+          </SortableHeader>
           <th className="text-left font-semibold px-5 py-3">Contact</th>
-          <th className="text-left font-semibold px-5 py-3">Joined</th>
-          <th className="text-left font-semibold px-5 py-3">Last login</th>
+          <SortableHeader field="createdAt" currentSort={sort} onSort={onSort}>
+            Added
+          </SortableHeader>
+          <SortableHeader field="updatedAt" currentSort={sort} onSort={onSort}>
+            Updated
+          </SortableHeader>
+          <SortableHeader
+            field="lastLoginAt"
+            currentSort={sort}
+            onSort={onSort}
+          >
+            Last login
+          </SortableHeader>
           <th className="text-left font-semibold px-5 py-3">Status</th>
           <th className="px-5 py-3" />
         </tr>
@@ -641,7 +749,7 @@ function UsersTable({
         {loading && (
           <tr>
             <td
-              colSpan={6}
+              colSpan={7}
               className="px-5 py-10 text-center text-sm text-gray-500"
             >
               <Loader2 className="inline animate-spin mr-2" size={16} /> Loading…
@@ -650,7 +758,7 @@ function UsersTable({
         )}
         {!loading && rows.length === 0 && (
           <tr>
-            <td colSpan={6} className="px-5 py-10 text-center text-sm text-gray-500">
+            <td colSpan={7} className="px-5 py-10 text-center text-sm text-gray-500">
               No users match.
             </td>
           </tr>
@@ -693,11 +801,14 @@ function UsersTable({
                   <p>{u.email ?? "—"}</p>
                   <p className="text-gray-400">{u.phone ?? "—"}</p>
                 </td>
-                <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                  {formatDate(u.createdAt)}
+                <td className="px-5 py-3 text-gray-500 whitespace-nowrap text-xs">
+                  {formatTimestamp(u.createdAt)}
                 </td>
-                <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                  {formatDate(u.lastLoginAt)}
+                <td className="px-5 py-3 text-gray-500 whitespace-nowrap text-xs">
+                  {formatUpdated(u.createdAt, u.updatedAt)}
+                </td>
+                <td className="px-5 py-3 text-gray-500 whitespace-nowrap text-xs">
+                  {formatTimestamp(u.lastLoginAt)}
                 </td>
                 <td className="px-5 py-3">
                   <span

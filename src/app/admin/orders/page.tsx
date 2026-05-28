@@ -1,14 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortableHeader, {
+  type SortState,
+} from "@/components/admin/list/SortableHeader";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
 import { adminApi, isApiError } from "@/lib/api";
 import type {
   AdminOrderListItem,
   ListAdminOrdersQuery,
   OrderStatus,
 } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+  { label: "Recently updated", sortBy: "updatedAt", sortOrder: "desc" },
+  { label: "Order ID (A → Z)", sortBy: "orderNumber", sortOrder: "asc" },
+  { label: "Order ID (Z → A)", sortBy: "orderNumber", sortOrder: "desc" },
+  { label: "Amount (High → Low)", sortBy: "grandTotal", sortOrder: "desc" },
+  { label: "Amount (Low → High)", sortBy: "grandTotal", sortOrder: "asc" },
+  { label: "Status", sortBy: "status", sortOrder: "asc" },
+];
 import {
   Search,
   Eye,
@@ -70,24 +93,59 @@ function formatPrice(n: number) {
   return "₹" + n.toLocaleString("en-IN");
 }
 
-function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 export default function AdminOrdersPage() {
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
-  const [query, setQuery] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [offset, setOffset] = useState(0);
+  const [url, setUrl] = useUrlState({
+    status: "ALL" as OrderStatus | "ALL",
+    q: "",
+    offset: 0,
+    sortBy: "createdAt",
+    sortOrder: "desc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const statusFilter = url.status;
+  const query = url.q;
+  const offset = url.offset;
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
+  );
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const setStatusFilter = useCallback(
+    (next: OrderStatus | "ALL") => setUrl({ status: next, offset: 0 }),
+    [setUrl],
+  );
+  const setQuery = useCallback(
+    (v: string) => setUrl({ q: v, offset: 0 }),
+    [setUrl],
+  );
+  const setOffset = useCallback((n: number) => setUrl({ offset: n }), [setUrl]);
+  const setSort = useCallback(
+    (s: SortState) =>
+      setUrl({ sortBy: s.field, sortOrder: s.order, offset: 0 }),
+    [setUrl],
+  );
+  const setDateRange = useCallback(
+    (r: DateRange) =>
+      setUrl({
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+        updatedFrom: r.updatedFrom ?? "",
+        updatedTo: r.updatedTo ?? "",
+        offset: 0,
+      }),
+    [setUrl],
+  );
 
   const [items, setItems] = useState<AdminOrderListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -102,11 +160,15 @@ export default function AdminOrdersPage() {
     const q: ListAdminOrdersQuery = {
       limit: PAGE_SIZE,
       offset,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
     };
     if (statusFilter !== "ALL") q.status = statusFilter;
     if (query.trim()) q.q = query.trim();
-    if (fromDate) q.from = fromDate;
-    if (toDate) q.to = toDate;
 
     adminApi
       .listOrders(q)
@@ -130,7 +192,21 @@ export default function AdminOrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, query, fromDate, toDate, offset]);
+  }, [statusFilter, query, dateRange, sort, offset]);
+
+  const exportQuery = useMemo(
+    () => ({
+      status: statusFilter !== "ALL" ? statusFilter : undefined,
+      q: query.trim() || undefined,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [statusFilter, query, sort, dateRange],
+  );
 
   // Lightweight per-status counts for the summary cards. One request per status —
   // small N (5), only fires on mount.
@@ -158,20 +234,11 @@ export default function AdminOrdersPage() {
   const onFilterChange = (next: OrderStatus | "ALL") => {
     if (next === statusFilter) return;
     setStatusFilter(next);
-    setOffset(0);
     setLoading(true);
   };
 
   const onSearchChange = (v: string) => {
     setQuery(v);
-    setOffset(0);
-    setLoading(true);
-  };
-
-  const onDateChange = (which: "from" | "to", v: string) => {
-    if (which === "from") setFromDate(v);
-    else setToDate(v);
-    setOffset(0);
     setLoading(true);
   };
 
@@ -187,7 +254,12 @@ export default function AdminOrdersPage() {
 
       <div className="p-6 space-y-5">
         {/* Header actions */}
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <ExportCsvButton
+            path="/admin/orders/export.csv"
+            query={exportQuery}
+            filename="orders"
+          />
           <Link
             href="/admin/orders/new"
             className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
@@ -243,24 +315,21 @@ export default function AdminOrdersPage() {
               </option>
             ))}
           </select>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">From</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => onDateChange("from", e.target.value)}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white text-gray-600"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">To</label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => onDateChange("to", e.target.value)}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white text-gray-600"
-            />
-          </div>
+          <DateRangeFilter
+            value={dateRange}
+            onApply={(r) => {
+              setDateRange(r);
+              setLoading(true);
+            }}
+          />
+          <SortByDropdown
+            options={SORT_OPTIONS}
+            currentSort={sort}
+            onSort={(s) => {
+              setSort(s);
+              setLoading(true);
+            }}
+          />
         </div>
 
         {/* Table */}
@@ -289,12 +358,45 @@ export default function AdminOrdersPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                   <tr>
-                    <th className="text-left font-semibold px-5 py-3">Order</th>
+                    <SortableHeader
+                      field="orderNumber"
+                      currentSort={sort}
+                      onSort={(s) => {
+                        setSort(s);
+                      }}
+                    >
+                      Order
+                    </SortableHeader>
                     <th className="text-left font-semibold px-5 py-3">Customer</th>
-                    <th className="text-left font-semibold px-5 py-3">Date</th>
                     <th className="text-left font-semibold px-5 py-3">Items</th>
-                    <th className="text-left font-semibold px-5 py-3">Amount</th>
+                    <SortableHeader
+                      field="grandTotal"
+                      currentSort={sort}
+                      onSort={(s) => {
+                        setSort(s);
+                      }}
+                    >
+                      Amount
+                    </SortableHeader>
                     <th className="text-left font-semibold px-5 py-3">Status</th>
+                    <SortableHeader
+                      field="createdAt"
+                      currentSort={sort}
+                      onSort={(s) => {
+                        setSort(s);
+                      }}
+                    >
+                      Added
+                    </SortableHeader>
+                    <SortableHeader
+                      field="updatedAt"
+                      currentSort={sort}
+                      onSort={(s) => {
+                        setSort(s);
+                      }}
+                    >
+                      Updated
+                    </SortableHeader>
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
@@ -317,9 +419,6 @@ export default function AdminOrdersPage() {
                           {o.user.email ?? o.user.phone ?? "—"}
                         </p>
                       </td>
-                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap">
-                        {formatDate(o.createdAt)}
-                      </td>
                       <td className="px-5 py-3 text-gray-700">{o.itemCount}</td>
                       <td className="px-5 py-3 font-semibold text-gray-800">
                         {formatPrice(o.grandTotal)}
@@ -330,6 +429,12 @@ export default function AdminOrdersPage() {
                         >
                           {STATUS_LABEL[o.status]}
                         </span>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                        {formatTimestamp(o.createdAt)}
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                        {formatUpdated(o.createdAt, o.updatedAt)}
                       </td>
                       <td className="px-5 py-3">
                         <Link

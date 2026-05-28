@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortableHeader, {
+  type SortState,
+} from "@/components/admin/list/SortableHeader";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
 import {
   Plus,
   Pencil,
@@ -20,6 +30,17 @@ import type {
   CreateCouponBody,
   UpdateCouponBody,
 } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+  { label: "Recently updated", sortBy: "updatedAt", sortOrder: "desc" },
+  { label: "Name (A → Z)", sortBy: "name", sortOrder: "asc" },
+  { label: "Type", sortBy: "type", sortOrder: "asc" },
+  { label: "Status", sortBy: "status", sortOrder: "asc" },
+];
 
 type Tab = "rules" | "coupons" | "campaigns";
 
@@ -79,6 +100,41 @@ export default function PricingPage() {
   const [confirmDelete, setConfirmDelete] = useState<AdminCouponRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [url, setUrl] = useUrlState({
+    sortBy: "createdAt",
+    sortOrder: "desc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
+  );
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const setSort = useCallback(
+    (s: SortState) => setUrl({ sortBy: s.field, sortOrder: s.order }),
+    [setUrl],
+  );
+  const setDateRange = useCallback(
+    (r: DateRange) =>
+      setUrl({
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+        updatedFrom: r.updatedFrom ?? "",
+        updatedTo: r.updatedTo ?? "",
+      }),
+    [setUrl],
+  );
 
   const [reloadKey, setReloadKey] = useState(0);
   const reload = useCallback(() => {
@@ -90,7 +146,15 @@ export default function PricingPage() {
   useEffect(() => {
     let cancelled = false;
     adminApi
-      .listCoupons({ limit: 100 })
+      .listCoupons({
+        limit: 100,
+        sortBy: sort.field,
+        sortOrder: sort.order,
+        createdFrom: dateRange.createdFrom,
+        createdTo: dateRange.createdTo,
+        updatedFrom: dateRange.updatedFrom,
+        updatedTo: dateRange.updatedTo,
+      })
       .then((resp) => {
         if (!cancelled) setItems(resp.items);
       })
@@ -109,7 +173,19 @@ export default function PricingPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, sort, dateRange]);
+
+  const exportQuery = useMemo(
+    () => ({
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [sort, dateRange],
+  );
 
   const totalCount = items.length;
   const activeCount = useMemo(
@@ -143,12 +219,19 @@ export default function PricingPage() {
         subtitle="Manage global pricing rules, coupon codes and timed campaigns"
         actions={
           tab === "coupons" ? (
-            <button
-              onClick={() => setCreating(true)}
-              className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-            >
-              <Plus size={14} /> New coupon
-            </button>
+            <div className="flex items-center gap-2">
+              <ExportCsvButton
+                path="/admin/coupons/export.csv"
+                query={exportQuery}
+                filename="coupons"
+              />
+              <button
+                onClick={() => setCreating(true)}
+                className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              >
+                <Plus size={14} /> New coupon
+              </button>
+            </div>
           ) : null
         }
       />
@@ -175,6 +258,17 @@ export default function PricingPage() {
             value={loading ? "…" : String(pausedCount)}
           />
         </div>
+
+        {tab === "coupons" && (
+          <div className="flex justify-end gap-2">
+            <SortByDropdown
+              options={SORT_OPTIONS}
+              currentSort={sort}
+              onSort={setSort}
+            />
+            <DateRangeFilter value={dateRange} onApply={setDateRange} />
+          </div>
+        )}
 
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="flex items-center border-b border-gray-100 px-2">
@@ -213,13 +307,42 @@ export default function PricingPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="text-left font-semibold px-5 py-3">Code</th>
-                  <th className="text-left font-semibold px-5 py-3">Type</th>
-                  <th className="text-left font-semibold px-5 py-3">Value</th>
-                  <th className="text-left font-semibold px-5 py-3">Min Order</th>
-                  <th className="text-left font-semibold px-5 py-3">Usage</th>
-                  <th className="text-left font-semibold px-5 py-3">Expires</th>
-                  <th className="text-left font-semibold px-5 py-3">Status</th>
+                  <SortableHeader
+                    field="name"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Code
+                  </SortableHeader>
+                  <SortableHeader
+                    field="type"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Type
+                  </SortableHeader>
+                  <th className="text-left font-semibold px-5 py-3">Attachments</th>
+                  <SortableHeader
+                    field="createdAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Added
+                  </SortableHeader>
+                  <SortableHeader
+                    field="updatedAt"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Updated
+                  </SortableHeader>
+                  <SortableHeader
+                    field="status"
+                    currentSort={sort}
+                    onSort={setSort}
+                  >
+                    Status
+                  </SortableHeader>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
@@ -228,7 +351,7 @@ export default function PricingPage() {
                   [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center text-gray-400 text-sm">
+                    <td colSpan={7} className="px-5 py-12 text-center text-gray-400 text-sm">
                       No coupons yet. Click <span className="font-semibold">New coupon</span> to create your first one.
                     </td>
                   </tr>
@@ -241,10 +364,13 @@ export default function PricingPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3 text-gray-700">{typeLabel(c.type)}</td>
-                      <td className="px-5 py-3 text-gray-400">—</td>
-                      <td className="px-5 py-3 text-gray-400">—</td>
-                      <td className="px-5 py-3 text-gray-400">—</td>
-                      <td className="px-5 py-3 text-gray-400">—</td>
+                      <td className="px-5 py-3 text-gray-700">{c.attachmentCount}</td>
+                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap text-xs">
+                        {formatTimestamp(c.createdAt)}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap text-xs">
+                        {formatUpdated(c.createdAt, c.updatedAt)}
+                      </td>
                       <td className="px-5 py-3">
                         <span
                           className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${statusCls[c.status]}`}
@@ -347,7 +473,7 @@ function StatCard({
 function SkeletonRow() {
   return (
     <tr>
-      {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
         <td key={i} className="px-5 py-3.5">
           <div className="h-3 bg-gray-100 rounded animate-pulse" />
         </td>

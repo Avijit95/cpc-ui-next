@@ -54,6 +54,8 @@ export type {
   AdminTicketMessageBody,
   ListAdminReviewsQuery,
   PatchAdminReviewBody,
+  AdminBrandRow,
+  ListAdminBrandsQuery,
 } from "./endpoints/admin";
 export { bannersApi } from "./endpoints/banners";
 export { dealsApi } from "./endpoints/deals";

@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortableHeader, {
+  type SortState,
+} from "@/components/admin/list/SortableHeader";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
 import {
   Archive,
   Check,
@@ -21,6 +31,22 @@ import type {
   AdminProductListItem,
   ProductStatus,
 } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+  { label: "Recently updated", sortBy: "updatedAt", sortOrder: "desc" },
+  { label: "Name (A → Z)", sortBy: "name", sortOrder: "asc" },
+  { label: "Name (Z → A)", sortBy: "name", sortOrder: "desc" },
+  { label: "Price (Low → High)", sortBy: "basePrice", sortOrder: "asc" },
+  { label: "Price (High → Low)", sortBy: "basePrice", sortOrder: "desc" },
+  { label: "Best Sellers first", sortBy: "isBestSeller", sortOrder: "desc" },
+  { label: "Featured first", sortBy: "isFeatured", sortOrder: "desc" },
+  { label: "Status (Active first)", sortBy: "status", sortOrder: "asc" },
+  { label: "Stock (Low → High)", sortBy: "stock", sortOrder: "asc" },
+];
 
 const PAGE_SIZE = 20;
 
@@ -35,6 +61,12 @@ const BEST_SELLER_OPTIONS: { value: "" | "true" | "false"; label: string }[] = [
   { value: "", label: "All products" },
   { value: "true", label: "Best Sellers" },
   { value: "false", label: "Normal" },
+];
+
+const FEATURED_OPTIONS: { value: "" | "true" | "false"; label: string }[] = [
+  { value: "", label: "All (Featured?)" },
+  { value: "true", label: "Featured" },
+  { value: "false", label: "Not Featured" },
 ];
 
 type Toast = { id: number; message: string; kind: "success" | "error" };
@@ -62,21 +94,15 @@ function ProductToggle({
       className="inline-flex items-center gap-2 group disabled:opacity-60"
     >
       <span
-        className={`relative inline-block h-5 w-9 rounded-full transition-colors ${
+        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
           on ? "bg-[#129cd3]" : "bg-gray-300"
         } group-hover:brightness-110`}
       >
         <span
-          className={`absolute top-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+          className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
             on ? "translate-x-[18px]" : "translate-x-0.5"
           }`}
         />
-        {busy && (
-          <Loader2
-            size={10}
-            className="absolute -right-4 top-1 animate-spin text-gray-400"
-          />
-        )}
       </span>
       <span
         className={`text-[11px] font-semibold ${
@@ -85,6 +111,7 @@ function ProductToggle({
       >
         {on ? onLabel : offLabel}
       </span>
+      {busy && <Loader2 size={10} className="animate-spin text-gray-400" />}
     </button>
   );
 }
@@ -114,15 +141,41 @@ function archiveErrorMessage(err: unknown): string {
 }
 
 export default function AdminProductsPage() {
-  // Filters / pagination
-  const [statusFilter, setStatusFilter] = useState<"" | ProductStatus>("");
-  const [categoryFilter, setCategoryFilter] = useState<string>(""); // categoryId
-  const [bestSellerFilter, setBestSellerFilter] = useState<"" | "true" | "false">(
-    "",
+  // Filters / sort / pagination — URL-synced.
+  const [url, setUrl] = useUrlState({
+    status: "" as "" | ProductStatus,
+    categoryId: "",
+    bestSeller: "" as "" | "true" | "false",
+    isFeatured: "" as "" | "true" | "false",
+    search: "",
+    page: 0,
+    sortBy: "updatedAt",
+    sortOrder: "desc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const statusFilter = url.status;
+  const categoryFilter = url.categoryId;
+  const bestSellerFilter = url.bestSeller;
+  const isFeaturedFilter = url.isFeatured;
+  const page = url.page;
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
   );
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState(""); // debounced
-  const [page, setPage] = useState(0); // zero-indexed
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const [searchInput, setSearchInput] = useState(url.search);
+  const search = url.search;
 
   // Data
   const [items, setItems] = useState<AdminProductListItem[]>([]);
@@ -140,7 +193,7 @@ export default function AdminProductsPage() {
   // Inline toggle state (status + best seller). Track which row is busy on which
   // field so we can disable just that toggle while its PATCH is in flight.
   const [busyToggles, setBusyToggles] = useState<
-    Record<string, "status" | "bestSeller" | undefined>
+    Record<string, "status" | "bestSeller" | "featured" | undefined>
   >({});
 
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -153,14 +206,15 @@ export default function AdminProductsPage() {
     }, 3000);
   }, []);
 
-  // Debounce search input → applied search.
+  // Debounce search input → URL.
   useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed === search) return;
     const t = setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(0);
+      setUrl({ search: trimmed, page: 0 });
     }, 300);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, search, setUrl]);
 
   // Categories for filter dropdown.
   useEffect(() => {
@@ -196,6 +250,16 @@ export default function AdminProductsPage() {
           bestSellerFilter === ""
             ? undefined
             : bestSellerFilter === "true",
+        isFeatured:
+          isFeaturedFilter === ""
+            ? undefined
+            : isFeaturedFilter === "true",
+        sortBy: sort.field,
+        sortOrder: sort.order,
+        createdFrom: dateRange.createdFrom,
+        createdTo: dateRange.createdTo,
+        updatedFrom: dateRange.updatedFrom,
+        updatedTo: dateRange.updatedTo,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       })
@@ -219,7 +283,44 @@ export default function AdminProductsPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, categoryFilter, bestSellerFilter, search, page, reloadKey]);
+  }, [
+    statusFilter,
+    categoryFilter,
+    bestSellerFilter,
+    isFeaturedFilter,
+    search,
+    sort,
+    dateRange,
+    page,
+    reloadKey,
+  ]);
+
+  const exportQuery = useMemo(
+    () => ({
+      status: statusFilter || undefined,
+      categoryId: categoryFilter || undefined,
+      search: search || undefined,
+      isBestSeller:
+        bestSellerFilter === "" ? undefined : bestSellerFilter,
+      isFeatured:
+        isFeaturedFilter === "" ? undefined : isFeaturedFilter,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [
+      statusFilter,
+      categoryFilter,
+      bestSellerFilter,
+      isFeaturedFilter,
+      search,
+      sort,
+      dateRange,
+    ],
+  );
 
   const categoryNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -304,6 +405,44 @@ export default function AdminProductsPage() {
     [pushToast],
   );
 
+  const onToggleFeatured = useCallback(
+    async (p: AdminProductListItem) => {
+      const next = !p.isFeatured;
+      setBusyToggles((b) => ({ ...b, [p.id]: "featured" }));
+      setItems((prev) =>
+        prev.map((row) =>
+          row.id === p.id ? { ...row, isFeatured: next } : row,
+        ),
+      );
+      try {
+        await adminApi.updateProduct(p.id, { isFeatured: next });
+        pushToast(
+          next
+            ? `${p.name} marked as Featured`
+            : `${p.name} removed from Featured`,
+          "success",
+        );
+      } catch (err) {
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === p.id ? { ...row, isFeatured: p.isFeatured } : row,
+          ),
+        );
+        pushToast(
+          isApiError(err) ? err.displayMessage : "Couldn't update Featured",
+          "error",
+        );
+      } finally {
+        setBusyToggles((b) => {
+          const { [p.id]: _omit, ...rest } = b;
+          void _omit;
+          return rest;
+        });
+      }
+    },
+    [pushToast],
+  );
+
   const onArchive = async () => {
     if (!archiveTarget) return;
     setArchiving(true);
@@ -342,12 +481,20 @@ export default function AdminProductsPage() {
         title="Products"
         subtitle="Add, edit or archive products in your catalog"
         actions={
-          <Link
-            href="/admin/products/add"
-            className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={14} /> Add product
-          </Link>
+          <div className="flex items-center gap-2">
+            <ExportCsvButton
+              path="/admin/products/export.csv"
+              query={exportQuery}
+              filename="products"
+              onError={(msg) => pushToast(msg, "error")}
+            />
+            <Link
+              href="/admin/products/add"
+              className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={14} /> Add product
+            </Link>
+          </div>
         }
       />
 
@@ -407,8 +554,10 @@ export default function AdminProductsPage() {
           <select
             value={statusFilter}
             onChange={(e) => {
-              setStatusFilter(e.target.value as "" | ProductStatus);
-              setPage(0);
+              setUrl({
+                status: e.target.value as "" | ProductStatus,
+                page: 0,
+              });
             }}
             className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
           >
@@ -421,8 +570,7 @@ export default function AdminProductsPage() {
           <select
             value={categoryFilter}
             onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setPage(0);
+              setUrl({ categoryId: e.target.value, page: 0 });
             }}
             className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
           >
@@ -436,8 +584,10 @@ export default function AdminProductsPage() {
           <select
             value={bestSellerFilter}
             onChange={(e) => {
-              setBestSellerFilter(e.target.value as "" | "true" | "false");
-              setPage(0);
+              setUrl({
+                bestSeller: e.target.value as "" | "true" | "false",
+                page: 0,
+              });
             }}
             className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
           >
@@ -447,6 +597,41 @@ export default function AdminProductsPage() {
               </option>
             ))}
           </select>
+          <select
+            value={isFeaturedFilter}
+            onChange={(e) => {
+              setUrl({
+                isFeatured: e.target.value as "" | "true" | "false",
+                page: 0,
+              });
+            }}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+          >
+            {FEATURED_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <DateRangeFilter
+            value={dateRange}
+            onApply={(r) => {
+              setUrl({
+                createdFrom: r.createdFrom ?? "",
+                createdTo: r.createdTo ?? "",
+                updatedFrom: r.updatedFrom ?? "",
+                updatedTo: r.updatedTo ?? "",
+                page: 0,
+              });
+            }}
+          />
+          <SortByDropdown
+            options={SORT_OPTIONS}
+            currentSort={sort}
+            onSort={(s) =>
+              setUrl({ sortBy: s.field, sortOrder: s.order, page: 0 })
+            }
+          />
         </div>
 
         {/* Top-level error */}
@@ -468,25 +653,90 @@ export default function AdminProductsPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="text-left font-semibold px-5 py-3">Product</th>
+                  <SortableHeader
+                    field="name"
+                    currentSort={sort}
+                    onSort={(s) => {
+                      setUrl({
+                        sortBy: s.field,
+                        sortOrder: s.order,
+                        page: 0,
+                      });
+                    }}
+                  >
+                    Product
+                  </SortableHeader>
                   <th className="text-left font-semibold px-5 py-3">
                     Category
                   </th>
                   <th className="text-left font-semibold px-5 py-3">Brand</th>
-                  <th className="text-left font-semibold px-5 py-3">Price</th>
-                  <th className="text-left font-semibold px-5 py-3">Stock</th>
+                  <SortableHeader
+                    field="basePrice"
+                    currentSort={sort}
+                    onSort={(s) => {
+                      setUrl({
+                        sortBy: s.field,
+                        sortOrder: s.order,
+                        page: 0,
+                      });
+                    }}
+                  >
+                    Price
+                  </SortableHeader>
+                  <SortableHeader
+                    field="stock"
+                    currentSort={sort}
+                    onSort={(s) => {
+                      setUrl({
+                        sortBy: s.field,
+                        sortOrder: s.order,
+                        page: 0,
+                      });
+                    }}
+                  >
+                    Stock
+                  </SortableHeader>
                   <th className="text-left font-semibold px-5 py-3">Variants</th>
                   <th className="text-left font-semibold px-5 py-3">Status</th>
                   <th className="text-left font-semibold px-5 py-3">
                     Best&nbsp;Seller
                   </th>
+                  <th className="text-left font-semibold px-5 py-3">
+                    Featured
+                  </th>
+                  <SortableHeader
+                    field="createdAt"
+                    currentSort={sort}
+                    onSort={(s) => {
+                      setUrl({
+                        sortBy: s.field,
+                        sortOrder: s.order,
+                        page: 0,
+                      });
+                    }}
+                  >
+                    Added
+                  </SortableHeader>
+                  <SortableHeader
+                    field="updatedAt"
+                    currentSort={sort}
+                    onSort={(s) => {
+                      setUrl({
+                        sortBy: s.field,
+                        sortOrder: s.order,
+                        page: 0,
+                      });
+                    }}
+                  >
+                    Updated
+                  </SortableHeader>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-5 py-12 text-center">
+                    <td colSpan={12} className="px-5 py-12 text-center">
                       <Loader2
                         className="animate-spin text-[#129cd3] inline-block"
                         size={22}
@@ -496,7 +746,7 @@ export default function AdminProductsPage() {
                 ) : items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={12}
                       className="px-5 py-12 text-center text-sm text-gray-400"
                     >
                       {total === 0
@@ -572,6 +822,21 @@ export default function AdminProductsPage() {
                           />
                         </td>
                         <td className="px-5 py-3">
+                          <ProductToggle
+                            on={p.isFeatured}
+                            busy={busyToggles[p.id] === "featured"}
+                            onLabel="On"
+                            offLabel="Off"
+                            onClick={() => onToggleFeatured(p)}
+                          />
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                          {formatTimestamp(p.createdAt)}
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                          {formatUpdated(p.createdAt, p.updatedAt)}
+                        </td>
+                        <td className="px-5 py-3">
                           <div className="flex items-center gap-1">
                             <Link
                               href={`/admin/products/${p.id}/edit`}
@@ -622,7 +887,7 @@ export default function AdminProductsPage() {
               </span>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  onClick={() => setUrl({ page: Math.max(0, page - 1) })}
                   disabled={page === 0}
                   className="w-7 h-7 rounded border border-gray-200 hover:border-[#129cd3] hover:text-[#129cd3] disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:text-inherit"
                 >
@@ -632,7 +897,7 @@ export default function AdminProductsPage() {
                   {page + 1} / {lastPage + 1}
                 </span>
                 <button
-                  onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+                  onClick={() => setUrl({ page: Math.min(lastPage, page + 1) })}
                   disabled={page >= lastPage}
                   className="w-7 h-7 rounded border border-gray-200 hover:border-[#129cd3] hover:text-[#129cd3] disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:text-inherit"
                 >

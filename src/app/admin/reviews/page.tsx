@@ -1,10 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
+import DateRangeFilter, {
+  type DateRange,
+} from "@/components/admin/list/DateRangeFilter";
+import ExportCsvButton from "@/components/admin/list/ExportCsvButton";
+import SortableHeader, {
+  type SortState,
+} from "@/components/admin/list/SortableHeader";
+import SortByDropdown, {
+  type SortOption,
+} from "@/components/admin/list/SortByDropdown";
 import { adminApi, isApiError } from "@/lib/api";
 import type { AdminReviewRow } from "@/lib/api";
+import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import { useUrlState } from "@/lib/use-url-state";
+
+const SORT_OPTIONS: readonly SortOption[] = [
+  { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
+  { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
+  { label: "Recently updated", sortBy: "updatedAt", sortOrder: "desc" },
+  { label: "Rating (High → Low)", sortBy: "rating", sortOrder: "desc" },
+  { label: "Rating (Low → High)", sortBy: "rating", sortOrder: "asc" },
+];
 import {
   Star,
   Eye,
@@ -26,26 +46,56 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "HIDDEN", label: "Hidden" },
 ];
 
-function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 function truncate(s: string | null, n: number) {
   if (!s) return "";
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
 
 export default function AdminReviewsPage() {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [offset, setOffset] = useState(0);
+  const [url, setUrl] = useUrlState({
+    status: "ALL" as StatusFilter,
+    offset: 0,
+    sortBy: "createdAt",
+    sortOrder: "desc" as "asc" | "desc",
+    createdFrom: "",
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
+  const statusFilter = url.status;
+  const offset = url.offset;
+  const sort: SortState = useMemo(
+    () => ({ field: url.sortBy, order: url.sortOrder }),
+    [url.sortBy, url.sortOrder],
+  );
+  const dateRange: DateRange = useMemo(
+    () => ({
+      createdFrom: url.createdFrom || undefined,
+      createdTo: url.createdTo || undefined,
+      updatedFrom: url.updatedFrom || undefined,
+      updatedTo: url.updatedTo || undefined,
+    }),
+    [url.createdFrom, url.createdTo, url.updatedFrom, url.updatedTo],
+  );
+  const setStatusFilter = useCallback(
+    (next: StatusFilter) => setUrl({ status: next, offset: 0 }),
+    [setUrl],
+  );
+  const setOffset = useCallback((n: number) => setUrl({ offset: n }), [setUrl]);
+  const setSort = useCallback(
+    (s: SortState) => setUrl({ sortBy: s.field, sortOrder: s.order }),
+    [setUrl],
+  );
+  const setDateRange = useCallback(
+    (r: DateRange) =>
+      setUrl({
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+        updatedFrom: r.updatedFrom ?? "",
+        updatedTo: r.updatedTo ?? "",
+      }),
+    [setUrl],
+  );
   const [rows, setRows] = useState<AdminReviewRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -63,6 +113,12 @@ export default function AdminReviewsPage() {
             : statusFilter === "HIDDEN"
             ? false
             : undefined,
+        sortBy: sort.field,
+        sortOrder: sort.order,
+        createdFrom: dateRange.createdFrom,
+        createdTo: dateRange.createdTo,
+        updatedFrom: dateRange.updatedFrom,
+        updatedTo: dateRange.updatedTo,
         limit: PAGE_SIZE,
         offset,
       })
@@ -85,7 +141,25 @@ export default function AdminReviewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, offset]);
+  }, [statusFilter, offset, sort, dateRange]);
+
+  const exportQuery = useMemo(
+    () => ({
+      isApproved:
+        statusFilter === "VISIBLE"
+          ? true
+          : statusFilter === "HIDDEN"
+          ? false
+          : undefined,
+      sortBy: sort.field,
+      sortOrder: sort.order,
+      createdFrom: dateRange.createdFrom,
+      createdTo: dateRange.createdTo,
+      updatedFrom: dateRange.updatedFrom,
+      updatedTo: dateRange.updatedTo,
+    }),
+    [statusFilter, sort, dateRange],
+  );
 
   const handleToggle = useCallback(
     async (row: AdminReviewRow) => {
@@ -134,7 +208,6 @@ export default function AdminReviewsPage() {
   const onFilterChange = (next: StatusFilter) => {
     if (next === statusFilter) return;
     setStatusFilter(next);
-    setOffset(0);
     setLoading(true);
   };
 
@@ -146,27 +219,44 @@ export default function AdminReviewsPage() {
       <AdminHeader
         title="Reviews"
         subtitle="Moderate customer reviews — hide or unhide from PDP"
+        actions={
+          <ExportCsvButton
+            path="/admin/reviews/export.csv"
+            query={exportQuery}
+            filename="reviews"
+          />
+        }
       />
 
       <div className="p-6 space-y-5">
-        {/* Filter chips */}
-        <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((f) => {
-            const active = f.value === statusFilter;
-            return (
-              <button
-                key={f.value}
-                onClick={() => onFilterChange(f.value)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                  active
-                    ? "bg-[#129cd3] border-[#129cd3] text-white"
-                    : "border-gray-200 text-gray-600 hover:border-[#129cd3]"
-                }`}
-              >
-                {f.label}
-              </button>
-            );
-          })}
+        {/* Filter chips + date range */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {STATUS_FILTERS.map((f) => {
+              const active = f.value === statusFilter;
+              return (
+                <button
+                  key={f.value}
+                  onClick={() => onFilterChange(f.value)}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                    active
+                      ? "bg-[#129cd3] border-[#129cd3] text-white"
+                      : "border-gray-200 text-gray-600 hover:border-[#129cd3]"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2">
+            <DateRangeFilter value={dateRange} onApply={setDateRange} />
+            <SortByDropdown
+              options={SORT_OPTIONS}
+              currentSort={sort}
+              onSort={setSort}
+            />
+          </div>
         </div>
 
         {error && (
@@ -203,10 +293,29 @@ export default function AdminReviewsPage() {
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                   <tr>
                     <th className="text-left font-semibold px-5 py-3">Review</th>
-                    <th className="text-left font-semibold px-5 py-3">Rating</th>
+                    <SortableHeader
+                      field="rating"
+                      currentSort={sort}
+                      onSort={setSort}
+                    >
+                      Rating
+                    </SortableHeader>
                     <th className="text-left font-semibold px-5 py-3">Product</th>
                     <th className="text-left font-semibold px-5 py-3">Author</th>
-                    <th className="text-left font-semibold px-5 py-3">Date</th>
+                    <SortableHeader
+                      field="createdAt"
+                      currentSort={sort}
+                      onSort={setSort}
+                    >
+                      Added
+                    </SortableHeader>
+                    <SortableHeader
+                      field="updatedAt"
+                      currentSort={sort}
+                      onSort={setSort}
+                    >
+                      Updated
+                    </SortableHeader>
                     <th className="text-left font-semibold px-5 py-3">Status</th>
                     <th className="px-5 py-3" />
                   </tr>
@@ -259,8 +368,11 @@ export default function AdminReviewsPage() {
                         </Link>
                       </td>
                       <td className="px-5 py-3 text-gray-700">{r.user.name}</td>
-                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap">
-                        {formatDate(r.createdAt)}
+                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap text-xs">
+                        {formatTimestamp(r.createdAt)}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 whitespace-nowrap text-xs">
+                        {formatUpdated(r.createdAt, r.updatedAt)}
                       </td>
                       <td className="px-5 py-3">
                         <span
@@ -358,7 +470,7 @@ export default function AdminReviewsPage() {
                   >
                     {detail.product.name}
                   </Link>{" "}
-                  · {formatDate(detail.createdAt)}
+                  · {formatTimestamp(detail.createdAt)}
                   {detail.updatedAt !== detail.createdAt ? " (edited)" : ""}
                 </p>
               </div>
