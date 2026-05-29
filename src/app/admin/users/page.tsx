@@ -144,6 +144,37 @@ export default function UsersPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
+  // Stat-card totals — fetched independently of the active tab so all three
+  // cards stay populated whichever tab you're on.
+  const [tabCounts, setTabCounts] = useState<{
+    customers: number | null;
+    admins: number | null;
+    partners: number | null;
+  }>({ customers: null, admins: null, partners: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      adminApi.listAdminUsers({ role: "CUSTOMER", limit: 1 }),
+      adminApi.listAdminUsers({ role: "ADMIN", limit: 1 }),
+      adminApi.listPartners({ status: partnerStatus, limit: 1 }),
+    ])
+      .then(([c, a, p]) => {
+        if (cancelled) return;
+        setTabCounts({
+          customers: c.total,
+          admins: a.total,
+          partners: p.total,
+        });
+      })
+      .catch(() => {
+        /* primary list errors are surfaced via usersErr / partnersErr */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [partnerStatus, reloadKey]);
+
   // Customers / admins fetch.
   useEffect(() => {
     if (tab === "partners") return;
@@ -315,9 +346,9 @@ export default function UsersPage() {
   };
 
   const counts = {
-    customers: tab === "customers" ? usersTotal : "—",
-    partners: partnersTotal,
-    admins: tab === "admins" ? usersTotal : "—",
+    customers: tabCounts.customers ?? "—",
+    partners: tabCounts.partners ?? "—",
+    admins: tabCounts.admins ?? "—",
   };
 
   const filteredPartners = partners.filter((p) =>
@@ -361,7 +392,7 @@ export default function UsersPage() {
               <p className="text-xs text-gray-500 uppercase">
                 Retail Partners ({kycLabel(partnerStatus)})
               </p>
-              <p className="text-xl font-bold text-gray-800">{partnersTotal}</p>
+              <p className="text-xl font-bold text-gray-800">{counts.partners}</p>
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
