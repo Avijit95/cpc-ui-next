@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import {
-  Mail, Lock, Phone, Eye, EyeOff, ArrowRight, Loader2,
+  Mail, Lock, Phone, User, Eye, EyeOff, ArrowRight, Loader2,
   ShoppingBag, Shield, Zap, Headphones,
 } from "lucide-react";
 import Image from "next/image";
@@ -22,7 +22,6 @@ const benefits = [
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-// Minimal type for the GIS callback payload we use.
 type GoogleCredentialResponse = { credential: string };
 
 declare global {
@@ -45,33 +44,31 @@ declare global {
   }
 }
 
-export default function LoginPage() {
+export default function RegisterPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
-      <LoginPageInner />
+      <RegisterPageInner />
     </Suspense>
   );
 }
 
-function LoginPageInner() {
+function RegisterPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/";
   const { setSession, status, user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<Tab>("phone");
+  const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [needsName, setNeedsName] = useState(false);
-  const [signupName, setSignupName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Already logged in — bounce.
   useEffect(() => {
     if (status === "authenticated" && user) {
       router.replace(user.role === "ADMIN" ? "/admin" : next);
@@ -86,13 +83,13 @@ function LoginPageInner() {
     newOtp[index] = value;
     setOtp(newOtp);
     if (value && index < 5) {
-      document.getElementById(`otp-${index + 1}`)?.focus();
+      document.getElementById(`reg-otp-${index + 1}`)?.focus();
     }
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace" && !otp[index] && index > 0) {
-      document.getElementById(`otp-${index - 1}`)?.focus();
+      document.getElementById(`reg-otp-${index - 1}`)?.focus();
     }
   };
 
@@ -100,8 +97,6 @@ function LoginPageInner() {
     setActiveTab(tab);
     setOtpSent(false);
     setOtp(["", "", "", "", "", ""]);
-    setNeedsName(false);
-    setSignupName("");
     setErrorMsg(null);
   };
 
@@ -118,9 +113,10 @@ function LoginPageInner() {
     router.replace(resp.user.role === "ADMIN" ? "/admin" : next);
   };
 
-  // ── Phone OTP flow ──────────────────────────────────────────────
+  // ── Phone OTP signup ────────────────────────────────────────────
   const handleSendOtp = async () => {
     if (!e164Phone) return;
+    if (!name.trim()) return setErrorMsg("Tell us your name first.");
     setBusy(true);
     setErrorMsg(null);
     try {
@@ -139,46 +135,49 @@ function LoginPageInner() {
       setErrorMsg("Enter the 6-digit OTP.");
       return;
     }
+    if (!name.trim()) {
+      setErrorMsg("Tell us your name first.");
+      return;
+    }
     setBusy(true);
     setErrorMsg(null);
     try {
       const resp = await authApi.verifyOtp({
         phone: e164Phone,
         code,
-        ...(needsName && signupName ? { name: signupName } : {}),
+        name: name.trim(),
       });
       finishLogin(resp);
     } catch (err) {
-      if (isApiError(err) && err.code === "NAME_REQUIRED_FOR_SIGNUP") {
-        setNeedsName(true);
-        setErrorMsg("New here? Tell us your name to finish signing up.");
-      } else {
-        handleApiError(err, "Couldn't verify OTP.");
-      }
+      handleApiError(err, "Couldn't verify OTP.");
     } finally {
       setBusy(false);
     }
   };
 
-  // ── Email login ─────────────────────────────────────────────────
-  const handleEmailLogin = async () => {
-    if (!email || !password) {
-      setErrorMsg("Enter your email and password.");
+  // ── Email signup ────────────────────────────────────────────────
+  const handleEmailRegister = async () => {
+    if (!name.trim() || !email || !password) {
+      setErrorMsg("Name, email and password are all required.");
       return;
     }
     setBusy(true);
     setErrorMsg(null);
     try {
-      const resp = await authApi.loginEmail({ email, password });
+      const resp = await authApi.registerEmail({
+        name: name.trim(),
+        email,
+        password,
+      });
       finishLogin(resp);
     } catch (err) {
-      handleApiError(err, "Sign-in failed.");
+      handleApiError(err, "Couldn't create account.");
     } finally {
       setBusy(false);
     }
   };
 
-  // ── Google ID token flow ────────────────────────────────────────
+  // ── Google signup ───────────────────────────────────────────────
   useEffect(() => {
     if (activeTab !== "google" || !GOOGLE_CLIENT_ID) return;
     if (document.getElementById("gis-script")) {
@@ -204,13 +203,13 @@ function LoginPageInner() {
             const data = await authApi.google(resp.credential);
             finishLogin(data);
           } catch (err) {
-            handleApiError(err, "Google sign-in failed.");
+            handleApiError(err, "Google sign-up failed.");
           } finally {
             setBusy(false);
           }
         },
       });
-      const btn = document.getElementById("gis-btn");
+      const btn = document.getElementById("reg-gis-btn");
       if (btn) {
         window.google.accounts.id.renderButton(btn, {
           theme: "outline",
@@ -238,10 +237,10 @@ function LoginPageInner() {
 
         <div className="relative z-10">
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-            Welcome to<br />CellPhone Crowd
+            Create your<br />CellPhone Crowd account
           </h1>
           <p className="text-white/80 text-base mb-10 leading-relaxed">
-            India&apos;s trusted destination for premium electronics. Sign in to unlock exclusive deals and manage your orders.
+            Join thousands of happy customers. Sign up free in seconds and start unlocking exclusive deals.
           </p>
 
           <ul className="space-y-4">
@@ -271,17 +270,11 @@ function LoginPageInner() {
 
         <div className="w-full max-w-md">
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Sign in to your account</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Create your account</h2>
             <p className="text-gray-500 text-sm mt-1">
-              New here?{" "}
-              <Link href="/register" className="text-[#129cd3] hover:underline font-medium">
-                Create an account
-              </Link>
-            </p>
-            <p className="text-gray-400 text-xs mt-1">
-              Registering a business?{" "}
-              <Link href="/dealer/register" className="text-[#129cd3] hover:underline font-medium">
-                Sign up as a dealer →
+              Already have an account?{" "}
+              <Link href="/login" className="text-[#129cd3] hover:underline font-medium">
+                Sign in
               </Link>
             </p>
           </div>
@@ -317,6 +310,21 @@ function LoginPageInner() {
                     <>
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Full Name
+                        </label>
+                        <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+                          <span className="px-3 py-3 text-gray-400 flex-shrink-0"><User size={17} /></span>
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value.slice(0, 100))}
+                            placeholder="Your full name"
+                            className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
                           Mobile Number
                         </label>
                         <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
@@ -334,9 +342,9 @@ function LoginPageInner() {
                       </div>
                       <button
                         onClick={handleSendOtp}
-                        disabled={phoneNumber.length !== 10 || busy}
+                        disabled={phoneNumber.length !== 10 || !name.trim() || busy}
                         className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all ${
-                          phoneNumber.length === 10 && !busy
+                          phoneNumber.length === 10 && name.trim() && !busy
                             ? "bg-[#129cd3] hover:bg-[#0e87b5] text-white shadow-md shadow-[#129cd3]/30"
                             : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         }`}
@@ -354,7 +362,7 @@ function LoginPageInner() {
                           OTP sent to <span className="font-bold text-gray-900">+91 {phoneNumber}</span>
                         </p>
                         <button
-                          onClick={() => { setOtpSent(false); setNeedsName(false); setOtp(["","","","","",""]); }}
+                          onClick={() => { setOtpSent(false); setOtp(["","","","","",""]); }}
                           className="text-xs text-[#129cd3] hover:underline font-medium"
                         >
                           Change
@@ -368,7 +376,7 @@ function LoginPageInner() {
                           {otp.map((digit, i) => (
                             <input
                               key={i}
-                              id={`otp-${i}`}
+                              id={`reg-otp-${i}`}
                               type="text"
                               inputMode="numeric"
                               maxLength={1}
@@ -380,26 +388,12 @@ function LoginPageInner() {
                           ))}
                         </div>
                       </div>
-                      {needsName && (
-                        <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            Your name
-                          </label>
-                          <input
-                            type="text"
-                            value={signupName}
-                            onChange={(e) => setSignupName(e.target.value.slice(0, 100))}
-                            placeholder="Full name"
-                            className="w-full border-2 border-gray-200 focus:border-[#129cd3] rounded-xl px-4 py-3 text-sm outline-none text-gray-800 transition-colors"
-                          />
-                        </div>
-                      )}
                       <button
                         onClick={handleVerifyOtp}
-                        disabled={busy || otp.join("").length !== 6 || (needsName && !signupName.trim())}
+                        disabled={busy || otp.join("").length !== 6}
                         className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
                       >
-                        {busy ? <Loader2 size={16} className="animate-spin" /> : <>Verify &amp; Continue <ArrowRight size={16} /></>}
+                        {busy ? <Loader2 size={16} className="animate-spin" /> : <>Create Account <ArrowRight size={16} /></>}
                       </button>
                       <p className="text-center text-xs text-gray-500">
                         Didn&apos;t receive?{" "}
@@ -414,14 +408,14 @@ function LoginPageInner() {
               {activeTab === "google" && (
                 <div className="space-y-5">
                   <p className="text-center text-gray-500 text-sm">
-                    Sign in quickly and securely with your Google account.
+                    Sign up quickly and securely with your Google account.
                   </p>
 
                   {GOOGLE_CLIENT_ID ? (
-                    <div className="flex justify-center"><div id="gis-btn" /></div>
+                    <div className="flex justify-center"><div id="reg-gis-btn" /></div>
                   ) : (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                      Set <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in <code className="font-mono">.env.local</code> to enable Google sign-in.
+                      Set <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in <code className="font-mono">.env.local</code> to enable Google sign-up.
                     </div>
                   )}
 
@@ -449,6 +443,19 @@ function LoginPageInner() {
               {activeTab === "email" && (
                 <div className="space-y-5">
                   <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
+                    <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+                      <span className="px-3 py-3 text-gray-400 flex-shrink-0"><User size={17} /></span>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value.slice(0, 100))}
+                        placeholder="Your full name"
+                        className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
+                      />
+                    </div>
+                  </div>
+                  <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
                     <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
                       <span className="px-3 py-3 text-gray-400 flex-shrink-0"><Mail size={17} /></span>
@@ -469,31 +476,37 @@ function LoginPageInner() {
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") handleEmailLogin(); }}
-                        placeholder="Enter your password"
+                        onKeyDown={(e) => { if (e.key === "Enter") handleEmailRegister(); }}
+                        placeholder="≥8 chars, 1 uppercase, 1 digit"
                         className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
                       />
                       <button onClick={() => setShowPassword(!showPassword)} className="px-3 text-gray-400 hover:text-gray-600 flex-shrink-0">
                         {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                       </button>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <label className="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
-                      <input type="checkbox" className="accent-[#129cd3]" /> Remember me
-                    </label>
-                    <Link href="/forgot-password" className="text-[#129cd3] hover:underline font-semibold">Forgot password?</Link>
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      You can add a mobile number later from your profile.
+                    </p>
                   </div>
                   <button
-                    onClick={handleEmailLogin}
-                    disabled={busy || !email || !password}
+                    onClick={handleEmailRegister}
+                    disabled={busy || !name.trim() || !email || !password}
                     className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
                   >
-                    {busy ? <Loader2 size={16} className="animate-spin" /> : <>Sign In <ArrowRight size={16} /></>}
+                    {busy ? <Loader2 size={16} className="animate-spin" /> : <>Create Account <ArrowRight size={16} /></>}
                   </button>
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-[#b8e8f5] bg-[#e8f7fc] px-4 py-3 text-center">
+            <p className="text-xs text-gray-700">
+              Registering a business?{" "}
+              <Link href="/dealer/register" className="text-[#129cd3] hover:underline font-semibold">
+                Sign up as a dealer →
+              </Link>
+            </p>
           </div>
 
           <p className="text-center text-xs text-gray-400 mt-5">

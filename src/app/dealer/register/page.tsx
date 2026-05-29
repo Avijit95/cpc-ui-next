@@ -468,6 +468,10 @@ export default function DealerRegisterPage() {
           Already registered?{" "}
           <a href="/login" className="text-[#129cd3] hover:underline">Sign in here</a>
         </p>
+        <p className="text-center text-xs text-gray-400 mt-2">
+          Not a dealer?{" "}
+          <a href="/register" className="text-[#129cd3] hover:underline">Sign up as a customer →</a>
+        </p>
       </div>
     </div>
   );

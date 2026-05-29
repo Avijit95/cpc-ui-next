@@ -200,12 +200,11 @@ export default function DealerDashboardPage() {
                   <BadgeCheck size={28} className="text-amber-500" />
                 </div>
                 <h2 className="text-lg font-bold text-gray-800 mb-1">
-                  Partner verification pending
+                  Dealer verification pending
                 </h2>
                 <p className="text-sm text-gray-500 mb-5 max-w-md mx-auto">
-                  Your partner application hasn&apos;t been verified yet. Once
-                  an admin approves it, your dashboard will populate
-                  automatically.
+                  Your dealer account has been submitted and is awaiting admin
+                  verification.
                 </p>
                 <Link
                   href="/dealer/register"
