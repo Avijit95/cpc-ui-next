@@ -65,10 +65,16 @@ export const serverGetNavLinks = cache(async (): Promise<ServerNavLink[]> => {
 export const serverListProducts = cache(
   async (opts: {
     sort?: CatalogSort;
+    newOnly?: boolean;
+    isFeatured?: boolean;
+    isBestSeller?: boolean;
     limit?: number;
   }): Promise<ProductListResponse | null> => {
     const params = new URLSearchParams();
     if (opts.sort) params.set("sort", opts.sort);
+    if (opts.newOnly) params.set("newOnly", "true");
+    if (opts.isFeatured) params.set("isFeatured", "true");
+    if (opts.isBestSeller) params.set("isBestSeller", "true");
     if (opts.limit !== undefined) params.set("limit", String(opts.limit));
     const qs = params.toString();
     const path = `/products${qs ? `?${qs}` : ""}`;

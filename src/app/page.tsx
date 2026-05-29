@@ -11,7 +11,7 @@ import { serverGetNavLinks, serverListProducts } from "@/lib/api/server";
 
 export default async function Home() {
   const [tabsInitial, navLinks] = await Promise.all([
-    serverListProducts({ sort: "popular", limit: 8 }),
+    serverListProducts({ newOnly: true, limit: 8 }),
     serverGetNavLinks(),
   ]);
 
@@ -22,11 +22,8 @@ export default async function Home() {
         <HeroBanner />
         <CategorySection />
         <DealsSection />
-        <ProductSection title="Best Sellers" filter="bestseller" />
-        <ProductTabs
-          title="New Arrivals"
-          initialItems={tabsInitial?.items ?? []}
-        />
+        <ProductSection title="Featured" filter="featured" />
+        <ProductTabs title="New Arrivals" items={tabsInitial?.items ?? []} />
         <PromoBanners />
       </main>
       <TrustBar />

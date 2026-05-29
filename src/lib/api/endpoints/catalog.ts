@@ -14,6 +14,9 @@ export type ListProductsQuery = {
   minRating?: number; // 1-5; 2026-05-18 sweep
   search?: string;
   sort?: CatalogSort;
+  newOnly?: boolean;
+  isFeatured?: boolean;
+  isBestSeller?: boolean;
   limit?: number;
   offset?: number;
 };

@@ -5,20 +5,26 @@ import type { CatalogSort } from "@/lib/api";
 
 type Props = {
   title: string;
-  filter?: "new" | "bestseller" | "all";
+  filter?: "new" | "bestseller" | "featured" | "all";
 };
 
 const ITEM_LIMIT = 8;
 
-function sortFromFilter(filter: Props["filter"]): CatalogSort | undefined {
-  if (filter === "new") return "newest";
-  if (filter === "bestseller") return "popular";
-  return undefined;
+function queryFromFilter(filter: Props["filter"]): {
+  sort?: CatalogSort;
+  isFeatured?: boolean;
+} {
+  if (filter === "new") return { sort: "newest" };
+  if (filter === "bestseller") return { sort: "popular" };
+  if (filter === "featured") return { isFeatured: true };
+  return {};
 }
 
 export default async function ProductSection({ title, filter = "all" }: Props) {
-  const sort = sortFromFilter(filter);
-  const resp = await serverListProducts({ sort, limit: ITEM_LIMIT });
+  const resp = await serverListProducts({
+    ...queryFromFilter(filter),
+    limit: ITEM_LIMIT,
+  });
   const items = resp?.items ?? [];
 
   if (items.length === 0) return null;
