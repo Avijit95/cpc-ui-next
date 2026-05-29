@@ -615,7 +615,7 @@ export default function AdminSupportPage() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[500px] bg-gray-50/40">
+                <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[500px] bg-gray-50">
                   {/* Initial body as the first message */}
                   <ThreadMessage
                     body={detail.body}
@@ -807,12 +807,12 @@ function ThreadMessage({
         </p>
       )}
       <div
-        className={`rounded-xl p-3.5 ${
+        className={`rounded-2xl p-3.5 shadow-sm ${
           isInternal
             ? "bg-amber-50 border border-amber-200 text-amber-900"
             : role === "agent"
-            ? "bg-[#129cd3] text-white"
-            : "bg-white border border-gray-200 text-gray-700"
+            ? "bg-[#129cd3] text-white rounded-br-md"
+            : "bg-white border border-gray-200 text-gray-700 rounded-bl-md"
         }`}
       >
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{body}</p>

@@ -233,7 +233,7 @@ export default function CustomerTicketDetailPage() {
               </div>
 
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="p-5 space-y-4 bg-gray-50/40 max-h-[560px] overflow-y-auto">
+                <div className="p-5 space-y-4 bg-gray-50 max-h-[560px] overflow-y-auto">
                   {/* Initial body as the first message */}
                   <ThreadMessage
                     body={detail.body}
@@ -367,10 +367,10 @@ function ThreadMessage({
   return (
     <div className={`max-w-[80%] ${isMine ? "ml-auto" : "mr-auto"}`}>
       <div
-        className={`rounded-xl p-3.5 ${
+        className={`rounded-2xl p-3.5 shadow-sm ${
           isMine
-            ? "bg-[#129cd3] text-white"
-            : "bg-white border border-gray-200 text-gray-700"
+            ? "bg-[#129cd3] text-white rounded-br-md"
+            : "bg-white border border-gray-200 text-gray-700 rounded-bl-md"
         }`}
       >
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
