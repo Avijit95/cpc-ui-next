@@ -40,6 +40,10 @@ jobs:
       # (typescript, eslint, tailwindcss). `next build` sets NODE_ENV=production
       # internally during the build, and EC2's /etc/cpn/ui.env sets it at runtime.
       NEXT_PUBLIC_API_URL: https://api.cpc24.co.in
+      # OAuth client IDs are public-by-design (they ship in the browser bundle),
+      # so this is not a secret. Must be present at build time or the Google
+      # sign-in button never renders on /login, /register, /dealer/register.
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: 575329460316-7v1j8slftv98mnvq4uhgj1i8fk138h48.apps.googleusercontent.com
 
     steps:
       - uses: actions/checkout@v4
