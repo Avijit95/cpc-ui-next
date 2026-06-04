@@ -11,6 +11,10 @@ export type EmailRegisterBody = {
   name: string;
   email: string;
   password: string;
+  // The phone is verified by OTP as part of registration — the account is
+  // only created once `code` checks out.
+  phone: string;
+  code: string;
 };
 
 export type EmailLoginBody = {
@@ -53,10 +57,12 @@ export const authApi = {
       anonymous: true,
     });
   },
-  google(idToken: string) {
+  // phone + code are sent only when creating a brand-new account (a new Google
+  // user must verify a phone by OTP first). Existing users omit them.
+  google(idToken: string, phone?: string, code?: string) {
     return request<LoginResponse>("/auth/google", {
       method: "POST",
-      body: { idToken },
+      body: { idToken, ...(phone && code ? { phone, code } : {}) },
       anonymous: true,
     });
   },

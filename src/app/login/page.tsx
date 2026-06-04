@@ -204,7 +204,12 @@ function LoginPageInner() {
             const data = await authApi.google(resp.credential);
             finishLogin(data);
           } catch (err) {
-            handleApiError(err, "Google sign-in failed.");
+            if (isApiError(err) && err.code === "PHONE_VERIFICATION_REQUIRED") {
+              // No account yet — finish sign-up (with phone OTP) on /register.
+              router.push(`/register?next=${encodeURIComponent(next)}`);
+            } else {
+              handleApiError(err, "Google sign-in failed.");
+            }
           } finally {
             setBusy(false);
           }
