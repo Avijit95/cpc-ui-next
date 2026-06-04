@@ -110,6 +110,9 @@ function ProfileInner({ user }: { user: PublicUser }) {
   const nameTrimmed = name.trim();
   const nameDirty = nameTrimmed.length > 0 && nameTrimmed !== user.name;
 
+  // Phone is stored/typed as 10 local digits; +91 is fixed (India only).
+  const newPhoneE164 = newPhone.length === 10 ? `+91${newPhone}` : "";
+
   async function handleSaveName() {
     if (!nameDirty || savingName) return;
     setSavingName(true);
@@ -166,15 +169,14 @@ function ProfileInner({ user }: { user: PublicUser }) {
 
   async function handlePhoneRequestOtp() {
     if (phoneBusy) return;
-    const trimmed = newPhone.trim();
-    if (!trimmed) {
-      setPhoneError("Enter a phone number.");
+    if (newPhone.length !== 10) {
+      setPhoneError("Enter a 10-digit mobile number.");
       return;
     }
     setPhoneBusy(true);
     setPhoneError(null);
     try {
-      await meApi.requestPhoneOtp(trimmed);
+      await meApi.requestPhoneOtp(newPhoneE164);
       setPhoneStep("verify");
     } catch (err) {
       setPhoneError(isApiError(err) ? err.message : "Could not send OTP.");
@@ -192,7 +194,7 @@ function ProfileInner({ user }: { user: PublicUser }) {
     setPhoneBusy(true);
     setPhoneError(null);
     try {
-      await meApi.verifyPhoneOtp(newPhone.trim(), otpCode.trim());
+      await meApi.verifyPhoneOtp(newPhoneE164, otpCode.trim());
       await refreshUser();
       setPhoneModalOpen(false);
     } catch (err) {
@@ -419,21 +421,25 @@ function ProfileInner({ user }: { user: PublicUser }) {
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">New Phone Number</label>
-                  <input
-                    type="tel"
-                    placeholder="+919000000001"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    autoFocus
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-1">Include country code, no spaces.</p>
+                  <div className="flex items-center border border-gray-300 focus-within:border-[#129cd3] focus-within:ring-1 focus-within:ring-[#129cd3] rounded-lg overflow-hidden">
+                    <span className="px-3 py-2.5 bg-gray-50 text-gray-600 text-sm font-semibold border-r border-gray-300 flex-shrink-0">+91</span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="Enter 10-digit number"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      autoFocus
+                      className="flex-1 px-3 py-2.5 text-sm outline-none text-gray-800"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">10-digit Indian mobile number.</p>
                 </div>
                 {phoneError && <p className="text-xs text-red-600">{phoneError}</p>}
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={handlePhoneRequestOtp}
-                    disabled={phoneBusy}
+                    disabled={phoneBusy || newPhone.length !== 10}
                     className="flex-1 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2"
                   >
                     {phoneBusy && <Loader2 size={14} className="animate-spin" />}
@@ -453,7 +459,7 @@ function ProfileInner({ user }: { user: PublicUser }) {
             {phoneStep === "verify" && (
               <div className="space-y-4">
                 <p className="text-sm text-gray-600">
-                  We sent a code to <span className="font-semibold text-gray-800">{newPhone}</span>. Enter it below to confirm.
+                  We sent a code to <span className="font-semibold text-gray-800">+91 {newPhone}</span>. Enter it below to confirm.
                 </p>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">OTP Code</label>
