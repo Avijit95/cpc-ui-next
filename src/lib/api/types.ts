@@ -187,6 +187,7 @@ export type Variant = {
   attributes: Record<string, unknown>;
   stock: number;
   pricing: CatalogPricingPreview;
+  deal: DealPreview | null;
   images: VariantImage[];
 };
 

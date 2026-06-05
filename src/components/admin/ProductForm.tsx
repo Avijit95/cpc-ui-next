@@ -12,11 +12,15 @@ import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ImagePlus,
-  Info,
   Loader2,
+  Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { adminApi, isApiError, s3Put } from "@/lib/api";
+import ProductVariantsEditor, {
+  type ProductVariantsHandle,
+} from "./ProductVariantsEditor";
 import type {
   AdminCategoryListItem,
   AdminProduct,
@@ -58,39 +62,33 @@ type PendingImage = {
   previewUrl: string;
 };
 
-// ── Phone-only option presets ─────────────────────────────────────────────
-// Stored on the product `specs` field (§7.4 specs is a free-form
-// Record<string, unknown>, so arrays of strings are fine).
-const RAM_PRESETS = ["4GB", "6GB", "8GB", "12GB", "16GB", "32GB"];
-const STORAGE_PRESETS = [
-  "32GB",
-  "64GB",
-  "128GB",
-  "256GB",
-  "512GB",
-  "1TB",
-];
-const COLOR_PRESETS = [
-  "Black",
-  "White",
-  "Silver",
-  "Gold",
-  "Rose Gold",
-  "Blue",
-  "Red",
-  "Green",
-  "Purple",
-  "Pink",
-  "Yellow",
-];
+function uid(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
-type PhoneOptions = {
-  ram: string[];
-  storage: string[];
-  color: string[];
-};
+type SpecRow = { id: string; key: string; value: string };
 
-const EMPTY_PHONE_OPTIONS: PhoneOptions = { ram: [], storage: [], color: [] };
+// RAM/ROM/Color now live on variants, not specs — hide the legacy option arrays.
+const HIDDEN_SPEC_KEYS = new Set([
+  "ramOptions",
+  "storageOptions",
+  "colorOptions",
+]);
+
+function initSpecRows(specs?: Record<string, unknown> | null): SpecRow[] {
+  if (!specs) return [];
+  return Object.entries(specs)
+    .filter(([k]) => !HIDDEN_SPEC_KEYS.has(k))
+    .map(([k, v]) => ({
+      id: uid(),
+      key: k,
+      value: Array.isArray(v)
+        ? v.map(String).join(", ")
+        : v && typeof v === "object"
+          ? JSON.stringify(v)
+          : String(v),
+    }));
+}
 
 // Heuristic: does this category look like phones? Walks parents too so
 // "Electronics › Smartphones › Apple" still triggers.
@@ -112,18 +110,6 @@ function isPhoneCategory(
     cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
   return false;
-}
-
-// Pull phone options out of an existing specs object (edit mode).
-function readPhoneOptions(specs: Record<string, unknown> | undefined | null): PhoneOptions {
-  const pick = (val: unknown): string[] =>
-    Array.isArray(val) ? val.map(String).filter(Boolean) : [];
-  if (!specs) return EMPTY_PHONE_OPTIONS;
-  return {
-    ram: pick((specs as Record<string, unknown>).ramOptions),
-    storage: pick((specs as Record<string, unknown>).storageOptions),
-    color: pick((specs as Record<string, unknown>).colorOptions),
-  };
 }
 
 function buildInitialForm(initial?: AdminProductDetail | AdminProduct): FormState {
@@ -186,10 +172,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const existingImageCount = mode.kind === "edit" ? mode.initial.images.length : 0;
 
-  // ── Phone option state (only surfaced when category looks like phones) ─
-  const [phoneOptions, setPhoneOptions] = useState<PhoneOptions>(() =>
-    readPhoneOptions(initial?.specs),
+  // Free-form specifications (key/value) → product.specs.
+  const [specRows, setSpecRows] = useState<SpecRow[]>(() =>
+    initSpecRows(initial?.specs),
   );
+  const variantsRef = useRef<ProductVariantsHandle | null>(null);
 
   // Cleanup object URLs on unmount.
   useEffect(() => {
@@ -330,17 +317,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       return { error: "Stock must be a whole number ≥ 0." };
     }
 
-    let specs: Record<string, unknown> | undefined;
-
-    // Phone option chips populate specs.{ramOptions, storageOptions, colorOptions}
-    // when the chosen category looks like phones.
-    const phoneCategory = isPhoneCategory(form.categoryId, categories);
-    if (phoneCategory) {
-      const merged: Record<string, unknown> = {};
-      if (phoneOptions.ram.length) merged.ramOptions = phoneOptions.ram;
-      if (phoneOptions.storage.length) merged.storageOptions = phoneOptions.storage;
-      if (phoneOptions.color.length) merged.colorOptions = phoneOptions.color;
-      if (Object.keys(merged).length > 0) specs = merged;
+    // Free-form specs from the editor (authoritative — empty clears existing).
+    const specs: Record<string, unknown> = {};
+    for (const r of specRows) {
+      const key = r.key.trim();
+      if (key) specs[key] = r.value;
     }
 
     if (status === "ACTIVE" && !form.hsnCode.trim()) {
@@ -361,7 +342,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     if (form.slug.trim()) body.slug = form.slug.trim();
     if (form.brand.trim()) body.brand = form.brand.trim();
     if (form.hsnCode.trim()) body.hsnCode = form.hsnCode.trim();
-    if (specs) body.specs = specs;
+    body.specs = specs;
     return body;
   };
 
@@ -402,6 +383,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       setErrorMsg(built.error);
       return;
     }
+    const variantError = variantsRef.current?.validate();
+    if (variantError) {
+      setErrorMsg(variantError);
+      return;
+    }
     setSubmitting(status);
     try {
       let productId: string;
@@ -426,6 +412,19 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         return;
       }
 
+      // Sync variants (phone categories / products that already have variants).
+      if (variantsRef.current) {
+        try {
+          await variantsRef.current.commit(productId);
+        } catch (err) {
+          setErrorMsg(
+            readableError(err) +
+              "\nThe product saved, but variants failed to save. Edit the product to retry.",
+          );
+          return;
+        }
+      }
+
       router.replace("/admin/products");
       router.refresh();
     } catch (err) {
@@ -440,36 +439,14 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const currentStatus = isEdit ? mode.initial.status : "DRAFT";
   const atImageLimit = totalImageCount >= MAX_IMAGES;
 
-  const showPhoneOptions = useMemo(
-    () => isPhoneCategory(form.categoryId, categories),
-    [form.categoryId, categories],
+  // Show the variant editor for phone-like categories, or whenever an existing
+  // product already has variants (so they stay editable regardless of category).
+  const showVariants = useMemo(
+    () =>
+      isPhoneCategory(form.categoryId, categories) ||
+      (mode.kind === "edit" && mode.initial.variants.length > 0),
+    [form.categoryId, categories, mode],
   );
-
-  const togglePhoneOption = (
-    group: keyof PhoneOptions,
-    value: string,
-  ) => {
-    setPhoneOptions((prev) => {
-      const current = prev[group];
-      const next = current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value];
-      return { ...prev, [group]: next };
-    });
-  };
-
-  const addCustomPhoneOption = (
-    group: keyof PhoneOptions,
-    raw: string,
-  ) => {
-    const value = raw.trim();
-    if (!value) return;
-    setPhoneOptions((prev) =>
-      prev[group].includes(value)
-        ? prev
-        : { ...prev, [group]: [...prev[group], value] },
-    );
-  };
 
   return (
     <div className="p-6">
@@ -652,46 +629,17 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             </p>
           </section>
 
-          {showPhoneOptions && (
-            <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-5">
-              <div>
-                <h3 className="font-bold text-gray-800 text-sm">Phone options</h3>
-                <p className="text-[12px] text-gray-500 mt-0.5">
-                  Pick the RAM, Storage, and Color choices this phone is sold in.
-                  Stored on the product&apos;s <code className="font-mono text-[11px] bg-gray-100 px-1 rounded">specs</code>{" "}
-                  as <code className="font-mono text-[11px] bg-gray-100 px-1 rounded">ramOptions</code>,{" "}
-                  <code className="font-mono text-[11px] bg-gray-100 px-1 rounded">storageOptions</code>,{" "}
-                  <code className="font-mono text-[11px] bg-gray-100 px-1 rounded">colorOptions</code>.
-                </p>
-              </div>
-
-              <PhoneOptionRow
-                label="RAM"
-                presets={RAM_PRESETS}
-                values={phoneOptions.ram}
-                onToggle={(v) => togglePhoneOption("ram", v)}
-                onAddCustom={(v) => addCustomPhoneOption("ram", v)}
-                placeholder="Add custom RAM (e.g. 24GB)"
-              />
-              <PhoneOptionRow
-                label="Storage"
-                presets={STORAGE_PRESETS}
-                values={phoneOptions.storage}
-                onToggle={(v) => togglePhoneOption("storage", v)}
-                onAddCustom={(v) => addCustomPhoneOption("storage", v)}
-                placeholder="Add custom storage (e.g. 2TB)"
-              />
-              <PhoneOptionRow
-                label="Color"
-                presets={COLOR_PRESETS}
-                values={phoneOptions.color}
-                onToggle={(v) => togglePhoneOption("color", v)}
-                onAddCustom={(v) => addCustomPhoneOption("color", v)}
-                placeholder="Add custom color (e.g. Titanium)"
-              />
-            </section>
-          )}
-
+          {/* ── Specifications (free-form key/value) ── */}
+          <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+            <div>
+              <h3 className="font-bold text-gray-800 text-sm">Specifications</h3>
+              <p className="text-[12px] text-gray-500 mt-0.5">
+                Key/value details shown on the product page (e.g. Display, Battery,
+                Processor). RAM, ROM and Color are set per variant below.
+              </p>
+            </div>
+            <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+          </section>
 
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Pricing &amp; Inventory</h3>
@@ -730,45 +678,13 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             </div>
           </section>
 
-          {!isEdit && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800 flex items-start gap-2">
-              <Info size={14} className="mt-0.5 flex-shrink-0" />
-              <span>
-                Variants attach to a product after it&apos;s saved. Save this
-                product first, then add variants from the editor.
-              </span>
-            </div>
-          )}
-
-          {isEdit && mode.initial.variants.length > 0 && (
-            <section className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="font-bold text-gray-800 text-sm mb-3">
-                Variants ({mode.initial.variants.length})
-              </h3>
-              <div className="divide-y divide-gray-100">
-                {mode.initial.variants.map((v) => (
-                  <div
-                    key={v.id}
-                    className="py-2.5 flex items-center justify-between text-sm"
-                  >
-                    <div>
-                      <p className="font-mono text-xs text-gray-700">{v.sku}</p>
-                      <p className="text-[11px] text-gray-400">
-                        Stock: {v.stock} ·{" "}
-                        {v.priceOverride != null
-                          ? `Override ₹${v.priceOverride.toLocaleString("en-IN")}`
-                          : "Uses base price"}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-gray-400">
-                      {Object.entries(v.attributes)
-                        .map(([k, val]) => `${k}: ${String(val)}`)
-                        .join(" · ")}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
+          {showVariants && (
+            <ProductVariantsEditor
+              ref={variantsRef}
+              productName={form.name}
+              initialVariants={isEdit ? mode.initial.variants : []}
+              disabled={busy}
+            />
           )}
         </div>
 
@@ -869,84 +785,64 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   );
 }
 
-function PhoneOptionRow({
-  label,
-  presets,
-  values,
-  onToggle,
-  onAddCustom,
-  placeholder,
+function SpecsEditor({
+  rows,
+  onChange,
+  disabled,
 }: {
-  label: string;
-  presets: string[];
-  values: string[];
-  onToggle: (value: string) => void;
-  onAddCustom: (value: string) => void;
-  placeholder: string;
+  rows: SpecRow[];
+  onChange: (rows: SpecRow[]) => void;
+  disabled: boolean;
 }) {
-  const [draft, setDraft] = useState("");
-  const customValues = values.filter((v) => !presets.includes(v));
-  const allOptions = [...presets, ...customValues];
-
-  const submitCustom = () => {
-    if (!draft.trim()) return;
-    onAddCustom(draft);
-    setDraft("");
-  };
+  const update = (id: string, patch: Partial<SpecRow>) =>
+    onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const add = () => onChange([...rows, { id: uid(), key: "", value: "" }]);
+  const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-          {label}
-        </p>
-        <span className="text-[11px] text-gray-400">
-          {values.length} selected
-        </span>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {allOptions.map((opt) => {
-          const active = values.includes(opt);
-          return (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => onToggle(opt)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                active
-                  ? "bg-[#129cd3] text-white border-[#129cd3] shadow-sm shadow-[#129cd3]/20"
-                  : "bg-white text-gray-700 border-gray-200 hover:border-[#129cd3] hover:text-[#129cd3]"
-              }`}
-            >
-              {opt}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center gap-2 mt-3">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submitCustom();
-            }
-          }}
-          placeholder={placeholder}
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-[#129cd3]"
-        />
-        <button
-          type="button"
-          onClick={submitCustom}
-          disabled={!draft.trim()}
-          className="text-xs font-semibold border border-gray-200 text-gray-700 px-3 py-2 rounded-lg hover:border-[#129cd3] hover:text-[#129cd3] disabled:opacity-50"
+    <div className="space-y-2">
+      {rows.length === 0 && (
+        <p className="text-[12px] text-gray-400">No specifications yet.</p>
+      )}
+      {rows.map((r) => (
+        <div
+          key={r.id}
+          className="grid grid-cols-[1fr_1.5fr_auto] gap-2 items-center"
         >
-          Add
-        </button>
-      </div>
+          <input
+            value={r.key}
+            onChange={(e) => update(r.id, { key: e.target.value })}
+            placeholder="e.g. Display"
+            disabled={disabled}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3]"
+          />
+          <input
+            value={r.value}
+            onChange={(e) => update(r.id, { value: e.target.value })}
+            placeholder="e.g. 6.8-inch AMOLED, 120Hz"
+            disabled={disabled}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3]"
+          />
+          <button
+            type="button"
+            onClick={() => remove(r.id)}
+            disabled={disabled}
+            className="h-9 w-9 flex items-center justify-center text-gray-400 hover:text-red-500 disabled:opacity-40"
+            aria-label="Remove specification"
+            title="Remove specification"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        disabled={disabled}
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#129cd3] border border-[#129cd3]/40 px-3 py-2 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+      >
+        <Plus size={14} /> Add specification
+      </button>
     </div>
   );
 }

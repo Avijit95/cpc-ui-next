@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
-import type { ProductDetail, Review, ReviewListResponse } from "@/lib/api";
+import type { ProductDetail, Variant, Review, ReviewListResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import {
@@ -82,6 +82,65 @@ type TabType = (typeof tabs)[number];
 
 type AddState = "idle" | "busy" | "added" | "error";
 
+// ── Variant selection helpers ─────────────────────────────────────────────
+// Attribute keys match the admin variant editor (ROM is stored as `storage`).
+const VARIANT_ATTR_ORDER = ["ram", "storage", "color"];
+const VARIANT_ATTR_LABELS: Record<string, string> = {
+  ram: "RAM",
+  storage: "ROM",
+  color: "Color",
+};
+
+type VariantGroup = { key: string; label: string; values: string[] };
+
+function attrValue(v: Variant, key: string): string {
+  const raw = v.attributes[key];
+  return raw == null ? "" : String(raw);
+}
+
+function attrsOf(v: Variant): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of Object.keys(v.attributes)) out[k] = attrValue(v, k);
+  return out;
+}
+
+// Build the ordered list of selectable attribute groups from the variant set.
+function buildVariantGroups(variants: Variant[]): VariantGroup[] {
+  const keys: string[] = [];
+  for (const v of variants) {
+    for (const k of Object.keys(v.attributes)) {
+      if (!keys.includes(k)) keys.push(k);
+    }
+  }
+  keys.sort((a, b) => {
+    const ia = VARIANT_ATTR_ORDER.indexOf(a);
+    const ib = VARIANT_ATTR_ORDER.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  return keys.map((key) => {
+    const values: string[] = [];
+    for (const v of variants) {
+      const val = attrValue(v, key);
+      if (val && !values.includes(val)) values.push(val);
+    }
+    return { key, label: VARIANT_ATTR_LABELS[key] ?? key, values };
+  });
+}
+
+function findVariant(
+  variants: Variant[],
+  attrs: Record<string, string>,
+  groups: VariantGroup[],
+): Variant | undefined {
+  return variants.find((v) =>
+    groups.every((g) => attrValue(v, g.key) === attrs[g.key]),
+  );
+}
+
+function pickDefaultVariant(variants: Variant[]): Variant | undefined {
+  return variants.find((v) => v.stock > 0) ?? variants[0];
+}
+
 function formatReviewDate(iso: string) {
   try {
     return new Date(iso).toLocaleDateString("en-IN", {
@@ -113,6 +172,7 @@ export default function ProductDetailPage() {
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState<TabType>("Description");
   const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
   const [addState, setAddState] = useState<AddState>("idle");
   const [addError, setAddError] = useState<string | null>(null);
   const [wishlistBusy, setWishlistBusy] = useState(false);
@@ -156,6 +216,8 @@ export default function ProductDetailPage() {
         if (ac.signal.aborted) return;
         setProduct(p);
         setActiveImageIdx(0);
+        const def = pickDefaultVariant(p.variants);
+        setSelectedAttrs(def ? attrsOf(def) : {});
         setError(null);
         setNotFound(false);
       })
@@ -394,17 +456,50 @@ export default function ProductDetailPage() {
     );
   }
 
-  const liveDeal = product.deal;
-  const displayBase = liveDeal ? liveDeal.basePrice : product.pricing.basePrice;
-  const displayFinal = liveDeal ? liveDeal.dealPrice : product.pricing.finalPrice;
+  const variantGroups = buildVariantGroups(product.variants);
+  const hasVariants = variantGroups.length > 0;
+  const selectedVariant = hasVariants
+    ? findVariant(product.variants, selectedAttrs, variantGroups)
+    : undefined;
+
+  // Picking a value keeps the other selections when a matching variant exists,
+  // otherwise snaps to a valid variant (prefers in-stock) so a variant always
+  // resolves. Changing color resets the gallery to that color's first image.
+  const selectVariantValue = (key: string, value: string) => {
+    const next = { ...selectedAttrs, [key]: value };
+    let target = findVariant(product.variants, next, variantGroups);
+    if (!target) {
+      const candidates = product.variants.filter(
+        (v) => attrValue(v, key) === value,
+      );
+      target = candidates.find((v) => v.stock > 0) ?? candidates[0];
+    }
+    if (target) {
+      setSelectedAttrs(attrsOf(target));
+      setActiveImageIdx(0);
+    }
+  };
+
+  const activeDeal = selectedVariant ? selectedVariant.deal : product.deal;
+  const activePricing = selectedVariant ? selectedVariant.pricing : product.pricing;
+  const displayBase = activeDeal ? activeDeal.basePrice : activePricing.basePrice;
+  const displayFinal = activeDeal ? activeDeal.dealPrice : activePricing.finalPrice;
   const hasDiscount = displayBase > displayFinal;
   const discount = hasDiscount
     ? Math.round(((displayBase - displayFinal) / displayBase) * 100)
     : 0;
   const immediateCategory = product.breadcrumbs[product.breadcrumbs.length - 1];
-  const sortedImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
-  const activeImage = sortedImages[activeImageIdx] ?? sortedImages[0];
-  const inStock = product.stock > 0;
+  const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
+  const galleryImages =
+    selectedVariant && selectedVariant.images.length > 0
+      ? selectedVariant.images.map((im, i) => ({
+          objectKey: im.objectKey,
+          url: im.url,
+          sortOrder: i,
+        }))
+      : productImages;
+  const activeImage = galleryImages[activeImageIdx] ?? galleryImages[0];
+  const inStock = (selectedVariant ? selectedVariant.stock : product.stock) > 0;
 
   return (
     <>
@@ -438,9 +533,9 @@ export default function ProductDetailPage() {
                   <div className="w-full h-full" />
                 )}
               </div>
-              {sortedImages.length > 1 && (
+              {galleryImages.length > 1 && (
                 <div className="flex gap-2 mt-3">
-                  {sortedImages.slice(0, 4).map((img, i) => (
+                  {galleryImages.slice(0, 4).map((img, i) => (
                     <button
                       key={img.objectKey}
                       onClick={() => setActiveImageIdx(i)}
@@ -518,7 +613,7 @@ export default function ProductDetailPage() {
                   You save {formatPrice(displayBase - displayFinal)}
                 </p>
               )}
-              {liveDeal && <DealCountdown endsAt={liveDeal.endsAt} />}
+              {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Stock */}
               <div className="flex items-center gap-2 mb-5">
@@ -530,6 +625,43 @@ export default function ProductDetailPage() {
                   <span className="text-sm text-gray-400">· Usually dispatched in 24 hours</span>
                 )}
               </div>
+
+              {/* Variant selectors (RAM / ROM / Color) — above Quantity */}
+              {hasVariants && (
+                <div className="space-y-4 mb-5">
+                  {variantGroups.map((group) => (
+                    <div key={group.key}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-gray-700">
+                          {group.label}:
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {selectedAttrs[group.key] ?? "Select"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {group.values.map((value) => {
+                          const active = selectedAttrs[group.key] === value;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => selectVariantValue(group.key, value)}
+                              className={`text-sm font-semibold px-4 py-2 rounded-lg border transition-colors ${
+                                active
+                                  ? "bg-[#129cd3] text-white border-[#129cd3]"
+                                  : "bg-white text-gray-700 border-gray-300 hover:border-[#129cd3] hover:text-[#129cd3]"
+                              }`}
+                            >
+                              {value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Quantity */}
               <div className="flex items-center gap-4 mb-5">
@@ -564,7 +696,11 @@ export default function ProductDetailPage() {
                     setAddState("busy");
                     setAddError(null);
                     try {
-                      await cartApi.addItem({ productId: product.id, qty });
+                      await cartApi.addItem({
+                        productId: product.id,
+                        variantId: selectedVariant?.id,
+                        qty,
+                      });
                       setAddState("added");
                       window.setTimeout(() => setAddState("idle"), 1500);
                     } catch (err) {
@@ -969,8 +1105,28 @@ export default function ProductDetailPage() {
   );
 }
 
+// Legacy keys: RAM/ROM/Color now live on variants, not specs. Hide them so old
+// products never render raw arrays like ["8GB","12GB"] in the spec table.
+const HIDDEN_SPEC_KEYS = new Set(["ramOptions", "storageOptions", "colorOptions"]);
+
+function humanizeSpecKey(key: string): string {
+  const spaced = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : key;
+}
+
+function formatSpecValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map(String).join(", ");
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
-  const entries = Object.entries(specs);
+  const entries = Object.entries(specs).filter(
+    ([key]) => !HIDDEN_SPEC_KEYS.has(key),
+  );
   if (entries.length === 0) {
     return <p className="text-sm text-gray-500">No specifications listed.</p>;
   }
@@ -980,10 +1136,10 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
         <tbody>
           {entries.map(([key, value], i) => (
             <tr key={key} className={i % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-              <td className="py-3 px-4 font-semibold text-gray-700 w-48">{key}</td>
-              <td className="py-3 px-4 text-gray-600">
-                {typeof value === "object" ? JSON.stringify(value) : String(value)}
+              <td className="py-3 px-4 font-semibold text-gray-700 w-48">
+                {humanizeSpecKey(key)}
               </td>
+              <td className="py-3 px-4 text-gray-600">{formatSpecValue(value)}</td>
             </tr>
           ))}
         </tbody>
