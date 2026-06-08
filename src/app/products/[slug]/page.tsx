@@ -521,7 +521,7 @@ export default function ProductDetailPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-6 lg:p-8 flex flex-col lg:flex-row gap-8 mb-8">
             {/* Left: Image */}
             <div className="lg:w-2/5 flex-shrink-0">
-              <div className="bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center aspect-square border border-gray-100">
+              <div className="relative bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center aspect-square border border-gray-100">
                 {activeImage?.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -532,6 +532,38 @@ export default function ProductDetailPage() {
                 ) : (
                   <div className="w-full h-full" />
                 )}
+                <button
+                  onClick={async () => {
+                    if (wishlistBusy || !product) return;
+                    if (status === "unauthenticated") {
+                      const path = `/products/${slug}`;
+                      router.push(`/login?next=${encodeURIComponent(path)}`);
+                      return;
+                    }
+                    setWishlistBusy(true);
+                    try {
+                      if (wishlisted) {
+                        await removeByProductId(product.id);
+                      } else {
+                        await addToWishlist(product.id);
+                      }
+                    } catch {
+                      // Silent on wishlist toggle.
+                    } finally {
+                      setWishlistBusy(false);
+                    }
+                  }}
+                  disabled={wishlistBusy}
+                  aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                  className="absolute top-3 right-3 w-9 h-9 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50"
+                >
+                  <Heart
+                    size={18}
+                    className={
+                      wishlisted ? "fill-red-500 text-red-500" : "text-gray-400"
+                    }
+                  />
+                </button>
               </div>
               {galleryImages.length > 1 && (
                 <div className="flex gap-2 mt-3">
@@ -736,37 +768,6 @@ export default function ProductDetailPage() {
                 </button>
                 <button className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-lg transition-colors">
                   Buy Now
-                </button>
-                <button
-                  onClick={async () => {
-                    if (wishlistBusy || !product) return;
-                    if (status === "unauthenticated") {
-                      const path = `/products/${slug}`;
-                      router.push(`/login?next=${encodeURIComponent(path)}`);
-                      return;
-                    }
-                    setWishlistBusy(true);
-                    try {
-                      if (wishlisted) {
-                        await removeByProductId(product.id);
-                      } else {
-                        await addToWishlist(product.id);
-                      }
-                    } catch {
-                      // Silent on wishlist toggle.
-                    } finally {
-                      setWishlistBusy(false);
-                    }
-                  }}
-                  disabled={wishlistBusy}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 border-2 rounded-lg font-semibold transition-colors ${
-                    wishlisted
-                      ? "border-red-400 bg-red-50 text-red-500"
-                      : "border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
-                  } ${wishlistBusy ? "opacity-60 cursor-wait" : ""}`}
-                >
-                  <Heart size={18} className={wishlisted ? "fill-red-400" : ""} />
-                  <span className="hidden sm:inline">{wishlisted ? "Wishlisted" : "Wishlist"}</span>
                 </button>
               </div>
               {addError && (

@@ -87,9 +87,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
             }
           }}
           aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          className={`absolute top-2 right-2 w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-opacity hover:bg-[#e8f7fc] disabled:opacity-50 ${
-            wishlisted ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          }`}
+          className="absolute top-2 right-2 w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50"
           disabled={wishlistBusy}
         >
           <Heart
