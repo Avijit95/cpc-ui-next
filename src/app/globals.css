@@ -39,3 +39,48 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+/* Dual-handle price range slider (two overlapping native inputs).
+   Tracks are transparent + non-interactive so the two inputs don't block
+   each other; only the thumbs capture pointer events. */
+.price-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.price-range:focus {
+  outline: none;
+}
+.price-range::-webkit-slider-runnable-track {
+  height: 16px;
+  background: transparent;
+}
+.price-range::-moz-range-track {
+  height: 16px;
+  background: transparent;
+}
+.price-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #129cd3;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px #cbd5e1;
+  cursor: pointer;
+}
+.price-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #129cd3;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px #cbd5e1;
+  cursor: pointer;
+}

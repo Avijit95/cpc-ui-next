@@ -35,6 +35,22 @@ const ratingOptions = [4, 3, 2, 1] as const;
 
 const PAGE_LIMIT = 24;
 
+const PRICE_FLOOR = 0;
+const PRICE_CEIL = 200000; // top of the slider; treated as open-ended (200000+)
+const PRICE_STEP = 1000;
+
+// Quick-pick ranges; the last bucket reaches PRICE_CEIL and so is open-ended.
+const priceBuckets: { label: string; min: number; max: number }[] = [
+  { label: "₹0 – ₹1K", min: 0, max: 1000 },
+  { label: "₹1K – ₹5K", min: 1000, max: 5000 },
+  { label: "₹5K – ₹10K", min: 5000, max: 10000 },
+  { label: "₹10K – ₹20K", min: 10000, max: 20000 },
+  { label: "₹20K – ₹50K", min: 20000, max: 50000 },
+  { label: "₹50K – ₹1L", min: 50000, max: 100000 },
+  { label: "₹1L – ₹2L", min: 100000, max: 200000 },
+  { label: "₹2L+", min: 200000, max: 200000 },
+];
+
 export default function ProductsPage() {
   return (
     <Suspense fallback={<ProductsPageFallback />}>
@@ -60,7 +76,8 @@ function ProductsPageInner() {
 
   const selectedCategory = urlCategory;
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
-  const [priceRange, setPriceRange] = useState(200000);
+  const [minPrice, setMinPrice] = useState(PRICE_FLOOR);
+  const [maxPrice, setMaxPrice] = useState(PRICE_CEIL);
   const [minRating, setMinRating] = useState<number | null>(null);
   const [sortLabel, setSortLabel] = useState<string>("Featured");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -112,7 +129,8 @@ function ProductsPageInner() {
         {
           category: selectedCategory ?? undefined,
           brand: selectedBrand ?? undefined,
-          priceMax: priceRange < 200000 ? priceRange : undefined,
+          priceMin: minPrice > PRICE_FLOOR ? minPrice : undefined,
+          priceMax: maxPrice < PRICE_CEIL ? maxPrice : undefined,
           minRating: minRating ?? undefined,
           sort: sortValue,
           limit: PAGE_LIMIT,
@@ -135,7 +153,7 @@ function ProductsPageInner() {
       });
 
     return () => ac.abort();
-  }, [selectedCategory, selectedBrand, priceRange, minRating, sortLabel]);
+  }, [selectedCategory, selectedBrand, minPrice, maxPrice, minRating, sortLabel]);
 
   const items: ListCard[] = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -179,21 +197,77 @@ function ProductsPageInner() {
         <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2">
           Price Range
         </h3>
-        <input
-          type="range"
-          min={5000}
-          max={200000}
-          step={1000}
-          value={priceRange}
-          onChange={(e) => setPriceRange(Number(e.target.value))}
-          className="w-full accent-[#129cd3]"
-        />
-        <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
-          <span>₹5,000</span>
+
+        {/* Predefined quick-pick ranges */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {priceBuckets.map((b) => {
+            const active = minPrice === b.min && maxPrice === b.max;
+            return (
+              <button
+                key={b.label}
+                onClick={() => {
+                  setMinPrice(b.min);
+                  setMaxPrice(b.max);
+                }}
+                className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  active
+                    ? "border-[#129cd3] bg-[#e8f7fc] text-[#129cd3] font-medium"
+                    : "border-gray-200 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
+                }`}
+              >
+                {b.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Dual-handle slider */}
+        <div className="relative h-5">
+          <div className="absolute top-1/2 -translate-y-1/2 h-1 w-full rounded bg-gray-200" />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-1 rounded bg-[#129cd3]"
+            style={{
+              left: `${(minPrice / PRICE_CEIL) * 100}%`,
+              right: `${100 - (maxPrice / PRICE_CEIL) * 100}%`,
+            }}
+          />
+          <input
+            type="range"
+            min={PRICE_FLOOR}
+            max={PRICE_CEIL}
+            step={PRICE_STEP}
+            value={minPrice}
+            onChange={(e) =>
+              setMinPrice(Math.min(Number(e.target.value), maxPrice))
+            }
+            className="price-range absolute left-0 top-1/2 w-full -translate-y-1/2"
+            style={{ zIndex: minPrice >= maxPrice ? 4 : 3 }}
+            aria-label="Minimum price"
+          />
+          <input
+            type="range"
+            min={PRICE_FLOOR}
+            max={PRICE_CEIL}
+            step={PRICE_STEP}
+            value={maxPrice}
+            onChange={(e) =>
+              setMaxPrice(Math.max(Number(e.target.value), minPrice))
+            }
+            className="price-range absolute left-0 top-1/2 w-full -translate-y-1/2"
+            style={{ zIndex: 3 }}
+            aria-label="Maximum price"
+          />
+        </div>
+
+        <div className="flex items-center justify-between text-xs mt-2">
           <span className="font-semibold text-[#129cd3]">
-            Up to ₹{priceRange.toLocaleString("en-IN")}
+            ₹{minPrice.toLocaleString("en-IN")}
           </span>
-          <span>₹2,00,000</span>
+          <span className="font-semibold text-[#129cd3]">
+            {maxPrice >= PRICE_CEIL
+              ? "₹2,00,000+"
+              : `₹${maxPrice.toLocaleString("en-IN")}`}
+          </span>
         </div>
       </div>
 
@@ -267,12 +341,16 @@ function ProductsPageInner() {
       {/* Clear Filters */}
       {(selectedCategory !== null ||
         selectedBrand !== null ||
-        minRating !== null) && (
+        minRating !== null ||
+        minPrice !== PRICE_FLOOR ||
+        maxPrice !== PRICE_CEIL) && (
         <button
           onClick={() => {
             selectCategory(null);
             setSelectedBrand(null);
             setMinRating(null);
+            setMinPrice(PRICE_FLOOR);
+            setMaxPrice(PRICE_CEIL);
           }}
           className="w-full py-2 border border-[#129cd3] text-[#129cd3] text-sm rounded hover:bg-[#e8f7fc] transition-colors"
         >
