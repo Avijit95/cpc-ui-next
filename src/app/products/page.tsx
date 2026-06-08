@@ -375,7 +375,7 @@ function ProductsPageInner() {
 
         <div className="max-w-7xl mx-auto px-4 py-6">
           {/* Top bar */}
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -383,7 +383,7 @@ function ProductsPageInner() {
               >
                 <SlidersHorizontal size={15} /> Filters
               </button>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 whitespace-nowrap">
                 {loading ? (
                   <span className="text-gray-400">Loading…</span>
                 ) : (
@@ -398,7 +398,7 @@ function ProductsPageInner() {
                 )}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm text-gray-600 hidden sm:block">Sort by:</span>
               <div className="relative">
                 <select
