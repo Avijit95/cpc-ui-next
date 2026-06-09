@@ -10,8 +10,10 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   ChevronLeft,
   ImagePlus,
+  Link2,
   Loader2,
   Plus,
   Trash2,
@@ -172,6 +174,17 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const existingImageCount = mode.kind === "edit" ? mode.initial.images.length : 0;
 
+  // ── Scrape-from-URL state (create mode) ─────────────────────────────────
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [scraping, setScraping] = useState(false);
+  const [scrapeNote, setScrapeNote] = useState<{
+    kind: "info" | "error";
+    text: string;
+  } | null>(null);
+  const [scrapedImages, setScrapedImages] = useState<
+    { url: string; selected: boolean }[]
+  >([]);
+
   // Free-form specifications (key/value) → product.specs.
   const [specRows, setSpecRows] = useState<SpecRow[]>(() =>
     initSpecRows(initial?.specs),
@@ -237,7 +250,9 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     };
   }, [categories]);
 
-  const totalImageCount = existingImageCount + pendingImages.length;
+  const selectedScrapedCount = scrapedImages.filter((i) => i.selected).length;
+  const totalImageCount =
+    existingImageCount + pendingImages.length + selectedScrapedCount;
   const remainingSlots = Math.max(0, MAX_IMAGES - totalImageCount);
 
   const onPickFiles = useCallback(
@@ -289,6 +304,96 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       if (removed) URL.revokeObjectURL(removed.previewUrl);
       return next;
     });
+  };
+
+  const toggleScraped = (url: string) => {
+    setImageError(null);
+    const target = scrapedImages.find((i) => i.url === url);
+    if (!target) return;
+    if (!target.selected && totalImageCount >= MAX_IMAGES) {
+      setImageError(`Limit is ${MAX_IMAGES} images per product.`);
+      return;
+    }
+    setScrapedImages((curr) =>
+      curr.map((i) => (i.url === url ? { ...i, selected: !i.selected } : i)),
+    );
+  };
+
+  // Scrape a product page and pre-fill the form. Best-effort: fills only the
+  // fields the page actually exposed; the admin reviews everything before save.
+  const runScrape = async () => {
+    const url = scrapeUrl.trim();
+    if (!url) return;
+    setScrapeNote(null);
+    setScraping(true);
+    try {
+      const data = await adminApi.scrapeProduct({ url });
+      const filled: string[] = [];
+
+      const patch: Partial<FormState> = {};
+      if (data.name) {
+        patch.name = data.name;
+        filled.push("name");
+      }
+      if (data.description) {
+        patch.description = data.description.slice(0, 10_000);
+        filled.push("description");
+      }
+      if (data.brand) {
+        patch.brand = data.brand;
+        filled.push("brand");
+      }
+      if (data.basePrice != null) {
+        patch.basePrice = String(data.basePrice);
+        filled.push("price");
+      }
+      if (Object.keys(patch).length > 0) setForm((f) => ({ ...f, ...patch }));
+
+      const specEntries = Object.entries(data.specs ?? {});
+      if (specEntries.length > 0) {
+        setSpecRows(
+          specEntries.map(([k, v]) => ({ id: uid(), key: k, value: v })),
+        );
+        filled.push(
+          `${specEntries.length} spec${specEntries.length === 1 ? "" : "s"}`,
+        );
+      }
+
+      // Default-select images only up to the remaining slot budget.
+      const free = Math.max(
+        0,
+        MAX_IMAGES - (existingImageCount + pendingImages.length),
+      );
+      setScrapedImages(
+        data.imageUrls.map((u, idx) => ({ url: u, selected: idx < free })),
+      );
+      if (data.imageUrls.length > 0) {
+        filled.push(
+          `${data.imageUrls.length} image${data.imageUrls.length === 1 ? "" : "s"}`,
+        );
+      }
+
+      setScrapeNote(
+        filled.length === 0
+          ? {
+              kind: "error",
+              text: "Couldn't extract anything from that page — it may block bots or load content dynamically. Fill the form manually.",
+            }
+          : {
+              kind: "info",
+              text: `Imported ${filled.join(", ")}. Review and edit before saving.`,
+            },
+      );
+    } catch (err) {
+      setScrapeNote({
+        kind: "error",
+        text: isApiError(err)
+          ? err.displayMessage
+          : "Couldn't scrape that URL. Fill the form manually.",
+      });
+    } finally {
+      setScraping(false);
+    }
   };
 
   const buildBody = (
@@ -376,6 +481,19 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     }
   };
 
+  // Re-host selected scraped image URLs server-side. Returns true on success.
+  const importScrapedImages = async (productId: string): Promise<boolean> => {
+    const urls = scrapedImages.filter((i) => i.selected).map((i) => i.url);
+    if (urls.length === 0) return true;
+    try {
+      await adminApi.importProductImages(productId, { imageUrls: urls });
+      return true;
+    } catch (err) {
+      setErrorMsg(readableError(err));
+      return false;
+    }
+  };
+
   const submit = async (status: ProductStatus) => {
     setErrorMsg(null);
     const built = buildBody(status);
@@ -400,15 +518,17 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       }
 
       const imagesOk = await uploadPendingImages(productId);
-      if (!imagesOk) {
+      const scrapedOk = imagesOk && (await importScrapedImages(productId));
+      if (!imagesOk || !scrapedOk) {
         // The product itself saved fine — nudge the user to retry images
         // from the product editor instead of blocking the save outright.
         setErrorMsg(
           (errorMsg ?? "") +
             "\nThe product was saved, but image upload failed. Edit the product to retry.",
         );
-        // Still clear pending so future submits don't re-upload.
+        // Still clear pending/scraped so future submits don't re-upload.
         setPendingImages([]);
+        setScrapedImages([]);
         return;
       }
 
@@ -498,6 +618,60 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Main form */}
         <div className="lg:col-span-2 space-y-5">
+          {mode.kind === "create" && (
+            <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+              <div>
+                <h3 className="font-bold text-gray-800 text-sm">
+                  Import from URL
+                </h3>
+                <p className="text-[12px] text-gray-500 mt-0.5">
+                  Paste a product page link to auto-fill details and images.
+                  Always review before saving — retail sites may block scraping.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={scrapeUrl}
+                  onChange={(e) => setScrapeUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void runScrape();
+                    }
+                  }}
+                  placeholder="https://www.example.com/product/…"
+                  disabled={scraping || busy}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => void runScrape()}
+                  disabled={scraping || busy || !scrapeUrl.trim()}
+                  className="inline-flex items-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-semibold px-4 py-2.5 rounded-lg"
+                >
+                  {scraping ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Link2 size={14} />
+                  )}
+                  Import
+                </button>
+              </div>
+              {scrapeNote && (
+                <div
+                  className={`rounded-lg border px-3 py-2 text-xs whitespace-pre-line ${
+                    scrapeNote.kind === "error"
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-gray-100 bg-gray-50 text-gray-600"
+                  }`}
+                >
+                  {scrapeNote.text}
+                </div>
+              )}
+            </section>
+          )}
+
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Basic Information</h3>
             <div>
@@ -621,6 +795,50 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 </div>
               ))}
             </div>
+
+            {scrapedImages.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <p className="text-[12px] font-semibold text-gray-600">
+                  From URL — tap to include or exclude ({selectedScrapedCount}{" "}
+                  selected)
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {scrapedImages.map((img) => (
+                    <button
+                      type="button"
+                      key={img.url}
+                      onClick={() => toggleScraped(img.url)}
+                      disabled={busy}
+                      title={img.selected ? "Click to exclude" : "Click to include"}
+                      className={`aspect-square relative rounded-lg overflow-hidden bg-gray-50 border transition-all disabled:cursor-not-allowed ${
+                        img.selected
+                          ? "border-[#129cd3] ring-2 ring-[#129cd3]/30"
+                          : "border-gray-200 opacity-50 hover:opacity-80"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                      <span
+                        className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow ${
+                          img.selected
+                            ? "bg-[#129cd3] text-white"
+                            : "bg-white/90 text-transparent"
+                        }`}
+                      >
+                        <Check size={13} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Selected images are downloaded and re-hosted to S3 when you save.
+                </p>
+              </div>
+            )}
 
             <p className="text-[11px] text-gray-400">
               {mode.kind === "create"
