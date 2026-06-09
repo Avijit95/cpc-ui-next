@@ -265,11 +265,22 @@ export type AdminVariant = {
   productId: string;
   sku: string;
   attributes: Record<string, unknown>;
+  basePrice: number | null;
   priceOverride: number | null;
   stock: number;
   imagesObjectKeys: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+// Slim variant shape returned by GET /admin/products/:id/variants (deal picker).
+export type AdminProductVariantOption = {
+  id: string;
+  sku: string;
+  attributes: Record<string, unknown>;
+  basePrice: number | null;
+  priceOverride: number | null;
+  stock: number;
 };
 
 export type ProductCouponInline = {
@@ -907,9 +918,16 @@ export type DealProductSummary = {
   status: ProductStatus;
 };
 
+export type DealVariantSummary = {
+  id: string;
+  sku: string;
+  attributes: Record<string, unknown>;
+};
+
 export type Deal = {
   id: string;
   productId: string;
+  variantId: string | null;
   dealPrice: number;
   basePrice: number;
   percentOff: number;
@@ -919,6 +937,7 @@ export type Deal = {
   createdAt: string;
   updatedAt: string;
   product: DealProductSummary;
+  variant: DealVariantSummary | null;
 };
 
 export type DealListResponse = {

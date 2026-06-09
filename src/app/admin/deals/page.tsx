@@ -26,6 +26,7 @@ import SortByDropdown, {
 } from "@/components/admin/list/SortByDropdown";
 import { adminApi, catalogApi, isApiError } from "@/lib/api";
 import type {
+  AdminProductVariantOption,
   CreateDealBody,
   Deal,
   DealLifecycle,
@@ -50,6 +51,7 @@ type FormState = {
   productName: string;
   productImageUrl: string | null;
   productBasePrice: number | null;
+  variantId: string | null;
   dealPrice: string;
   startsAt: string;
   endsAt: string;
@@ -61,11 +63,24 @@ const EMPTY_FORM: FormState = {
   productName: "",
   productImageUrl: null,
   productBasePrice: null,
+  variantId: null,
   dealPrice: "",
   startsAt: "",
   endsAt: "",
   isActive: true,
 };
+
+// "8GB / 128GB / Black" from a variant's attributes, falling back to its SKU.
+function variantLabel(v: {
+  sku: string;
+  attributes: Record<string, unknown>;
+}): string {
+  const parts = ["ram", "storage", "color"]
+    .map((k) => v.attributes[k])
+    .filter((x) => x != null && String(x).trim() !== "")
+    .map(String);
+  return parts.length > 0 ? parts.join(" / ") : v.sku;
+}
 
 const STATUS_TABS: { value: DealLifecycle; label: string }[] = [
   { value: "all", label: "All" },
@@ -166,6 +181,10 @@ export default function AdminDealsPage() {
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerResults, setPickerResults] = useState<ListCard[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+
+  // Variants of the selected product (for per-variant deal pricing).
+  const [variants, setVariants] = useState<AdminProductVariantOption[]>([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -284,10 +303,24 @@ export default function AdminDealsPage() {
     };
   }, [pickerQuery, pickerOpen]);
 
+  // Load a product's variants so the admin can scope the deal to one. Called
+  // from the pick / edit handlers (an event), not an effect.
+  const loadVariants = useCallback(async (productId: string) => {
+    setVariantsLoading(true);
+    try {
+      setVariants(await adminApi.listVariants(productId));
+    } catch {
+      setVariants([]);
+    } finally {
+      setVariantsLoading(false);
+    }
+  }, []);
+
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setEditId(null);
     setFormError(null);
+    setVariants([]);
     setModalMode("create");
   };
 
@@ -297,6 +330,7 @@ export default function AdminDealsPage() {
       productName: d.product.name,
       productImageUrl: d.product.primaryImageUrl,
       productBasePrice: d.basePrice,
+      variantId: d.variantId,
       dealPrice: String(d.dealPrice),
       startsAt: toDatetimeLocal(d.startsAt),
       endsAt: toDatetimeLocal(d.endsAt),
@@ -304,7 +338,9 @@ export default function AdminDealsPage() {
     });
     setEditId(d.id);
     setFormError(null);
+    setVariants([]);
     setModalMode("edit");
+    void loadVariants(d.productId);
   };
 
   const closeModal = () => {
@@ -313,6 +349,7 @@ export default function AdminDealsPage() {
     setForm(EMPTY_FORM);
     setFormError(null);
     setPickerOpen(false);
+    setVariants([]);
   };
 
   const pickProduct = (card: ListCard) => {
@@ -322,12 +359,27 @@ export default function AdminDealsPage() {
       productName: card.name,
       productImageUrl: card.primaryImageUrl,
       productBasePrice: card.basePrice,
+      variantId: null,
     }));
     setPickerOpen(false);
     setPickerInput("");
     setPickerQuery("");
     setPickerResults([]);
+    void loadVariants(card.id);
   };
+
+  // Resolve the selected variant's price tiers (base/selling) for display and
+  // validation; product-wide deals fall back to the product base price.
+  const selectedVariant = form.variantId
+    ? (variants.find((v) => v.id === form.variantId) ?? null)
+    : null;
+  const productBase = form.productBasePrice ?? 0;
+  const sellingPrice = selectedVariant
+    ? (selectedVariant.priceOverride ?? productBase)
+    : productBase;
+  const baseDisplayPrice = selectedVariant
+    ? (selectedVariant.basePrice ?? sellingPrice)
+    : productBase;
 
   const submit = async () => {
     setFormError(null);
@@ -343,12 +395,11 @@ export default function AdminDealsPage() {
       setFormError("Deal price must be a positive number.");
       return;
     }
-    if (
-      form.productBasePrice !== null &&
-      dealPriceNum >= form.productBasePrice
-    ) {
+    if (sellingPrice > 0 && dealPriceNum >= sellingPrice) {
       setFormError(
-        `Deal price must be less than base price (₹${form.productBasePrice}).`,
+        `Deal price must be less than the selling price (₹${sellingPrice.toLocaleString(
+          "en-IN",
+        )}).`,
       );
       return;
     }
@@ -366,6 +417,7 @@ export default function AdminDealsPage() {
       if (modalMode === "create") {
         const body: CreateDealBody = {
           productId: form.productId,
+          variantId: form.variantId ?? undefined,
           dealPrice: dealPriceNum,
           startsAt: startIso,
           endsAt: endIso,
@@ -546,7 +598,16 @@ export default function AdminDealsPage() {
                           ) : (
                             <div className="w-10 h-10 bg-gray-100 rounded" />
                           )}
-                          <span className="text-gray-800">{d.product.name}</span>
+                          <div className="min-w-0">
+                            <span className="text-gray-800 block truncate">
+                              {d.product.name}
+                            </span>
+                            <span className="text-[11px] text-gray-500">
+                              {d.variant
+                                ? variantLabel(d.variant)
+                                : "Whole product"}
+                            </span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 font-bold text-[#129cd3]">
@@ -658,9 +719,6 @@ export default function AdminDealsPage() {
                         <p className="text-sm text-gray-800 truncate">
                           {form.productName}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          Base price: {formatPrice(form.productBasePrice ?? 0)}
-                        </p>
                       </div>
                       <button
                         onClick={() => {
@@ -670,7 +728,9 @@ export default function AdminDealsPage() {
                             productName: "",
                             productImageUrl: null,
                             productBasePrice: null,
+                            variantId: null,
                           }));
+                          setVariants([]);
                           setPickerOpen(true);
                         }}
                         className="text-xs text-[#129cd3] hover:underline"
@@ -706,9 +766,6 @@ export default function AdminDealsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-800 truncate">
                       {form.productName}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Base price: {formatPrice(form.productBasePrice ?? 0)}
                     </p>
                   </div>
                 </div>
@@ -769,6 +826,75 @@ export default function AdminDealsPage() {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {/* Variant scope + price tiers */}
+              {form.productId && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                      Variant
+                    </label>
+                    {modalMode === "create" ? (
+                      variantsLoading ? (
+                        <p className="text-xs text-gray-500">
+                          Loading variants…
+                        </p>
+                      ) : variants.length === 0 ? (
+                        <p className="text-xs text-gray-500">
+                          No variants — this deal applies to the whole product.
+                        </p>
+                      ) : (
+                        <select
+                          value={form.variantId ?? ""}
+                          onChange={(e) =>
+                            setForm((p) => ({
+                              ...p,
+                              variantId: e.target.value || null,
+                            }))
+                          }
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3] bg-white"
+                        >
+                          <option value="">Whole product (all variants)</option>
+                          {variants.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {variantLabel(v)}
+                            </option>
+                          ))}
+                        </select>
+                      )
+                    ) : (
+                      <p className="text-sm text-gray-700">
+                        {selectedVariant
+                          ? variantLabel(selectedVariant)
+                          : form.variantId
+                            ? variantsLoading
+                              ? "Loading variant…"
+                              : "Variant"
+                            : "Whole product (all variants)"}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-lg p-3">
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                        Base Price
+                      </p>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {formatPrice(baseDisplayPrice)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                        Selling Price
+                      </p>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {formatPrice(sellingPrice)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
 
