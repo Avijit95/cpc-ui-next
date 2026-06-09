@@ -165,6 +165,27 @@ export type ProductImagesConfirmBody = {
   replace?: boolean;
 };
 
+export type ImportProductImagesBody = {
+  imageUrls: string[];
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scrape product from URL (pre-fill assist — admin reviews before saving)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ScrapeProductBody = {
+  url: string;
+};
+
+export type ScrapedProduct = {
+  name: string | null;
+  description: string | null;
+  brand: string | null;
+  basePrice: number | null;
+  specs: Record<string, string>;
+  imageUrls: string[];
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // Coupons (Sprint 3)
 // ────────────────────────────────────────────────────────────────────────────
@@ -459,6 +480,13 @@ export const adminApi = {
       method: "POST",
     });
   },
+  // Scrape a product page into a draft for the admin to review/edit.
+  scrapeProduct(body: ScrapeProductBody) {
+    return request<ScrapedProduct>("/admin/products/scrape", {
+      method: "POST",
+      body,
+    });
+  },
 
   // ── Variants ────────────────────────────────────────────────────────────
   listVariants(productId: string) {
@@ -499,6 +527,13 @@ export const adminApi = {
   confirmProductImages(productId: string, body: ProductImagesConfirmBody) {
     return request<ProductImagesConfirmResponse>(
       `/admin/products/${productId}/images/confirm`,
+      { method: "POST", body },
+    );
+  },
+  // Re-host scraped image URLs server-side, then append to the product.
+  importProductImages(productId: string, body: ImportProductImagesBody) {
+    return request<ProductImagesConfirmResponse>(
+      `/admin/products/${productId}/images/import`,
       { method: "POST", body },
     );
   },
