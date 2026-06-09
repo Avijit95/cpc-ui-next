@@ -529,8 +529,8 @@ export default function AdminDealsPage() {
             No deals in this view.
           </div>
         ) : (
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr className="text-left text-xs font-bold text-gray-600 uppercase tracking-wide">
                   <th className="px-4 py-3">Product</th>
