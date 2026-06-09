@@ -23,6 +23,7 @@ import type {
   AdminUserRow,
   AdminUsersListResponse,
   AdminVariant,
+  AdminProductVariantOption,
   AttachedSlotResponse,
   Banner,
   BannerPresignResponse,
@@ -136,6 +137,7 @@ export type ListProductsAdminQuery = AdminListSortFilter & {
 export type CreateVariantBody = {
   sku: string;
   attributes: Record<string, unknown>;
+  basePrice?: number | null;
   priceOverride?: number | null;
   stock?: number;
   imagesObjectKeys?: string[];
@@ -345,6 +347,7 @@ export type AttachProductCouponBody = {
 
 export type CreateDealBody = {
   productId: string;
+  variantId?: string | null;
   dealPrice: number;
   startsAt: string;
   endsAt: string;
@@ -458,6 +461,11 @@ export const adminApi = {
   },
 
   // ── Variants ────────────────────────────────────────────────────────────
+  listVariants(productId: string) {
+    return request<AdminProductVariantOption[]>(
+      `/admin/products/${productId}/variants`,
+    );
+  },
   createVariant(productId: string, body: CreateVariantBody) {
     return request<AdminVariant>(
       `/admin/products/${productId}/variants`,

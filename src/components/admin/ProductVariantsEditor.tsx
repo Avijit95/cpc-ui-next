@@ -39,7 +39,8 @@ type VariantRow = {
   storage: string; // ROM
   color: string;
   stock: string;
-  price: string; // blank = use base price
+  base: string; // MRP (struck); blank = no separate base price
+  price: string; // selling price; blank = use product base price
 };
 
 type PendingImg = { id: string; file: File; previewUrl: string };
@@ -90,6 +91,7 @@ function initRows(variants: AdminVariant[]): VariantRow[] {
     storage: v.attributes.storage != null ? String(v.attributes.storage) : "",
     color: v.attributes.color != null ? String(v.attributes.color) : "",
     stock: String(v.stock ?? 0),
+    base: v.basePrice != null ? String(v.basePrice) : "",
     price: v.priceOverride != null ? String(v.priceOverride) : "",
   }));
 }
@@ -145,7 +147,15 @@ const ProductVariantsEditor = forwardRef<
   const addRow = () =>
     setRows((rs) => [
       ...rs,
-      { uid: uid(), ram: "", storage: "", color: "", stock: "0", price: "" },
+      {
+        uid: uid(),
+        ram: "",
+        storage: "",
+        color: "",
+        stock: "0",
+        base: "",
+        price: "",
+      },
     ]);
 
   const removeRow = (id: string) =>
@@ -205,7 +215,16 @@ const ProductVariantsEditor = forwardRef<
           if (r.price.trim() !== "") {
             const p = Number(r.price);
             if (Number.isNaN(p) || p < 0) {
-              return "Variant price must be a number ≥ 0 (leave blank to use the base price).";
+              return "Variant selling price must be a number ≥ 0 (leave blank to use the product base price).";
+            }
+          }
+          if (r.base.trim() !== "") {
+            const b = Number(r.base);
+            if (Number.isNaN(b) || b < 0) {
+              return "Variant base price must be a number ≥ 0 (leave blank for no struck price).";
+            }
+            if (r.price.trim() !== "" && b < Number(r.price)) {
+              return "Variant base price must be greater than or equal to the selling price.";
             }
           }
           const key = comboKey(r);
@@ -235,6 +254,7 @@ const ProductVariantsEditor = forwardRef<
           const body = {
             sku: makeSku(productName, r),
             attributes: buildAttributes(r),
+            basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
             imagesObjectKeys: finalKeys[r.color.trim()] ?? [],
@@ -264,8 +284,10 @@ const ProductVariantsEditor = forwardRef<
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
           Add each RAM / ROM / Color combination this phone is sold in, with its own
-          stock and (optional) price. Leave price blank to use the base price. Images
-          are uploaded per color and preview when that color is selected.
+          stock and prices. Base (₹) is the struck MRP; Selling (₹) is what the
+          customer pays — leave Selling blank to use the product base price, and
+          Base blank for no struck price. Images are uploaded per color and preview
+          when that color is selected.
         </p>
       </div>
 
@@ -294,7 +316,7 @@ const ProductVariantsEditor = forwardRef<
         {rows.map((r) => (
           <div
             key={r.uid}
-            className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_80px_110px_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
+            className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_70px_100px_100px_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
           >
             <Field label="RAM">
               <input
@@ -337,7 +359,19 @@ const ProductVariantsEditor = forwardRef<
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
-            <Field label="Price (₹)">
+            <Field label="Base (₹)">
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={r.base}
+                onChange={(e) => updateRow(r.uid, { base: e.target.value })}
+                placeholder="MRP"
+                disabled={disabled}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+              />
+            </Field>
+            <Field label="Selling (₹)">
               <input
                 type="number"
                 min={0}
