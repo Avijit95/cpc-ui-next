@@ -44,6 +44,9 @@ jobs:
       # so this is not a secret. Must be present at build time or the Google
       # sign-in button never renders on /login, /register, /dealer/register.
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: 575329460316-7v1j8slftv98mnvq4uhgj1i8fk138h48.apps.googleusercontent.com
+      # Public S3 base (products/ prefix is public-read) — used to render saved
+      # image thumbnails in the admin product editor.
+      NEXT_PUBLIC_S3_PUBLIC_BASE_URL: https://cpn-uploads.s3.ap-south-1.amazonaws.com
 
     steps:
       - uses: actions/checkout@v4
