@@ -425,7 +425,7 @@ function ProductsPageInner() {
 
             {/* Mobile sidebar overlay */}
             {sidebarOpen && (
-              <div className="lg:hidden fixed inset-0 z-40 flex">
+              <div className="lg:hidden fixed inset-0 z-[60] flex">
                 <div className="fixed inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
                 <div className="relative bg-white w-72 h-full overflow-y-auto p-5 z-50">
                   <div className="flex items-center justify-between mb-4">
