@@ -23,7 +23,7 @@ export default function HeroSlider({ slides }: Props) {
   }, [slideCount]);
 
   if (slideCount === 0) {
-    return <div className="h-full min-h-[320px] bg-gray-100" />;
+    return <div className="h-full min-h-[200px] sm:min-h-[320px] bg-gray-100" />;
   }
 
   const clampedIndex = current % slideCount;
@@ -34,7 +34,7 @@ export default function HeroSlider({ slides }: Props) {
         const isActive = i === clampedIndex;
         const inner = (
           <div
-            className={`absolute inset-0 h-full min-h-[320px] ${
+            className={`absolute inset-0 h-full min-h-[200px] sm:min-h-[320px] ${
               isActive ? "block" : "hidden"
             }`}
           >
@@ -45,7 +45,7 @@ export default function HeroSlider({ slides }: Props) {
               preload={i === 0}
               fetchPriority={i === 0 ? "high" : "auto"}
               sizes="(min-width: 1280px) 832px, (min-width: 1024px) 768px, 100vw"
-              className="object-cover object-center"
+              className="object-contain object-center md:object-cover"
             />
           </div>
         );

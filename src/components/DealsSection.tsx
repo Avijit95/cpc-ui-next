@@ -216,10 +216,10 @@ export default function DealsSection() {
                     alt={deal.product.name}
                     width={160}
                     height={160}
-                    className="w-40 h-40 object-contain"
+                    className="w-28 h-28 sm:w-40 sm:h-40 object-contain"
                   />
                 ) : (
-                  <div className="w-40 h-40 bg-gray-100" />
+                  <div className="w-28 h-28 sm:w-40 sm:h-40 bg-gray-100" />
                 )}
                 <span className="absolute top-1 right-1 bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center">
                   -{deal.percentOff}%
@@ -240,7 +240,7 @@ export default function DealsSection() {
                 <p className="text-xs text-gray-500 mb-3 line-clamp-3">
                   Limited time offer — grab it before the deal ends.
                 </p>
-                <div className="flex items-baseline gap-2">
+                <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-lg font-bold text-[#129cd3]">
                     {formatPrice(deal.dealPrice)}
                   </span>

@@ -70,10 +70,7 @@ export default async function HeroBanner() {
         </div>
 
         {/* Center Slider */}
-        <div
-          className="flex-1 overflow-hidden relative"
-          style={{ minHeight: "320px" }}
-        >
+        <div className="flex-1 overflow-hidden relative min-h-[200px] sm:min-h-[320px]">
           <HeroSlider slides={heroSlides} />
         </div>
 
