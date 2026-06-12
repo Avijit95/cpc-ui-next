@@ -45,6 +45,7 @@ type FormState = {
   brand: string;
   hsnCode: string;
   basePrice: string;
+  priceOverride: string;
   stock: string;
   status: ProductStatus;
 };
@@ -124,6 +125,8 @@ function buildInitialForm(initial?: AdminProductDetail | AdminProduct): FormStat
     // Per api-integration §7.4: phones today use HSN 8517. Default for new products.
     hsnCode: initial?.hsnCode ?? (initial ? "" : "8517"),
     basePrice: initial?.basePrice != null ? String(initial.basePrice) : "",
+    priceOverride:
+      initial?.priceOverride != null ? String(initial.priceOverride) : "",
     stock: initial?.stock != null ? String(initial.stock) : "0",
     status: initial?.status ?? "DRAFT",
   };
@@ -417,6 +420,19 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       return { error: "Base price must be a number ≥ 0 (in rupees)." };
     }
 
+    // Optional selling price for products with no variants; null clears it.
+    let priceOverride: number | null = null;
+    if (form.priceOverride.trim() !== "") {
+      const n = Number(form.priceOverride);
+      if (Number.isNaN(n) || n < 0) {
+        return { error: "Selling price must be a number ≥ 0 (in rupees)." };
+      }
+      if (n > basePriceNum) {
+        return { error: "Selling price can't be more than the base price (MRP)." };
+      }
+      priceOverride = n;
+    }
+
     const stockNum = form.stock.trim() === "" ? 0 : Number(form.stock);
     if (Number.isNaN(stockNum) || stockNum < 0 || !Number.isInteger(stockNum)) {
       return { error: "Stock must be a whole number ≥ 0." };
@@ -441,6 +457,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       categoryId: form.categoryId,
       description,
       basePrice: basePriceNum,
+      priceOverride,
       stock: stockNum,
       status,
     };
@@ -861,7 +878,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Pricing &amp; Inventory</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
                   Base price (₹) <span className="text-red-500">*</span>
@@ -876,7 +893,24 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
                 />
                 <p className="text-[11px] text-gray-400 mt-1">
-                  Rupees. Up to 2 decimal places.
+                  MRP, shown struck-through. Up to 2 decimals.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+                  Selling price (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={form.priceOverride}
+                  onChange={(e) => onChange("priceOverride", e.target.value)}
+                  placeholder="Same as base"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Optional. Blank = sell at base price. Variants set their own.
                 </p>
               </div>
               <div>

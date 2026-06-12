@@ -95,6 +95,7 @@ export type CreateProductBody = {
   description: string;
   specs?: Record<string, unknown>;
   basePrice: number;
+  priceOverride?: number | null;
   stock?: number;
   status?: ProductStatus;
   brand?: string;

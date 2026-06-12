@@ -237,6 +237,8 @@ export type AdminProduct = {
   brand: string | null;
   categoryId: string;
   basePrice: number;
+  // selling price for a product with no variants; null = sell at basePrice
+  priceOverride: number | null;
   stock: number;
   status: ProductStatus;
   hsnCode: string | null;
