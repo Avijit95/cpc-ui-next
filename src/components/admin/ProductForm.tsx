@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { adminApi, isApiError, s3Put } from "@/lib/api";
+import { imageUrlForKey } from "@/lib/image-url";
 import ProductVariantsEditor, {
   type ProductVariantsHandle,
 } from "./ProductVariantsEditor";
@@ -175,7 +176,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     { current: number; total: number } | null
   >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const existingImageCount = mode.kind === "edit" ? mode.initial.images.length : 0;
+  const existingImageKeys = mode.kind === "edit" ? mode.initial.images : [];
+  const existingImageCount = existingImageKeys.length;
 
   // ── Scrape-from-URL state (create mode) ─────────────────────────────────
   const [scrapeUrl, setScrapeUrl] = useState("");
@@ -784,6 +786,32 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                   onChange={(e) => onPickFiles(e.target.files)}
                 />
               </label>
+
+              {existingImageKeys.map((key, i) => {
+                const url = imageUrlForKey(key);
+                return (
+                  <div
+                    key={key}
+                    className="aspect-square relative rounded-lg overflow-hidden bg-gray-50 border border-gray-100"
+                  >
+                    {url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={url}
+                        alt={`Saved image ${i + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 px-1 text-center">
+                        saved
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent text-white text-[10px] px-2 py-1 truncate">
+                      #{i + 1} · saved
+                    </div>
+                  </div>
+                );
+              })}
 
               {pendingImages.map((p, i) => (
                 <div
