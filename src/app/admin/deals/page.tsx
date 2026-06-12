@@ -31,7 +31,6 @@ import type {
   Deal,
   DealLifecycle,
   ListCard,
-  UpdateDealBody,
 } from "@/lib/api";
 import { formatTimestamp, formatUpdated } from "@/lib/format-date";
 import { useUrlState } from "@/lib/use-url-state";
@@ -57,6 +56,7 @@ type FormState = {
   productBasePrice: number | null;
   variantId: string | null;
   scope: DealScope;
+  discountPercent: string;
   dealPrice: string;
   variantPrices: Record<string, string>;
   startsAt: string;
@@ -71,6 +71,7 @@ const EMPTY_FORM: FormState = {
   productBasePrice: null,
   variantId: null,
   scope: "whole",
+  discountPercent: "",
   dealPrice: "",
   variantPrices: {},
   startsAt: "",
@@ -352,6 +353,11 @@ export default function AdminDealsPage() {
       productBasePrice: d.basePrice,
       variantId: d.variantId,
       scope: "whole",
+      // Whole-product deals are entered as a % off the base price; reconstruct it.
+      discountPercent:
+        d.variantId == null && d.basePrice > 0
+          ? String(Math.round(((d.basePrice - d.dealPrice) / d.basePrice) * 100))
+          : "",
       dealPrice: String(d.dealPrice),
       variantPrices: {},
       startsAt: toDatetimeLocal(d.startsAt),
@@ -382,6 +388,7 @@ export default function AdminDealsPage() {
       productImageUrl: card.primaryImageUrl,
       productBasePrice: card.basePrice,
       variantId: null,
+      discountPercent: "",
       variantPrices: {},
     }));
     setPickerOpen(false);
@@ -405,6 +412,12 @@ export default function AdminDealsPage() {
     : productBase;
 
   const perVariant = modalMode === "create" && form.scope === "perVariant";
+  // A whole-product deal is entered as a % off the base price (create scope
+  // "whole", or editing a deal that isn't variant-scoped). Variant-scoped deals
+  // keep an absolute ₹ deal price.
+  const wholeProductDeal =
+    (modalMode === "create" && form.scope === "whole") ||
+    (modalMode === "edit" && !form.variantId);
 
   const submit = async () => {
     setFormError(null);
@@ -470,7 +483,50 @@ export default function AdminDealsPage() {
       return;
     }
 
-    // Whole-product create + edit: a single deal.
+    // Whole-product deal: entered as a % off the base price (MRP). Stored as the
+    // equivalent base-config deal price; the API applies the same % to each
+    // variant's own MRP.
+    if (wholeProductDeal) {
+      const pct = Number(form.discountPercent);
+      if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) {
+        setFormError("Discount must be between 1 and 99%.");
+        return;
+      }
+      if (productBase <= 0) {
+        setFormError("This product has no base price to discount.");
+        return;
+      }
+      const dealPrice = Math.round(productBase * (1 - pct / 100));
+      setSaveBusy(true);
+      try {
+        if (modalMode === "create") {
+          await adminApi.createDeal({
+            productId: form.productId,
+            variantId: undefined,
+            dealPrice,
+            startsAt: startIso,
+            endsAt: endIso,
+            isActive: form.isActive,
+          });
+        } else if (editId) {
+          await adminApi.updateDeal(editId, {
+            dealPrice,
+            startsAt: startIso,
+            endsAt: endIso,
+            isActive: form.isActive,
+          });
+        }
+        closeModal();
+        await loadItems(statusFilter, false);
+      } catch (e) {
+        setFormError(isApiError(e) ? e.displayMessage : "Save failed");
+      } finally {
+        setSaveBusy(false);
+      }
+      return;
+    }
+
+    // Variant-scoped edit: an absolute ₹ deal price.
     const dealPriceNum = Number(form.dealPrice);
     if (!Number.isFinite(dealPriceNum) || dealPriceNum <= 0) {
       setFormError("Deal price must be a positive number.");
@@ -487,24 +543,13 @@ export default function AdminDealsPage() {
 
     setSaveBusy(true);
     try {
-      if (modalMode === "create") {
-        const body: CreateDealBody = {
-          productId: form.productId,
-          variantId: form.variantId ?? undefined,
+      if (editId) {
+        await adminApi.updateDeal(editId, {
           dealPrice: dealPriceNum,
           startsAt: startIso,
           endsAt: endIso,
           isActive: form.isActive,
-        };
-        await adminApi.createDeal(body);
-      } else if (modalMode === "edit" && editId) {
-        const body: UpdateDealBody = {
-          dealPrice: dealPriceNum,
-          startsAt: startIso,
-          endsAt: endIso,
-          isActive: form.isActive,
-        };
-        await adminApi.updateDeal(editId, body);
+        });
       }
       closeModal();
       await loadItems(statusFilter, false);
@@ -803,6 +848,7 @@ export default function AdminDealsPage() {
                             productBasePrice: null,
                             variantId: null,
                             scope: "whole",
+                            discountPercent: "",
                             variantPrices: {},
                           }));
                           setVariants([]);
@@ -1028,7 +1074,28 @@ export default function AdminDealsPage() {
                 </div>
               )}
 
-              {!perVariant && (
+              {perVariant ? null : wholeProductDeal ? (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                    Discount (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="99"
+                    value={form.discountPercent}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, discountPercent: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3]"
+                    placeholder="e.g., 8"
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Applied as % off each variant&apos;s base price (MRP).
+                  </p>
+                </div>
+              ) : (
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                     Deal Price (₹)
