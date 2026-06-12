@@ -655,6 +655,13 @@ export const adminApi = {
   createDeal(body: CreateDealBody) {
     return request<Deal>("/admin/deals", { method: "POST", body });
   },
+  // Create one deal per filled row of the per-variant grid, atomically.
+  createDealsBulk(items: CreateDealBody[]) {
+    return request<{ items: Deal[] }>("/admin/deals/bulk", {
+      method: "POST",
+      body: { items },
+    });
+  },
   updateDeal(id: string, body: UpdateDealBody) {
     return request<Deal>(`/admin/deals/${encodeURIComponent(id)}`, {
       method: "PATCH",

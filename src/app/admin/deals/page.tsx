@@ -46,13 +46,19 @@ const SORT_OPTIONS: readonly SortOption[] = [
   { label: "Oldest first", sortBy: "createdAt", sortOrder: "asc" },
 ];
 
+// "whole" = one % discount off every variant; "perVariant" = a separate deal
+// price per variant (the grid), created in one batch.
+type DealScope = "whole" | "perVariant";
+
 type FormState = {
   productId: string;
   productName: string;
   productImageUrl: string | null;
   productBasePrice: number | null;
   variantId: string | null;
+  scope: DealScope;
   dealPrice: string;
+  variantPrices: Record<string, string>;
   startsAt: string;
   endsAt: string;
   isActive: boolean;
@@ -64,11 +70,25 @@ const EMPTY_FORM: FormState = {
   productImageUrl: null,
   productBasePrice: null,
   variantId: null,
+  scope: "whole",
   dealPrice: "",
+  variantPrices: {},
   startsAt: "",
   endsAt: "",
   isActive: true,
 };
+
+// A variant's price tiers, mirroring the API's sellingOf():
+//   selling = priceOverride ?? basePrice ?? product base
+//   base    = basePrice ?? selling   (struck MRP)
+function variantTiers(
+  v: { basePrice: number | null; priceOverride: number | null },
+  productBase: number,
+): { base: number; selling: number } {
+  const selling = v.priceOverride ?? v.basePrice ?? productBase;
+  const base = v.basePrice ?? selling;
+  return { base, selling };
+}
 
 // "8GB / 128GB / Black" from a variant's attributes, falling back to its SKU.
 function variantLabel(v: {
@@ -331,7 +351,9 @@ export default function AdminDealsPage() {
       productImageUrl: d.product.primaryImageUrl,
       productBasePrice: d.basePrice,
       variantId: d.variantId,
+      scope: "whole",
       dealPrice: String(d.dealPrice),
+      variantPrices: {},
       startsAt: toDatetimeLocal(d.startsAt),
       endsAt: toDatetimeLocal(d.endsAt),
       isActive: d.isActive,
@@ -360,6 +382,7 @@ export default function AdminDealsPage() {
       productImageUrl: card.primaryImageUrl,
       productBasePrice: card.basePrice,
       variantId: null,
+      variantPrices: {},
     }));
     setPickerOpen(false);
     setPickerInput("");
@@ -381,9 +404,10 @@ export default function AdminDealsPage() {
     ? (selectedVariant.basePrice ?? sellingPrice)
     : productBase;
 
+  const perVariant = modalMode === "create" && form.scope === "perVariant";
+
   const submit = async () => {
     setFormError(null);
-    const dealPriceNum = Number(form.dealPrice);
     const startIso = fromDatetimeLocal(form.startsAt);
     const endIso = fromDatetimeLocal(form.endsAt);
 
@@ -391,6 +415,63 @@ export default function AdminDealsPage() {
       setFormError("Please pick a product.");
       return;
     }
+    if (!startIso || !endIso) {
+      setFormError("Start and end times are required.");
+      return;
+    }
+    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+      setFormError("End time must be after start time.");
+      return;
+    }
+
+    // Per-variant grid: build one deal per filled row.
+    if (perVariant) {
+      const items: CreateDealBody[] = [];
+      for (const v of variants) {
+        const raw = form.variantPrices[v.id];
+        if (raw == null || raw.trim() === "") continue;
+        const price = Number(raw);
+        const { selling } = variantTiers(v, productBase);
+        if (!Number.isFinite(price) || price <= 0) {
+          setFormError(`Enter a valid deal price for ${variantLabel(v)}.`);
+          return;
+        }
+        if (selling > 0 && price >= selling) {
+          setFormError(
+            `${variantLabel(v)}: deal price must be less than ₹${selling.toLocaleString(
+              "en-IN",
+            )}.`,
+          );
+          return;
+        }
+        items.push({
+          productId: form.productId,
+          variantId: v.id,
+          dealPrice: price,
+          startsAt: startIso,
+          endsAt: endIso,
+          isActive: form.isActive,
+        });
+      }
+      if (items.length === 0) {
+        setFormError("Enter a deal price for at least one variant.");
+        return;
+      }
+      setSaveBusy(true);
+      try {
+        await adminApi.createDealsBulk(items);
+        closeModal();
+        await loadItems(statusFilter, false);
+      } catch (e) {
+        setFormError(isApiError(e) ? e.displayMessage : "Save failed");
+      } finally {
+        setSaveBusy(false);
+      }
+      return;
+    }
+
+    // Whole-product create + edit: a single deal.
+    const dealPriceNum = Number(form.dealPrice);
     if (!Number.isFinite(dealPriceNum) || dealPriceNum <= 0) {
       setFormError("Deal price must be a positive number.");
       return;
@@ -401,14 +482,6 @@ export default function AdminDealsPage() {
           "en-IN",
         )}).`,
       );
-      return;
-    }
-    if (!startIso || !endIso) {
-      setFormError("Start and end times are required.");
-      return;
-    }
-    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
-      setFormError("End time must be after start time.");
       return;
     }
 
@@ -729,6 +802,8 @@ export default function AdminDealsPage() {
                             productImageUrl: null,
                             productBasePrice: null,
                             variantId: null,
+                            scope: "whole",
+                            variantPrices: {},
                           }));
                           setVariants([]);
                           setPickerOpen(true);
@@ -846,23 +921,33 @@ export default function AdminDealsPage() {
                           No variants — this deal applies to the whole product.
                         </p>
                       ) : (
-                        <select
-                          value={form.variantId ?? ""}
-                          onChange={(e) =>
-                            setForm((p) => ({
-                              ...p,
-                              variantId: e.target.value || null,
-                            }))
-                          }
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3] bg-white"
-                        >
-                          <option value="">Whole product (all variants)</option>
-                          {variants.map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {variantLabel(v)}
-                            </option>
+                        <div className="flex gap-2">
+                          {(
+                            [
+                              ["whole", "Whole product"],
+                              ["perVariant", "Per variant"],
+                            ] as const
+                          ).map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() =>
+                                setForm((p) => ({
+                                  ...p,
+                                  scope: value,
+                                  variantId: null,
+                                }))
+                              }
+                              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                form.scope === value
+                                  ? "bg-[#129cd3] text-white"
+                                  : "bg-white border border-gray-200 text-gray-700 hover:border-[#129cd3]"
+                              }`}
+                            >
+                              {label}
+                            </button>
                           ))}
-                        </select>
+                        </div>
                       )
                     ) : (
                       <p className="text-sm text-gray-700">
@@ -877,43 +962,90 @@ export default function AdminDealsPage() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-lg p-3">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                        Base Price
-                      </p>
-                      <p className="text-sm font-semibold text-gray-800">
-                        {formatPrice(baseDisplayPrice)}
-                      </p>
+                  {perVariant ? (
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                      {variants.map((v) => {
+                        const { base, selling } = variantTiers(v, productBase);
+                        return (
+                          <div
+                            key={v.id}
+                            className="flex items-center gap-3 p-3"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-800 truncate">
+                                {variantLabel(v)}
+                              </p>
+                              <p className="text-[11px] text-gray-500">
+                                {formatPrice(selling)}
+                                {base !== selling && (
+                                  <span className="line-through ml-1">
+                                    {formatPrice(base)}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={form.variantPrices[v.id] ?? ""}
+                              onChange={(e) =>
+                                setForm((p) => ({
+                                  ...p,
+                                  variantPrices: {
+                                    ...p.variantPrices,
+                                    [v.id]: e.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="Deal ₹"
+                              className="w-28 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3]"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                        Selling Price
-                      </p>
-                      <p className="text-sm font-semibold text-gray-800">
-                        {formatPrice(sellingPrice)}
-                      </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-lg p-3">
+                      <div>
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                          Base Price
+                        </p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {formatPrice(baseDisplayPrice)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                          Selling Price
+                        </p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {formatPrice(sellingPrice)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Deal Price (₹)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.dealPrice}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, dealPrice: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3]"
-                  placeholder="e.g., 750"
-                />
-              </div>
+              {!perVariant && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                    Deal Price (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.dealPrice}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, dealPrice: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3]"
+                    placeholder="e.g., 750"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
