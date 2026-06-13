@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronLeft,
+  ChevronRight,
   ImagePlus,
   Link2,
   Loader2,
@@ -60,14 +61,31 @@ const ALLOWED_TYPES: ProductImageContentType[] = [
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 20;
 
-type PendingImage = {
-  id: string; // local id for React keys
-  file: File;
-  previewUrl: string;
-};
+// One ordered list of product images — `existing` items carry the saved S3 key,
+// `pending` items carry a local File not yet uploaded. List order = display rank.
+type ProductImageItem =
+  | { id: string; kind: "existing"; key: string; url: string | null }
+  | { id: string; kind: "pending"; file: File; previewUrl: string };
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Build the editor's image list from a product, ordered by the saved sortOrder
+// (falling back to raw order when the two arrays don't line up).
+function initProductImages(
+  initial?: AdminProductDetail | AdminProduct,
+): ProductImageItem[] {
+  if (!initial || initial.images.length === 0) return [];
+  const order = initial.images.map((_, i) => i);
+  const sort = initial.imagesSortOrder;
+  if (sort && sort.length === initial.images.length) {
+    order.sort((a, b) => sort[a] - sort[b]);
+  }
+  return order.map((i) => {
+    const key = initial.images[i];
+    return { id: uid(), kind: "existing" as const, key, url: imageUrlForKey(key) };
+  });
 }
 
 type SpecRow = { id: string; key: string; value: string };
@@ -169,15 +187,15 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const [submitting, setSubmitting] = useState<null | ProductStatus>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ── Image upload state ────────────────────────────────────────────────
-  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  // ── Image state (existing + pending, one ordered list = display rank) ────
+  const [images, setImages] = useState<ProductImageItem[]>(() =>
+    initProductImages(initial),
+  );
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<
     { current: number; total: number } | null
   >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const existingImageKeys = mode.kind === "edit" ? mode.initial.images : [];
-  const existingImageCount = existingImageKeys.length;
 
   // ── Scrape-from-URL state (create mode) ─────────────────────────────────
   const [scrapeUrl, setScrapeUrl] = useState("");
@@ -199,8 +217,10 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   // Cleanup object URLs on unmount.
   useEffect(() => {
     return () => {
-      setPendingImages((curr) => {
-        for (const p of curr) URL.revokeObjectURL(p.previewUrl);
+      setImages((curr) => {
+        for (const it of curr) {
+          if (it.kind === "pending") URL.revokeObjectURL(it.previewUrl);
+        }
         return curr;
       });
     };
@@ -256,8 +276,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   }, [categories]);
 
   const selectedScrapedCount = scrapedImages.filter((i) => i.selected).length;
-  const totalImageCount =
-    existingImageCount + pendingImages.length + selectedScrapedCount;
+  const totalImageCount = images.length + selectedScrapedCount;
   const remainingSlots = Math.max(0, MAX_IMAGES - totalImageCount);
 
   const onPickFiles = useCallback(
@@ -265,7 +284,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       if (!files || files.length === 0) return;
       setImageError(null);
 
-      const accepted: PendingImage[] = [];
+      const accepted: ProductImageItem[] = [];
       const rejections: string[] = [];
 
       let slotsLeft = remainingSlots;
@@ -283,7 +302,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           continue;
         }
         accepted.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id: uid(),
+          kind: "pending",
           file,
           previewUrl: URL.createObjectURL(file),
         });
@@ -291,7 +311,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       }
 
       if (accepted.length > 0) {
-        setPendingImages((curr) => [...curr, ...accepted]);
+        setImages((curr) => [...curr, ...accepted]);
       }
       if (rejections.length > 0) {
         setImageError(rejections.join("\n"));
@@ -302,11 +322,22 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     [remainingSlots],
   );
 
-  const removePendingImage = (id: string) => {
-    setPendingImages((curr) => {
-      const next = curr.filter((p) => p.id !== id);
-      const removed = curr.find((p) => p.id === id);
-      if (removed) URL.revokeObjectURL(removed.previewUrl);
+  const removeImage = (id: string) => {
+    setImages((curr) => {
+      const removed = curr.find((it) => it.id === id);
+      if (removed?.kind === "pending") URL.revokeObjectURL(removed.previewUrl);
+      return curr.filter((it) => it.id !== id);
+    });
+  };
+
+  // Move an image one slot earlier (dir -1) or later (dir +1) — its display rank.
+  const moveImage = (id: string, dir: -1 | 1) => {
+    setImages((curr) => {
+      const i = curr.findIndex((it) => it.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= curr.length) return curr;
+      const next = [...curr];
+      [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
   };
@@ -365,10 +396,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       }
 
       // Default-select images only up to the remaining slot budget.
-      const free = Math.max(
-        0,
-        MAX_IMAGES - (existingImageCount + pendingImages.length),
-      );
+      const free = Math.max(0, MAX_IMAGES - images.length);
       setScrapedImages(
         data.imageUrls.map((u, idx) => ({ url: u, selected: idx < free })),
       );
@@ -470,26 +498,35 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     return body;
   };
 
-  // Upload pending images: presign → S3 PUT → confirm. Returns true on success.
-  const uploadPendingImages = async (productId: string): Promise<boolean> => {
-    if (pendingImages.length === 0) return true;
-    const total = pendingImages.length;
-    setUploadProgress({ current: 0, total });
-    const uploadedKeys: string[] = [];
+  // Persist the product image list: upload any pending files in order, then
+  // confirm the full ordered key list (replace=true) so removals and ranking
+  // stick. Returns true on success.
+  const commitProductImages = async (productId: string): Promise<boolean> => {
+    if (images.length === 0) return true; // nothing to persist
+    const total = images.filter((it) => it.kind === "pending").length;
+    let uploaded = 0;
+    if (total > 0) setUploadProgress({ current: 0, total });
+    const orderedKeys: string[] = [];
     try {
-      for (let i = 0; i < pendingImages.length; i++) {
-        const item = pendingImages[i];
-        setUploadProgress({ current: i + 1, total });
+      for (const item of images) {
+        if (item.kind === "existing") {
+          orderedKeys.push(item.key);
+          continue;
+        }
+        uploaded += 1;
+        setUploadProgress({ current: uploaded, total });
         const presigned = await adminApi.presignProductImage(productId, {
           contentType: item.file.type as ProductImageContentType,
           contentLength: item.file.size,
         });
         await s3Put(presigned.uploadUrl, item.file);
-        uploadedKeys.push(presigned.objectKey);
+        orderedKeys.push(presigned.objectKey);
       }
-      // Append by default — matches the doc: replace=false (default).
+      // Replace the whole list so reorders and removals are saved, not just appends.
       await adminApi.confirmProductImages(productId, {
-        objectKeys: uploadedKeys,
+        objectKeys: orderedKeys,
+        sortOrder: orderedKeys.map((_, i) => i),
+        replace: true,
       });
       return true;
     } catch (err) {
@@ -536,17 +573,16 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         productId = mode.productId;
       }
 
-      const imagesOk = await uploadPendingImages(productId);
+      const imagesOk = await commitProductImages(productId);
       const scrapedOk = imagesOk && (await importScrapedImages(productId));
       if (!imagesOk || !scrapedOk) {
-        // The product itself saved fine — nudge the user to retry images
-        // from the product editor instead of blocking the save outright.
+        // The product itself saved fine — keep the image list on screen so the
+        // admin can fix it and click Save again (a retry is safe/idempotent).
         setErrorMsg(
           (errorMsg ?? "") +
-            "\nThe product was saved, but image upload failed. Edit the product to retry.",
+            "\nThe product was saved, but the images failed. Adjust them and click Save again.",
         );
-        // Still clear pending/scraped so future submits don't re-upload.
-        setPendingImages([]);
+        // Clear scraped picks so a retry doesn't re-import duplicates.
         setScrapedImages([]);
         return;
       }
@@ -750,14 +786,6 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               </span>
             </div>
 
-            {isEdit && existingImageCount > 0 && (
-              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                {existingImageCount}{" "}
-                {existingImageCount === 1 ? "image already" : "images already"}{" "}
-                attached. New uploads will be appended to the existing list.
-              </div>
-            )}
-
             {imageError && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-line">
                 {imageError}
@@ -787,58 +815,66 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 />
               </label>
 
-              {existingImageKeys.map((key, i) => {
-                const url = imageUrlForKey(key);
+              {images.map((it, idx) => {
+                const src = it.kind === "existing" ? it.url : it.previewUrl;
+                // Backend can't store an empty image list, so block removing the
+                // last one when editing an existing product.
+                const canRemove = mode.kind === "create" || images.length > 1;
                 return (
                   <div
-                    key={key}
-                    className="aspect-square relative rounded-lg overflow-hidden bg-gray-50 border border-gray-100"
+                    key={it.id}
+                    className="aspect-square relative rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group"
                   >
-                    {url ? (
+                    {src ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={url}
-                        alt={`Saved image ${i + 1}`}
+                        src={src}
+                        alt={it.kind === "pending" ? it.file.name : `Image ${idx + 1}`}
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 px-1 text-center">
+                      <div className="w-full h-full flex items-center justify-center text-[11px] text-gray-400">
                         saved
                       </div>
                     )}
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent text-white text-[10px] px-2 py-1 truncate">
-                      #{i + 1} · saved
+                    <span className="absolute top-1.5 left-1.5 min-w-[22px] h-6 px-1.5 rounded-full bg-black/60 text-white text-[11px] font-semibold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(it.id)}
+                      disabled={busy || !canRemove}
+                      className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
+                      aria-label="Remove image"
+                      title={canRemove ? "Remove image" : "At least one image is required"}
+                    >
+                      <X size={14} />
+                    </button>
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 py-1 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => moveImage(it.id, -1)}
+                        disabled={busy || idx === 0}
+                        className="w-6 h-6 rounded-full bg-white/90 text-gray-600 hover:text-[#129cd3] shadow flex items-center justify-center disabled:opacity-30"
+                        aria-label="Move earlier"
+                        title="Move earlier"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveImage(it.id, 1)}
+                        disabled={busy || idx === images.length - 1}
+                        className="w-6 h-6 rounded-full bg-white/90 text-gray-600 hover:text-[#129cd3] shadow flex items-center justify-center disabled:opacity-30"
+                        aria-label="Move later"
+                        title="Move later"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
                     </div>
                   </div>
                 );
               })}
-
-              {pendingImages.map((p, i) => (
-                <div
-                  key={p.id}
-                  className="aspect-square relative rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={p.previewUrl}
-                    alt={p.file.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removePendingImage(p.id)}
-                    disabled={busy}
-                    className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
-                    aria-label="Remove image"
-                    title="Remove image"
-                  >
-                    <X size={14} />
-                  </button>
-                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent text-white text-[10px] px-2 py-1 truncate">
-                    #{existingImageCount + i + 1} · {fileSizeLabel(p.file.size)}
-                  </div>
-                </div>
-              ))}
             </div>
 
             {scrapedImages.length > 0 && (
@@ -886,9 +922,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             )}
 
             <p className="text-[11px] text-gray-400">
-              {mode.kind === "create"
-                ? "Images upload to S3 right after the product is created."
-                : "New images will be uploaded and appended when you save."}
+              Image #1 is the main photo. Use the arrows to reorder and ✕ to
+              remove — changes save when you click Save.
             </p>
           </section>
 
