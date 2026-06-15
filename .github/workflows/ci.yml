@@ -24,6 +24,9 @@ jobs:
       # Public S3 base — kept in sync with deploy.yml so PR builds inline the same
       # value used to render saved image thumbnails in the admin product editor.
       NEXT_PUBLIC_S3_PUBLIC_BASE_URL: https://cpn-uploads.s3.ap-south-1.amazonaws.com
+      # Kept in sync with deploy.yml so PR builds inline the same footer identifiers.
+      NEXT_PUBLIC_SELLER_GSTIN: 18AOMPC3877M1ZB
+      NEXT_PUBLIC_SELLER_IEC: AOMPC3877M
 
     steps:
       - uses: actions/checkout@v4

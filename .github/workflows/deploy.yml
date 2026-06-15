@@ -47,6 +47,10 @@ jobs:
       # Public S3 base (products/ prefix is public-read) — used to render saved
       # image thumbnails in the admin product editor.
       NEXT_PUBLIC_S3_PUBLIC_BASE_URL: https://cpn-uploads.s3.ap-south-1.amazonaws.com
+      # Public business identifiers shown in the site footer. Public-by-design
+      # (printed on every invoice), not secrets. Empty would hide the footer line.
+      NEXT_PUBLIC_SELLER_GSTIN: 18AOMPC3877M1ZB
+      NEXT_PUBLIC_SELLER_IEC: AOMPC3877M
 
     steps:
       - uses: actions/checkout@v4

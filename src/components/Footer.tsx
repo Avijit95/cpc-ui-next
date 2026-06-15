@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Mail } from "lucide-react";
 
 const footerLinks = {
@@ -9,6 +10,11 @@ const footerLinks = {
   "BRANDS": ["Apple", "Samsung", "Sony", "OnePlus", "JBL", "Google"],
   "ALL CATEGORIES": ["Smartphones", "Cameras", "Speakers", "Earphones", "Smartwatches", "Accessories"],
 };
+
+// Public business identifiers — inlined at build time (same as the OAuth client
+// ID). Each line renders only when its value is set.
+const SELLER_GSTIN = process.env.NEXT_PUBLIC_SELLER_GSTIN;
+const SELLER_IEC = process.env.NEXT_PUBLIC_SELLER_IEC;
 
 export default function Footer() {
   const [email, setEmail] = useState("");
@@ -29,10 +35,20 @@ export default function Footer() {
           <p className="text-xs mb-1">
             <span className="text-gray-300 font-semibold">Email:</span> support@cellphonecrowd.in
           </p>
-          <p className="text-xs mb-4">
+          <p className="text-xs mb-1">
             <span className="text-gray-300 font-semibold">Hours:</span> Mon–Fri, 9am–6pm IST
           </p>
-          <div className="flex gap-2 mb-4">
+          {SELLER_GSTIN && (
+            <p className="text-xs mb-1">
+              <span className="text-gray-300 font-semibold">GSTIN:</span> {SELLER_GSTIN}
+            </p>
+          )}
+          {SELLER_IEC && (
+            <p className="text-xs mb-1">
+              <span className="text-gray-300 font-semibold">IEC:</span> {SELLER_IEC}
+            </p>
+          )}
+          <div className="flex gap-2 mt-4 mb-4">
             {["f", "𝕏", "in", "▶"].map((label, i) => (
               <a
                 key={i}
@@ -50,6 +66,15 @@ export default function Footer() {
             <a href="#" className="bg-gray-700 hover:bg-[#129cd3] text-white text-xs px-3 py-1.5 rounded transition-colors">
               Google Play
             </a>
+          </div>
+          {/* MSME registration badge — white chip so the black logo stays legible on the dark footer */}
+          <div className="mt-4 inline-block bg-white rounded p-2">
+            <Image
+              src="/msme.png"
+              alt="Registered with Ministry of MSME, Govt. of India"
+              width={120}
+              height={66}
+            />
           </div>
         </div>
 
