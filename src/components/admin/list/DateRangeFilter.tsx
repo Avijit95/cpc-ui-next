@@ -80,7 +80,7 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-30">
+        <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-30">
           <div className="space-y-3">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase mb-1.5">
@@ -93,7 +93,7 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, createdFrom: e.target.value || undefined }))
                   }
-                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
+                  className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
                 />
                 <span className="text-xs text-gray-400">to</span>
                 <input
@@ -102,7 +102,7 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, createdTo: e.target.value || undefined }))
                   }
-                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
+                  className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
                 />
               </div>
             </div>
@@ -121,7 +121,7 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
                         updatedFrom: e.target.value || undefined,
                       }))
                     }
-                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
+                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
                   />
                   <span className="text-xs text-gray-400">to</span>
                   <input
@@ -133,7 +133,7 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
                         updatedTo: e.target.value || undefined,
                       }))
                     }
-                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
+                    className="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#129cd3]"
                   />
                 </div>
               </div>
