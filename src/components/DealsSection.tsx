@@ -74,7 +74,7 @@ function BestSellerRow({ product }: { product: ListCard }) {
           alt={product.name}
           width={64}
           height={64}
-          className="w-16 h-16 object-cover rounded flex-shrink-0"
+          className="w-16 h-16 object-contain rounded flex-shrink-0"
         />
       ) : (
         <div className="w-16 h-16 bg-gray-100 rounded flex-shrink-0" />
