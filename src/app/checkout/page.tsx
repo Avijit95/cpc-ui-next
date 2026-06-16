@@ -10,6 +10,7 @@ import {
   addressesApi,
   cartApi,
   checkoutApi,
+  paymentsApi,
   isApiError,
 } from "@/lib/api";
 import type {
@@ -238,8 +239,19 @@ export default function CheckoutPage() {
         addressId: selectedAddressId,
         idempotencyKey,
       });
-      // Successful checkout → land on the order detail.
-      router.replace(`/account/orders/${encodeURIComponent(resp.orderId)}`);
+      // Order created (PENDING_PAYMENT) → start payment and hand off to the
+      // Pine Labs hosted page. If initiation fails, send the user to the order
+      // detail page where they can retry payment.
+      try {
+        const { redirectUrl } = await paymentsApi.initiate(resp.orderId);
+        window.location.href = redirectUrl;
+        return;
+      } catch {
+        router.replace(
+          `/account/orders/${encodeURIComponent(resp.orderId)}`,
+        );
+        return;
+      }
     } catch (err) {
       if (isApiError(err)) {
         // STOCK_INSUFFICIENT carries a structured shortages list; surface it.
