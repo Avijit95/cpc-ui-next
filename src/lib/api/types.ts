@@ -645,6 +645,15 @@ export type CheckoutResponse = {
   grandTotal: number;
 };
 
+// Pine Labs hosted-checkout payment flow.
+export type PaymentInitiateResponse = {
+  redirectUrl: string;
+};
+
+export type PaymentStatusResponse = {
+  status: "SUCCESS" | "FAILED" | "PENDING";
+};
+
 // Shape of the `details` field on STOCK_INSUFFICIENT 409 responses.
 export type StockShortage = {
   productId: string;

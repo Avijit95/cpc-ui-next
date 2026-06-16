@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isApiError, ordersApi } from "@/lib/api";
+import { isApiError, ordersApi, paymentsApi } from "@/lib/api";
 import type { OrderDetail, OrderStatus, ReturnReason } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -129,6 +129,9 @@ export default function OrderDetailPage() {
   const [returnBusy, setReturnBusy] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
 
+  const [payBusy, setPayBusy] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
   // Auth gate.
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -226,6 +229,20 @@ export default function OrderDetailPage() {
       setCancelBusy(false);
     }
   }, [id, cancelReason, fetchOrder]);
+
+  const handleCompletePayment = useCallback(async () => {
+    setPayBusy(true);
+    setPayError(null);
+    try {
+      const { redirectUrl } = await paymentsApi.initiate(id);
+      window.location.href = redirectUrl;
+    } catch (err) {
+      setPayError(
+        isApiError(err) ? err.displayMessage : "Could not start payment",
+      );
+      setPayBusy(false);
+    }
+  }, [id]);
 
   const handleReturn = useCallback(async () => {
     if (returnReason === "OTHER" && !returnNote.trim()) {
@@ -379,6 +396,25 @@ export default function OrderDetailPage() {
                     <div className="mt-3 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                       Cancelled on {formatDateTime(order.cancelledAt)}
                       {order.cancelReason ? ` · ${order.cancelReason}` : ""}.
+                    </div>
+                  )}
+                  {order.status === "PENDING_PAYMENT" && (
+                    <div className="mt-3 bg-[#e8f7fc] border border-[#129cd3]/30 rounded-lg px-4 py-3">
+                      <p className="text-xs text-gray-700 mb-2">
+                        This order is awaiting payment. Complete it to confirm
+                        your order.
+                      </p>
+                      <button
+                        onClick={handleCompletePayment}
+                        disabled={payBusy}
+                        className="flex items-center justify-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+                      >
+                        {payBusy && <Loader2 size={15} className="animate-spin" />}
+                        Complete Payment
+                      </button>
+                      {payError && (
+                        <p className="text-xs text-red-600 mt-2">{payError}</p>
+                      )}
                     </div>
                   )}
                 </div>

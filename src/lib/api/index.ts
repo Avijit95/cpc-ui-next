@@ -91,6 +91,7 @@ export type {
 export { invoicesApi } from "./endpoints/invoices";
 export { checkoutApi } from "./endpoints/checkout";
 export type { CheckoutBody } from "./endpoints/checkout";
+export { paymentsApi } from "./endpoints/payments";
 export { reviewsApi } from "./endpoints/reviews";
 export type {
   ListProductReviewsQuery,
