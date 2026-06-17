@@ -164,7 +164,7 @@ export default function WishlistPage() {
           {items.length === 0 ? (
             <EmptyWishlist />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
               {items.map((item) => {
                 const id = item.wishlistItemId;
                 const move = moveState[id] ?? "idle";
@@ -182,7 +182,7 @@ export default function WishlistPage() {
                 return (
                   <div
                     key={id}
-                    className="bg-white rounded-xl border border-gray-200 overflow-hidden group relative hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl border border-gray-200 overflow-hidden group relative hover:shadow-md transition-shadow flex flex-col"
                   >
                     {/* Remove button */}
                     <button
@@ -224,7 +224,7 @@ export default function WishlistPage() {
                         <img
                           src={item.primaryImageUrl}
                           alt={item.name}
-                          className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-48 object-contain p-[10px] group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
                         <div className="w-full h-48 bg-gray-100" />
@@ -232,7 +232,7 @@ export default function WishlistPage() {
                     </Link>
 
                     {/* Info */}
-                    <div className="p-4">
+                    <div className="p-4 flex flex-col flex-1">
                       {item.brand && (
                         <p className="text-[10px] text-[#129cd3] font-semibold uppercase mb-1">
                           {item.brand}
@@ -244,7 +244,7 @@ export default function WishlistPage() {
                         </h3>
                       </Link>
 
-                      <div className="flex items-baseline gap-2 mb-4">
+                      <div className="flex items-baseline gap-2 mb-4 mt-auto">
                         <span className="text-base font-bold text-[#129cd3]">
                           {formatPrice(item.finalPrice)}
                         </span>
