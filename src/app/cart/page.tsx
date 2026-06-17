@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useCart } from "@/lib/cart/CartProvider";
 import { cartApi, isApiError } from "@/lib/api";
 import type { CartView, PricedCartLine } from "@/lib/api";
 import {
@@ -25,9 +26,15 @@ export default function CartPage() {
   const router = useRouter();
   const { status } = useAuth();
 
+  const { setCart: syncHeaderCart } = useCart();
   const [cart, setCart] = useState<CartView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Mirror cart changes (load, qty, coupons, removal) into the header badge.
+  useEffect(() => {
+    if (cart) syncHeaderCart(cart);
+  }, [cart, syncHeaderCart]);
 
   // Per-line pending qty for optimistic updates (rolled back on error).
   const [pendingQty, setPendingQty] = useState<Record<string, number>>({});

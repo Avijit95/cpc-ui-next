@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
@@ -16,8 +16,12 @@ import {
   ChevronRight,
   Loader2,
   ShieldAlert,
+  Package,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useWishlist } from "@/lib/wishlist/WishlistProvider";
+import { isApiError, ordersApi } from "@/lib/api";
+import type { OrderListItem, OrderStatus } from "@/lib/api";
 
 type SidebarItem = {
   key: string;
@@ -35,18 +39,49 @@ const sidebarItems: SidebarItem[] = [
   { key: "support", label: "Support", icon: <Headphones size={18} />, href: "/account/support" },
 ];
 
-// Mock orders kept until /orders endpoints ship (Sprint 4).
-const recentOrders: Array<{ id: string; product: string; date: string; status: string; amount: number }> = [];
+// Orders not in one of these are counted as "Active".
+const TERMINAL_STATUSES = new Set<OrderStatus>([
+  "DELIVERED",
+  "CANCELLED",
+  "RETURNED",
+]);
 
-const statusColor: Record<string, string> = {
-  Delivered: "bg-green-100 text-green-700",
-  Processing: "bg-yellow-100 text-yellow-700",
-  Shipped: "bg-blue-100 text-blue-700",
-  Cancelled: "bg-red-100 text-red-700",
+const STATUS_LABEL: Record<OrderStatus, string> = {
+  PENDING_PAYMENT: "Pending Payment",
+  CONFIRMED: "Confirmed",
+  PROCESSING: "Processing",
+  SHIPPED: "Shipped",
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
+  RETURN_REQUESTED: "Return Requested",
+  RETURNED: "Returned",
+};
+
+const STATUS_BADGE: Record<OrderStatus, string> = {
+  PENDING_PAYMENT: "bg-gray-100 text-gray-700",
+  CONFIRMED: "bg-blue-100 text-blue-700",
+  PROCESSING: "bg-yellow-100 text-yellow-700",
+  SHIPPED: "bg-indigo-100 text-indigo-700",
+  DELIVERED: "bg-green-100 text-green-700",
+  CANCELLED: "bg-red-100 text-red-700",
+  RETURN_REQUESTED: "bg-orange-100 text-orange-700",
+  RETURNED: "bg-gray-200 text-gray-700",
 };
 
 function formatPrice(price: number) {
-  return "₹" + (price / 100).toLocaleString("en-IN");
+  return "₹" + price.toLocaleString("en-IN");
+}
+
+function formatDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function initials(name: string) {
@@ -62,12 +97,51 @@ function initials(name: string) {
 export default function AccountPage() {
   const router = useRouter();
   const { user, status, logout } = useAuth();
+  const { items: wishlistItems, loading: wishlistLoading } = useWishlist();
+
+  const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/login?next=/account");
     }
   }, [status, router]);
+
+  // Pull the customer's orders once authenticated. limit=100 (the API max) is
+  // plenty to count Active orders exactly; `total` gives the exact Total.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let cancelled = false;
+    ordersApi
+      .list({ limit: 100 })
+      .then((resp) => {
+        if (cancelled) return;
+        setOrders(resp.items);
+        setTotalOrders(resp.total);
+        setOrdersError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setOrdersError(
+            isApiError(err) ? err.displayMessage : "Could not load orders",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setOrdersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
+
+  const activeOrders = orders.filter(
+    (o) => !TERMINAL_STATUSES.has(o.status),
+  ).length;
+  const recentOrders = orders.slice(0, 5);
 
   if (status !== "authenticated" || !user) {
     return (
@@ -186,9 +260,9 @@ export default function AccountPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: "Total Orders", value: "—", icon: <ShoppingBag size={22} className="text-[#129cd3]" />, bg: "bg-[#e8f7fc]" },
-                { label: "Active Orders", value: "—", icon: <LayoutDashboard size={22} className="text-orange-500" />, bg: "bg-orange-50" },
-                { label: "Wishlist", value: "—", icon: <Heart size={22} className="text-red-500" />, bg: "bg-red-50" },
+                { label: "Total Orders", value: ordersLoading ? "—" : String(totalOrders), icon: <ShoppingBag size={22} className="text-[#129cd3]" />, bg: "bg-[#e8f7fc]" },
+                { label: "Active Orders", value: ordersLoading ? "—" : String(activeOrders), icon: <LayoutDashboard size={22} className="text-orange-500" />, bg: "bg-orange-50" },
+                { label: "Wishlist", value: wishlistLoading ? "—" : String(wishlistItems.length), icon: <Heart size={22} className="text-red-500" />, bg: "bg-red-50" },
               ].map((card, i) => (
                 <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
                   <div className={`${card.bg} rounded-xl w-12 h-12 flex items-center justify-center flex-shrink-0`}>
@@ -207,9 +281,20 @@ export default function AccountPage() {
                 <h2 className="font-bold text-gray-800">Recent Orders</h2>
                 <Link href="/account/orders" className="text-[#129cd3] text-sm hover:underline">View all</Link>
               </div>
-              {recentOrders.length === 0 ? (
-                <div className="px-6 py-10 text-center text-sm text-gray-500">
-                  Orders will appear here once the order system goes live.
+              {ordersLoading ? (
+                <div className="px-6 py-8 space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : ordersError ? (
+                <div className="m-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  {ordersError}
+                </div>
+              ) : recentOrders.length === 0 ? (
+                <div className="px-6 py-10 text-center">
+                  <Package size={28} className="mx-auto text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-500">You haven&apos;t placed any orders yet.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -217,7 +302,7 @@ export default function AccountPage() {
                     <thead>
                       <tr className="bg-gray-50 text-xs text-gray-500 font-semibold uppercase">
                         <th className="text-left px-6 py-3">Order ID</th>
-                        <th className="text-left px-6 py-3">Product</th>
+                        <th className="text-left px-6 py-3">Items</th>
                         <th className="text-left px-6 py-3">Date</th>
                         <th className="text-left px-6 py-3">Status</th>
                         <th className="text-right px-6 py-3">Amount</th>
@@ -226,15 +311,31 @@ export default function AccountPage() {
                     <tbody>
                       {recentOrders.map((order) => (
                         <tr key={order.id} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-[#129cd3]">{order.id}</td>
-                          <td className="px-6 py-4 text-gray-700 max-w-[180px] truncate">{order.product}</td>
-                          <td className="px-6 py-4 text-gray-500">{order.date}</td>
+                          <td className="px-6 py-4 font-medium text-[#129cd3]">
+                            <Link href={`/account/orders/${encodeURIComponent(order.id)}`} className="hover:underline">
+                              {order.orderNumber}
+                            </Link>
+                          </td>
+                          <td className="px-6 py-4 text-gray-700">
+                            <div className="flex items-center gap-3">
+                              {order.primaryImageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={order.primaryImageUrl} alt="" className="w-10 h-10 object-cover rounded border border-gray-200" />
+                              ) : (
+                                <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
+                              )}
+                              <span className="text-xs text-gray-500">
+                                {order.itemCount} item{order.itemCount === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatDate(order.createdAt)}</td>
                           <td className="px-6 py-4">
-                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColor[order.status] ?? "bg-gray-100 text-gray-600"}`}>
-                              {order.status}
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${STATUS_BADGE[order.status]}`}>
+                              {STATUS_LABEL[order.status]}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-800">{formatPrice(order.amount)}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-gray-800 whitespace-nowrap">{formatPrice(order.grandTotal)}</td>
                         </tr>
                       ))}
                     </tbody>
