@@ -297,50 +297,81 @@ export default function AccountPage() {
                   <p className="text-sm text-gray-500">You haven&apos;t placed any orders yet.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs text-gray-500 font-semibold uppercase">
-                        <th className="text-left px-6 py-3">Order ID</th>
-                        <th className="text-left px-6 py-3">Items</th>
-                        <th className="text-left px-6 py-3">Date</th>
-                        <th className="text-left px-6 py-3">Status</th>
-                        <th className="text-right px-6 py-3">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentOrders.map((order) => (
-                        <tr key={order.id} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-[#129cd3]">
-                            <Link href={`/account/orders/${encodeURIComponent(order.id)}`} className="hover:underline">
-                              {order.orderNumber}
-                            </Link>
-                          </td>
-                          <td className="px-6 py-4 text-gray-700">
-                            <div className="flex items-center gap-3">
-                              {order.primaryImageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={order.primaryImageUrl} alt="" className="w-10 h-10 object-cover rounded border border-gray-200" />
-                              ) : (
-                                <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
-                              )}
-                              <span className="text-xs text-gray-500">
-                                {order.itemCount} item{order.itemCount === 1 ? "" : "s"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatDate(order.createdAt)}</td>
-                          <td className="px-6 py-4">
-                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${STATUS_BADGE[order.status]}`}>
-                              {STATUS_LABEL[order.status]}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-800 whitespace-nowrap">{formatPrice(order.grandTotal)}</td>
+                <>
+                  {/* Table — above 740px */}
+                  <div className="hidden min-[740px]:block overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-[#129cd3] font-semibold uppercase border-b border-gray-200">
+                          <th className="text-left px-6 py-3 whitespace-nowrap">Order ID</th>
+                          <th className="text-left px-6 py-3 whitespace-nowrap">Items</th>
+                          <th className="text-left px-6 py-3 whitespace-nowrap">Date</th>
+                          <th className="text-left px-6 py-3 whitespace-nowrap">Status</th>
+                          <th className="text-right px-6 py-3 whitespace-nowrap">Amount</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {recentOrders.map((order) => (
+                          <tr key={order.id} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 font-medium text-[#129cd3] whitespace-nowrap">
+                              <Link href={`/account/orders/${encodeURIComponent(order.id)}`} className="hover:underline">
+                                {order.orderNumber}
+                              </Link>
+                            </td>
+                            <td className="px-6 py-4 text-gray-700">
+                              <div className="flex items-center gap-3">
+                                {order.primaryImageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={order.primaryImageUrl} alt="" className="w-10 h-10 object-cover rounded border border-gray-200" />
+                                ) : (
+                                  <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
+                                )}
+                                <span className="text-xs text-gray-500">
+                                  {order.itemCount} item{order.itemCount === 1 ? "" : "s"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatDate(order.createdAt)}</td>
+                            <td className="px-6 py-4">
+                              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${STATUS_BADGE[order.status]}`}>
+                                {STATUS_LABEL[order.status]}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right font-semibold text-gray-800 whitespace-nowrap">{formatPrice(order.grandTotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Cards — below 740px */}
+                  <div className="min-[740px]:hidden divide-y divide-gray-100">
+                    {recentOrders.map((order) => (
+                      <Link
+                        key={order.id}
+                        href={`/account/orders/${encodeURIComponent(order.id)}`}
+                        className="flex items-center gap-2 xxs:gap-3 px-3 xxs:px-4 py-2.5 xxs:py-3 hover:bg-gray-50 transition-colors"
+                      >
+                        {order.primaryImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={order.primaryImageUrl} alt="" className="w-9 h-9 xxs:w-12 xxs:h-12 object-cover rounded border border-gray-200 flex-shrink-0" />
+                        ) : (
+                          <div className="w-9 h-9 xxs:w-12 xxs:h-12 bg-gray-100 rounded border border-gray-200 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] xxs:text-xs font-semibold text-[#129cd3] truncate">{order.orderNumber}</p>
+                          <p className="text-[10px] xxs:text-xs text-gray-500 mt-0.5">{formatDate(order.createdAt)} · {order.itemCount} item{order.itemCount === 1 ? "" : "s"}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0 max-w-[90px] xxs:max-w-none">
+                          <span className={`text-[10px] font-semibold px-1.5 xxs:px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE[order.status]}`}>
+                            {STATUS_LABEL[order.status]}
+                          </span>
+                          <p className="text-[11px] xxs:text-xs font-bold text-gray-800 text-right">{formatPrice(order.grandTotal)}</p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>

@@ -177,8 +177,8 @@ export default function CartPage() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">
             Shopping Cart{" "}
             <span className="text-base font-normal text-gray-500">
               ({cart?.items.length ?? 0} items)
@@ -228,10 +228,10 @@ export default function CartPage() {
                   return (
                     <div
                       key={id}
-                      className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4"
+                      className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex gap-3 sm:gap-4"
                     >
                       {/* Image */}
-                      <div className="w-24 h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100 overflow-hidden">
+                      <div className="w-16 h-16 sm:w-24 sm:h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100 overflow-hidden">
                         {line.primaryImageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -244,11 +244,11 @@ export default function CartPage() {
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-gray-800 mb-1 line-clamp-2">
+                        <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-1 line-clamp-2">
                           {line.name}
                         </h3>
-                        <div className="flex items-baseline gap-2 mb-3">
-                          <span className="text-base font-bold text-[#129cd3]">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
+                          <span className="text-sm sm:text-base font-bold text-[#129cd3]">
                             {formatPrice(line.unitPrice)}
                           </span>
                           {line.deal && (
@@ -313,15 +313,26 @@ export default function CartPage() {
                           </p>
                         )}
 
+                        {/* Inline total — shown only below 450px */}
+                        <div className="xxs:hidden mt-2 flex items-center justify-between">
+                          <span className="text-xs text-gray-400">Total</span>
+                          <div className="text-right">
+                            <span className="text-sm font-bold text-gray-800">{formatPrice(line.lineGrandTotal)}</span>
+                            {line.discount.total > 0 && (
+                              <p className="text-[10px] text-green-600">saved {formatPrice(line.discount.total)}</p>
+                            )}
+                          </div>
+                        </div>
+
                         {lineErr && (
                           <p className="mt-2 text-xs text-red-600">{lineErr}</p>
                         )}
                       </div>
 
-                      {/* Item total */}
-                      <div className="flex-shrink-0 text-right">
+                      {/* Item total — hidden below 450px */}
+                      <div className="hidden xxs:flex flex-col flex-shrink-0 text-right">
                         <p className="text-xs text-gray-400 mb-1">Total</p>
-                        <p className="text-base font-bold text-gray-800">
+                        <p className="text-sm sm:text-base font-bold text-gray-800">
                           {formatPrice(line.lineGrandTotal)}
                         </p>
                         {line.discount.total > 0 && (

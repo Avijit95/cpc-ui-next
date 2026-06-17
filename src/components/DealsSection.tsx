@@ -167,7 +167,7 @@ export default function DealsSection() {
   if (!deal) return null;
 
   return (
-    <section className="py-8 px-4 bg-gray-50">
+    <section className="py-8 px-[10px] xs:px-4 bg-gray-50">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Today Deals */}
         <div className="md:col-span-2 border border-gray-200 p-4 bg-white shadow-sm">
@@ -191,9 +191,9 @@ export default function DealsSection() {
               <Countdown endsAt={deal.endsAt} />
             </div>
 
-            <div className="p-5 pt-14 flex flex-col xs:flex-row xs:items-center gap-3 relative">
+            <div className="pt-14 xs:p-5 xs:pt-14 flex flex-col xs:flex-row xs:items-center gap-3 relative">
               {/* Image row: arrows flank the image on all sizes */}
-              <div className="flex items-center justify-center gap-3 xs:contents">
+              <div className="flex items-center justify-center gap-[5px] xs:gap-3 xs:contents">
                 {/* Prev Arrow */}
                 <button
                   onClick={() =>
@@ -210,7 +210,7 @@ export default function DealsSection() {
                 {/* Product Image */}
                 <Link
                   href={`/products/${deal.product.slug}`}
-                  className="relative flex-shrink-0"
+                  className="relative flex-1 min-w-0"
                 >
                   {deal.product.primaryImageUrl ? (
                     <Image
@@ -218,10 +218,10 @@ export default function DealsSection() {
                       alt={deal.product.name}
                       width={160}
                       height={160}
-                      className="w-28 h-28 sm:w-40 sm:h-40 object-contain"
+                      className="w-full h-auto object-contain"
                     />
                   ) : (
-                    <div className="w-28 h-28 sm:w-40 sm:h-40 bg-gray-100" />
+                    <div className="w-full aspect-square bg-gray-100" />
                   )}
                   <span className="absolute top-1 right-1 bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center">
                     -{deal.percentOff}%

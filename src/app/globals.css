@@ -45,6 +45,26 @@ html {
   scroll-behavior: smooth;
 }
 
+@media (max-width: 499px) {
+  .trustbar-title {
+    font-size: 11px;
+    line-height: normal;
+  }
+}
+
+@media (max-width: 1279px) {
+  .order-table td,
+  .order-table th {
+    padding: 10px;
+    font-size: 12px;
+    line-height: normal;
+  }
+  .all-categories-btn {
+    font-size: 13px;
+    line-height: normal;
+  }
+}
+
 /* Dual-handle price range slider (two overlapping native inputs).
    Tracks are transparent + non-interactive so the two inputs don't block
    each other; only the thumbs capture pointer events. */

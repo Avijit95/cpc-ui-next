@@ -291,7 +291,7 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 py-8 flex gap-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 flex gap-6">
           {/* Sidebar */}
           <aside className="w-64 flex-shrink-0 hidden lg:block">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -424,7 +424,8 @@ export default function OrderDetailPage() {
                   <div className="px-5 py-3 border-b border-gray-100">
                     <h2 className="font-bold text-gray-800 text-sm">Items</h2>
                   </div>
-                  <div className="overflow-x-auto">
+                  {/* Table — sm and above */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gray-50 text-xs text-gray-500 font-semibold uppercase">
@@ -440,46 +441,61 @@ export default function OrderDetailPage() {
                         {order.items.map((it, idx) => {
                           const discount = it.customerDiscount + it.retailDiscount;
                           return (
-                            <tr
-                              key={idx}
-                              className="border-t border-gray-100"
-                            >
+                            <tr key={idx} className="border-t border-gray-100">
                               <td className="px-5 py-3 text-gray-800">
                                 <div className="font-medium">{it.productName}</div>
-                                {it.variantSku && (
-                                  <div className="text-xs text-gray-500 mt-0.5">
-                                    SKU: {it.variantSku}
-                                  </div>
-                                )}
+                                {it.variantSku && <div className="text-xs text-gray-500 mt-0.5">SKU: {it.variantSku}</div>}
                                 {(it.customerCouponName || it.retailCouponName) && (
                                   <div className="text-xs text-green-700 mt-0.5">
-                                    {it.customerCouponName ? `${it.customerCouponName}` : null}
-                                    {it.customerCouponName && it.retailCouponName ? " + " : null}
-                                    {it.retailCouponName ? `${it.retailCouponName}` : null}
+                                    {it.customerCouponName}{it.customerCouponName && it.retailCouponName ? " + " : null}{it.retailCouponName}
                                   </div>
                                 )}
                               </td>
                               <td className="px-5 py-3 text-center text-gray-600">{it.qty}</td>
-                              <td className="px-5 py-3 text-right text-gray-600">
-                                {formatPrice(it.unitPrice)}
-                              </td>
-                              <td className="px-5 py-3 text-right text-green-600">
-                                {discount > 0 ? `−${formatPrice(discount)}` : "—"}
-                              </td>
+                              <td className="px-5 py-3 text-right text-gray-600">{formatPrice(it.unitPrice)}</td>
+                              <td className="px-5 py-3 text-right text-green-600">{discount > 0 ? `−${formatPrice(discount)}` : "—"}</td>
                               <td className="px-5 py-3 text-right text-gray-600">
                                 {formatPrice(it.gstAmount)}
-                                <div className="text-[10px] text-gray-400">
-                                  {it.gstRatePercent}%
-                                </div>
+                                <div className="text-[10px] text-gray-400">{it.gstRatePercent}%</div>
                               </td>
-                              <td className="px-5 py-3 text-right font-semibold text-gray-800">
-                                {formatPrice(it.lineGrandTotal)}
-                              </td>
+                              <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatPrice(it.lineGrandTotal)}</td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Cards — below sm */}
+                  <div className="sm:hidden divide-y divide-gray-100">
+                    {order.items.map((it, idx) => {
+                      const discount = it.customerDiscount + it.retailDiscount;
+                      return (
+                        <div key={idx} className="px-4 py-3 text-xs">
+                          <p className="font-semibold text-gray-800 text-sm">{it.productName}</p>
+                          {it.variantSku && <p className="text-gray-400 mt-0.5">SKU: {it.variantSku}</p>}
+                          {(it.customerCouponName || it.retailCouponName) && (
+                            <p className="text-green-700 mt-0.5">
+                              {it.customerCouponName}{it.customerCouponName && it.retailCouponName ? " + " : null}{it.retailCouponName}
+                            </p>
+                          )}
+                          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
+                            <span className="text-gray-400 uppercase font-semibold">Qty</span>
+                            <span className="text-right">{it.qty}</span>
+                            <span className="text-gray-400 uppercase font-semibold">Unit Price</span>
+                            <span className="text-right">{formatPrice(it.unitPrice)}</span>
+                            {discount > 0 && <>
+                              <span className="text-gray-400 uppercase font-semibold">Discount</span>
+                              <span className="text-right text-green-600">−{formatPrice(discount)}</span>
+                            </>}
+                            <span className="text-gray-400 uppercase font-semibold">GST ({it.gstRatePercent}%)</span>
+                            <span className="text-right">{formatPrice(it.gstAmount)}</span>
+                            <span className="text-gray-400 uppercase font-semibold border-t border-gray-100 pt-1">Total</span>
+                            <span className="text-right font-bold text-gray-800 border-t border-gray-100 pt-1">{formatPrice(it.lineGrandTotal)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

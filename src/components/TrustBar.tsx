@@ -11,15 +11,15 @@ const features = [
 export default function TrustBar() {
   return (
     <section className="py-5 px-4 bg-[#129cd3]">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 xxs:grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+      <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         {features.map(({ icon: Icon, title, desc }) => (
           <div key={title} className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
               <Icon size={18} className="text-white" />
             </div>
             <div>
-              <p className="text-white font-bold text-xs">{title}</p>
-              <p className="text-[#b3e3f5] text-[11px]">{desc}</p>
+              <p className="trustbar-title text-white font-bold text-xs">{title}</p>
+              <p className="text-[#b3e3f5] text-[11px] leading-normal">{desc}</p>
             </div>
           </div>
         ))}

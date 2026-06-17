@@ -120,7 +120,7 @@ export default function HeroSlider({ slides }: Props) {
               fetchPriority={i === 0 ? "high" : "auto"}
               sizes="(min-width: 1280px) 832px, (min-width: 1024px) 768px, 100vw"
               draggable={false}
-              className="object-contain object-top lg:object-center xl:object-cover pointer-events-none"
+              className="object-contain object-center min-[600px]:object-top lg:object-center xl:object-cover pointer-events-none"
             />
           );
           const cellClass =

@@ -38,67 +38,68 @@ export default function ProductCard({ product }: { product: ListCard }) {
       {/* Image */}
       <Link
         href={`/products/${product.slug}`}
-        className="relative bg-gray-50 overflow-hidden block"
+        className="bg-gray-50 overflow-hidden block"
       >
-        {product.primaryImageUrl ? (
-          <div className="relative w-full h-44">
+        <div className="grid h-44">
+          {product.primaryImageUrl ? (
             <Image
               src={product.primaryImageUrl}
               alt={product.name}
-              fill
+              width={400}
+              height={400}
               sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
-              className="object-contain p-3 group-hover:scale-105 transition-transform duration-400"
+              className="w-full h-44 object-contain p-[10px] group-hover:scale-105 transition-transform duration-400 col-start-1 row-start-1"
             />
-          </div>
-        ) : (
-          <div className="w-full h-44" />
-        )}
-        {badge && (
-          <span
-            className={`absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded ${
-              badge === "NEW"
-                ? "bg-green-500"
-                : badge === "HOT"
-                ? "bg-red-500"
-                : "bg-[#129cd3]"
-            }`}
-          >
-            {badge}
-          </span>
-        )}
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            if (wishlistBusy) return;
-            if (status === "unauthenticated") {
-              const path = window.location.pathname + window.location.search;
-              router.push(`/login?next=${encodeURIComponent(path)}`);
-              return;
-            }
-            setWishlistBusy(true);
-            try {
-              if (wishlisted) {
-                await removeByProductId(product.id);
-              } else {
-                await addToWishlist(product.id);
+          ) : (
+            <div className="w-full h-44 col-start-1 row-start-1" />
+          )}
+          {badge && (
+            <span
+              className={`col-start-1 row-start-1 self-start justify-self-start m-2 text-white text-[10px] font-bold px-2 py-0.5 rounded ${
+                badge === "NEW"
+                  ? "bg-green-500"
+                  : badge === "HOT"
+                  ? "bg-red-500"
+                  : "bg-[#129cd3]"
+              }`}
+            >
+              {badge}
+            </span>
+          )}
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              if (wishlistBusy) return;
+              if (status === "unauthenticated") {
+                const path = window.location.pathname + window.location.search;
+                router.push(`/login?next=${encodeURIComponent(path)}`);
+                return;
               }
-            } catch {
-              // Silent fail on heart toggle — full-page error UX would be intrusive.
-            } finally {
-              setWishlistBusy(false);
-            }
-          }}
-          aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          className="absolute top-2 right-2 w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50"
-          disabled={wishlistBusy}
-        >
-          <Heart
-            size={14}
-            className={
-              wishlisted ? "fill-red-500 text-red-500" : "text-gray-400"
-            }
-          />
-        </button>
+              setWishlistBusy(true);
+              try {
+                if (wishlisted) {
+                  await removeByProductId(product.id);
+                } else {
+                  await addToWishlist(product.id);
+                }
+              } catch {
+                // Silent fail on heart toggle — full-page error UX would be intrusive.
+              } finally {
+                setWishlistBusy(false);
+              }
+            }}
+            aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+            className="col-start-1 row-start-1 self-start justify-self-end m-2 w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50 z-[999]"
+            disabled={wishlistBusy}
+          >
+            <Heart
+              size={14}
+              className={
+                wishlisted ? "fill-red-500 text-red-500" : "text-gray-400"
+              }
+            />
+          </button>
+        </div>
       </Link>
 
       {/* Info */}
