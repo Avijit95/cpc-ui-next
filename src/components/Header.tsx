@@ -164,7 +164,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
           </div>
 
           {/* Icons */}
-          <div className="flex items-center gap-[10px] md:gap-4">
+          <div className="flex items-center gap-[15px] xs:gap-[10px] md:gap-4">
             <Link href="/wishlist" className="flex flex-col items-center text-gray-600 hover:text-[#129cd3] transition-colors relative">
               <Heart size={22} className="hidden xs:block" />
               <Heart size={18} className="xs:hidden" />
