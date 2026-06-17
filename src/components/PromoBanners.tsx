@@ -25,7 +25,8 @@ const promos = [
 
 export default function PromoBanners() {
   return (
-    <section className="py-8 px-4 bg-gray-50 border-b border-gray-100">
+  <>
+    {/* <section className="py-8 px-4 bg-gray-50 border-b border-gray-100">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
         {promos.map((promo) => (
           <div
@@ -52,6 +53,7 @@ export default function PromoBanners() {
           </div>
         ))}
       </div>
-    </section>
+    </section> */}
+  </>
   );
 }
