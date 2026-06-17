@@ -22,6 +22,7 @@ import {
   Headphones,
   LogOut,
   ChevronRight,
+  ChevronLeft,
   Plus,
   Edit2,
   Trash2,
@@ -339,6 +340,11 @@ export default function AddressesPage() {
             <ChevronRight size={12} />
             <span className="text-gray-800 font-medium">Addresses</span>
           </div>
+        </div>
+        <div className="lg:hidden max-w-7xl mx-auto px-4 pt-4">
+          <Link href="/account" className="inline-flex items-center gap-1 text-sm text-[#129cd3] font-medium hover:underline">
+            <ChevronLeft size={16} /> Back to Account
+          </Link>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 py-8 flex gap-6">

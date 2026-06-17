@@ -164,15 +164,17 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
           </div>
 
           {/* Icons */}
-          <div className="flex items-center gap-4">
-            <Link href="/wishlist" className="hidden md:flex flex-col items-center text-gray-600 hover:text-[#129cd3] transition-colors relative">
-              <Heart size={22} />
+          <div className="flex items-center gap-[10px] md:gap-4">
+            <Link href="/wishlist" className="flex flex-col items-center text-gray-600 hover:text-[#129cd3] transition-colors relative">
+              <Heart size={22} className="hidden xs:block" />
+              <Heart size={18} className="xs:hidden" />
               {wishlistCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#129cd3] text-white text-[9px] rounded-full flex items-center justify-center font-bold">{wishlistCount}</span>
               )}
             </Link>
             <Link href="/cart" className="flex flex-col items-center text-gray-600 hover:text-[#129cd3] transition-colors relative">
-              <ShoppingCart size={22} />
+              <ShoppingCart size={22} className="hidden xs:block" />
+              <ShoppingCart size={18} className="xs:hidden" />
               {cartCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#129cd3] text-white text-[9px] rounded-full flex items-center justify-center font-bold">{cartCount}</span>
               )}
@@ -180,7 +182,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
             <Link
               href={accountHref}
               aria-label={isAuthed ? `Open ${user.name}'s profile` : "Sign in"}
-              className="hidden md:flex items-center text-gray-600 hover:text-[#129cd3] transition-colors"
+              className="flex items-center text-gray-600 hover:text-[#129cd3] transition-colors"
             >
               {isAuthed ? (
                 user.profilePicUrl ? (
@@ -188,15 +190,18 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
                   <img
                     src={user.profilePicUrl}
                     alt={user.name}
-                    className="w-9 h-9 rounded-full object-cover ring-2 ring-[#129cd3]"
+                    className="w-7 h-7 xs:w-9 xs:h-9 rounded-full object-cover ring-2 ring-[#129cd3]"
                   />
                 ) : (
-                  <span className="w-9 h-9 rounded-full bg-[#129cd3] text-white text-xs font-bold flex items-center justify-center ring-2 ring-[#129cd3]/20">
+                  <span className="w-7 h-7 xs:w-9 xs:h-9 rounded-full bg-[#129cd3] text-white text-[10px] xs:text-xs font-bold flex items-center justify-center ring-2 ring-[#129cd3]/20">
                     {initials(user.name)}
                   </span>
                 )
               ) : (
-                <User size={22} />
+                <>
+                  <User size={22} className="hidden xs:block" />
+                  <User size={18} className="xs:hidden" />
+                </>
               )}
             </Link>
             <button className="md:hidden text-gray-700" onClick={() => setMobileOpen(!mobileOpen)}>
@@ -248,36 +253,6 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
               {link.hasDropdown && <ChevronDown size={14} className="text-gray-400" />}
             </Link>
           ))}
-          <div className="flex gap-4 p-4 border-t border-gray-100">
-            {isAuthed ? (
-              <Link
-                href={accountHref}
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 text-gray-600 text-sm hover:text-[#129cd3] transition-colors"
-              >
-                {user.profilePicUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.profilePicUrl} alt={user.name} className="w-6 h-6 rounded-full object-cover" />
-                ) : (
-                  <span className="w-6 h-6 rounded-full bg-[#129cd3] text-white text-[10px] font-bold flex items-center justify-center">
-                    {initials(user.name)}
-                  </span>
-                )}
-                {user.name.split(" ")[0]}
-              </Link>
-            ) : (
-              <Link
-                href="/login"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 text-gray-600 text-sm hover:text-[#129cd3] transition-colors"
-              >
-                <User size={16} /> Sign In
-              </Link>
-            )}
-            <Link href="/wishlist" className="flex items-center gap-2 text-gray-600 text-sm hover:text-[#129cd3] transition-colors">
-              <Heart size={16} /> Wishlist
-            </Link>
-          </div>
         </div>
       )}
     </header>

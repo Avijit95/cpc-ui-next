@@ -14,6 +14,7 @@ import {
   Headphones,
   LogOut,
   ChevronRight,
+  ChevronDown,
   Loader2,
   ShieldAlert,
   Package,
@@ -98,6 +99,7 @@ export default function AccountPage() {
   const router = useRouter();
   const { user, status, logout } = useAuth();
   const { items: wishlistItems, loading: wishlistLoading } = useWishlist();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -167,35 +169,52 @@ export default function AccountPage() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 py-8 flex gap-6">
-          <aside className="w-64 flex-shrink-0 hidden lg:block">
+        <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col lg:flex-row gap-6">
+          <aside className="w-full lg:w-64 lg:flex-shrink-0">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="bg-[#129cd3] px-5 py-5 text-white">
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-2 overflow-hidden">
-                  {user.profilePicUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={user.profilePicUrl} alt={user.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[#129cd3] font-bold text-lg">{initials(user.name)}</span>
-                  )}
+              {/* Mobile: clickable header that toggles nav */}
+              <button
+                className="w-full bg-gradient-to-r from-[#129cd3] to-[#0e85b5] px-5 py-4 text-white text-left lg:cursor-default hover:from-[#10a8e0] hover:to-[#0c78a6] transition-all"
+                onClick={() => setSidebarOpen((o) => !o)}
+                aria-expanded={sidebarOpen}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 ring-white/40">
+                    {user.profilePicUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={user.profilePicUrl} alt={user.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-white font-bold text-base">{initials(user.name)}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">{user.name}</p>
+                    <p className="text-white/70 text-xs truncate mt-0.5">{user.email ?? user.phone ?? ""}</p>
+                  </div>
+                  <div className={`lg:hidden w-7 h-7 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 transition-transform ${sidebarOpen ? "rotate-180" : ""}`}>
+                    <ChevronDown size={15} />
+                  </div>
                 </div>
-                <p className="font-semibold">{user.name}</p>
-                <p className="text-[#b8e8f5] text-xs truncate">{user.email ?? user.phone ?? ""}</p>
-              </div>
-              <nav className="py-2">
+              </button>
+
+              {/* Nav — always visible on lg, toggleable below lg */}
+              <nav className={`py-2 ${sidebarOpen ? "block" : "hidden"} lg:block`}>
                 {sidebarItems.map((item) => (
-                  <Link
-                    key={item.key}
-                    href={item.href}
-                    className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${
-                      item.key === "dashboard"
-                        ? "bg-[#e8f7fc] text-[#129cd3] border-r-4 border-[#129cd3]"
-                        : "text-gray-600 hover:bg-gray-50 hover:text-[#129cd3]"
-                    }`}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </Link>
+                  <div key={item.key}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${
+                        item.key === "dashboard"
+                          ? "bg-[#e8f7fc] text-[#129cd3] border-r-4 border-[#129cd3]"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-[#129cd3]"
+                      }`}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </Link>
+                    <div className="h-px mx-5 bg-gradient-to-r from-transparent via-[#129cd3]/40 to-transparent" />
+                  </div>
                 ))}
                 <button
                   onClick={async () => {
@@ -212,7 +231,17 @@ export default function AccountPage() {
           </aside>
 
           <div className="flex-1 space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+            {/* Hello — mobile gradient */}
+            <div className="lg:hidden bg-gradient-to-br from-[#129cd3] to-[#0b7aa8] rounded-xl px-5 py-4">
+              <h1 className="text-xl font-bold text-white">
+                Hello, {user.name.split(" ")[0]} 👋
+              </h1>
+              <p className="text-sm text-blue-100 mt-1">
+                Welcome back! Here&apos;s a summary of your account.
+              </p>
+            </div>
+            {/* Hello — desktop */}
+            <div className="hidden lg:block bg-white rounded-xl border border-gray-200 px-6 py-5">
               <h1 className="text-xl font-bold text-gray-800">
                 Hello, {user.name.split(" ")[0]} 👋
               </h1>
@@ -258,19 +287,19 @@ export default function AccountPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-2 lg:gap-4">
               {[
                 { label: "Total Orders", value: ordersLoading ? "—" : String(totalOrders), icon: <ShoppingBag size={22} className="text-[#129cd3]" />, bg: "bg-[#e8f7fc]" },
                 { label: "Active Orders", value: ordersLoading ? "—" : String(activeOrders), icon: <LayoutDashboard size={22} className="text-orange-500" />, bg: "bg-orange-50" },
                 { label: "Wishlist", value: wishlistLoading ? "—" : String(wishlistItems.length), icon: <Heart size={22} className="text-red-500" />, bg: "bg-red-50" },
               ].map((card, i) => (
-                <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
-                  <div className={`${card.bg} rounded-xl w-12 h-12 flex items-center justify-center flex-shrink-0`}>
+                <div key={i} className={`rounded-xl border border-gray-100 lg:border-gray-200 p-3 lg:p-5 flex flex-col lg:flex-row items-center lg:items-center gap-1 lg:gap-4 ${card.bg} lg:bg-white`}>
+                  <div className={`hidden lg:flex ${card.bg} rounded-xl w-12 h-12 items-center justify-center flex-shrink-0`}>
                     {card.icon}
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-800">{card.value}</p>
-                    <p className="text-sm text-gray-500">{card.label}</p>
+                  <div className="text-center lg:text-left">
+                    <p className="text-xl lg:text-2xl font-bold text-gray-800">{card.value}</p>
+                    <p className="text-[11px] lg:text-sm text-gray-500 leading-tight">{card.label}</p>
                   </div>
                 </div>
               ))}

@@ -10,7 +10,7 @@ import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
 import { isApiError, wishlistApi } from "@/lib/api";
 import type { WishlistCardItem } from "@/lib/api";
-import { X, ShoppingCart, Heart, ChevronRight, Check, Loader2 } from "lucide-react";
+import { X, ShoppingCart, Heart, ChevronRight, ChevronLeft, Check, Loader2 } from "lucide-react";
 
 function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
@@ -128,6 +128,11 @@ export default function WishlistPage() {
             <ChevronRight size={12} />
             <span className="text-gray-800 font-medium">Wishlist</span>
           </div>
+        </div>
+        <div className="lg:hidden max-w-7xl mx-auto px-4 pt-4">
+          <Link href="/account" className="inline-flex items-center gap-1 text-sm text-[#129cd3] font-medium hover:underline">
+            <ChevronLeft size={16} /> Back to Account
+          </Link>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 py-8">
