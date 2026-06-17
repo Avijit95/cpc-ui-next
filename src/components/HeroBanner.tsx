@@ -38,7 +38,7 @@ export default async function HeroBanner() {
     <section className="bg-gray-100">
       <div className="max-w-7xl mx-auto flex">
         {/* Left Sidebar */}
-        <div className="hidden lg:block w-52 flex-shrink-0 bg-white shadow-sm">
+        <div className="hidden lg:block w-[170px] xl:w-52 flex-shrink-0 bg-white shadow-sm">
           <div className="bg-[#129cd3] text-white px-4 py-3 flex items-center gap-2 font-semibold text-sm cursor-pointer">
             <span className="text-lg leading-none">☰</span> ALL CATEGORIES
           </div>
@@ -70,13 +70,13 @@ export default async function HeroBanner() {
         </div>
 
         {/* Center Slider */}
-        <div className="flex-1 overflow-hidden relative min-h-[200px] sm:min-h-[320px]">
+        <div className="flex-1 overflow-hidden relative max-lg:h-[clamp(110px,36.2vw,370px)] max-lg:min-h-[inherit] lg:min-h-[370px] xl:min-h-[320px] bg-black">
           <HeroSlider slides={heroSlides} />
         </div>
 
         {/* Right Banners */}
         {sideBanners.length > 0 && (
-          <div className="hidden xl:flex flex-col w-48 flex-shrink-0 border-l border-gray-200">
+          <div className="hidden lg:flex flex-col w-[170px] xl:w-48 flex-shrink-0 border-l border-gray-200">
             {sideBanners.map((banner) => {
               const href = banner.linkUrl ?? "#";
               return (

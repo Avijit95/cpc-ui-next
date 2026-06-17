@@ -130,7 +130,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
       </div>
 
       {/* Main Header */}
-      <div className="bg-white border-b border-gray-200 py-3 px-4">
+      <div className="bg-white border-b border-gray-200 py-3 px-[7px] xs:px-4">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           {/* Logo */}
           <Link href="/" className="flex items-center flex-shrink-0">
@@ -144,7 +144,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search for products..."
-              className="flex-1 outline-none text-sm px-4 py-2.5 text-gray-700 placeholder-gray-400"
+              className="flex-1 outline-none text-sm px-[7px] py-2.5 xs:px-4 text-gray-700 placeholder-gray-400"
             />
             <button type="submit" className="bg-[#0a6e99] hover:bg-[#08597f] text-white px-5 py-2.5 flex items-center gap-2 transition-colors flex-shrink-0">
               <Search size={16} />

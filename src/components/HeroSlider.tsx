@@ -51,7 +51,7 @@ export default function HeroSlider({ slides }: Props) {
   }, [noAnim]);
 
   if (slideCount === 0) {
-    return <div className="h-full min-h-[200px] sm:min-h-[320px] bg-gray-100" />;
+    return <div className="h-full lg:min-h-[370px] xl:min-h-[320px] bg-gray-100" />;
   }
 
   const startDrag = (e: React.PointerEvent) => {
@@ -120,11 +120,11 @@ export default function HeroSlider({ slides }: Props) {
               fetchPriority={i === 0 ? "high" : "auto"}
               sizes="(min-width: 1280px) 832px, (min-width: 1024px) 768px, 100vw"
               draggable={false}
-              className="object-contain object-center md:object-cover pointer-events-none"
+              className="object-contain object-top lg:object-center xl:object-cover pointer-events-none"
             />
           );
           const cellClass =
-            "relative w-full flex-shrink-0 h-full min-h-[200px] sm:min-h-[320px]";
+            "relative w-full flex-shrink-0 h-full lg:min-h-[370px] xl:min-h-[320px] bg-black";
           return slide.linkUrl ? (
             <a
               key={slide.id}
@@ -147,7 +147,7 @@ export default function HeroSlider({ slides }: Props) {
       </div>
 
       {slideCount > 1 && (
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/30 backdrop-blur-sm rounded-full px-2 py-1">
+        <div className="absolute bottom-[5px] lg:bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/30 backdrop-blur-sm rounded-full px-2 py-1">
           {slides.map((_, i) => (
             <button
               key={i}

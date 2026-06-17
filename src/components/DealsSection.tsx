@@ -152,7 +152,7 @@ export default function DealsSection() {
               BEST SELLERS
             </h2>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4">
             {bestSellers.slice(0, 8).map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
@@ -191,40 +191,52 @@ export default function DealsSection() {
               <Countdown endsAt={deal.endsAt} />
             </div>
 
-            <div className="p-5 pt-14 flex items-center gap-3 relative">
-              {/* Prev Arrow */}
-              <button
-                onClick={() =>
-                  setDealIdx(
-                    (i) => (i - 1 + liveDeals.length) % liveDeals.length,
-                  )
-                }
-                className="flex-shrink-0 w-8 h-12 bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 flex items-center justify-center transition-colors"
-                aria-label="Previous deal"
-              >
-                <ChevronLeft size={18} />
-              </button>
+            <div className="p-5 pt-14 flex flex-col xs:flex-row xs:items-center gap-3 relative">
+              {/* Image row: arrows flank the image on all sizes */}
+              <div className="flex items-center justify-center gap-3 xs:contents">
+                {/* Prev Arrow */}
+                <button
+                  onClick={() =>
+                    setDealIdx(
+                      (i) => (i - 1 + liveDeals.length) % liveDeals.length,
+                    )
+                  }
+                  className="flex-shrink-0 w-8 h-12 bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 flex items-center justify-center transition-colors"
+                  aria-label="Previous deal"
+                >
+                  <ChevronLeft size={18} />
+                </button>
 
-              {/* Product Image */}
-              <Link
-                href={`/products/${deal.product.slug}`}
-                className="relative flex-shrink-0"
-              >
-                {deal.product.primaryImageUrl ? (
-                  <Image
-                    src={deal.product.primaryImageUrl}
-                    alt={deal.product.name}
-                    width={160}
-                    height={160}
-                    className="w-28 h-28 sm:w-40 sm:h-40 object-contain"
-                  />
-                ) : (
-                  <div className="w-28 h-28 sm:w-40 sm:h-40 bg-gray-100" />
-                )}
-                <span className="absolute top-1 right-1 bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center">
-                  -{deal.percentOff}%
-                </span>
-              </Link>
+                {/* Product Image */}
+                <Link
+                  href={`/products/${deal.product.slug}`}
+                  className="relative flex-shrink-0"
+                >
+                  {deal.product.primaryImageUrl ? (
+                    <Image
+                      src={deal.product.primaryImageUrl}
+                      alt={deal.product.name}
+                      width={160}
+                      height={160}
+                      className="w-28 h-28 sm:w-40 sm:h-40 object-contain"
+                    />
+                  ) : (
+                    <div className="w-28 h-28 sm:w-40 sm:h-40 bg-gray-100" />
+                  )}
+                  <span className="absolute top-1 right-1 bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center">
+                    -{deal.percentOff}%
+                  </span>
+                </Link>
+
+                {/* Next Arrow */}
+                <button
+                  onClick={() => setDealIdx((i) => (i + 1) % liveDeals.length)}
+                  className="flex-shrink-0 w-8 h-12 bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 flex items-center justify-center transition-colors"
+                  aria-label="Next deal"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
 
               {/* Details */}
               <div className="flex-1 min-w-0">
@@ -249,15 +261,6 @@ export default function DealsSection() {
                   </span>
                 </div>
               </div>
-
-              {/* Next Arrow */}
-              <button
-                onClick={() => setDealIdx((i) => (i + 1) % liveDeals.length)}
-                className="flex-shrink-0 w-8 h-12 bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 flex items-center justify-center transition-colors"
-                aria-label="Next deal"
-              >
-                <ChevronRight size={18} />
-              </button>
             </div>
           </div>
 

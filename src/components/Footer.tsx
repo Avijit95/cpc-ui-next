@@ -22,10 +22,11 @@ export default function Footer() {
   return (
     <footer className="bg-gray-800 text-gray-400">
       {/* Main Footer */}
-      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6">
+      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 xs:grid-cols-3 lg:grid-cols-6 gap-6 text-center xs:text-left">
         {/* Contact column */}
-        <div className="col-span-2">
-          <h4 className="text-white font-bold text-xs mb-3 uppercase tracking-wide">CONTACT US</h4>
+        <div className="xs:col-span-2">
+          <h4 className="text-white font-bold text-xs uppercase tracking-wide mb-1">CONTACT US</h4>
+          <div className="h-px bg-gradient-to-r from-transparent via-[#129cd3] to-transparent mb-3 xs:hidden" />
           <p className="text-xs text-gray-400 mb-3 leading-relaxed">
             Your trusted destination for premium electronics at the best prices in India.
           </p>
@@ -48,7 +49,7 @@ export default function Footer() {
               <span className="text-gray-300 font-semibold">IEC:</span> {SELLER_IEC}
             </p>
           )}
-          <div className="flex gap-2 mt-4 mb-4">
+          <div className="flex gap-2 mt-4 mb-4 justify-center xs:justify-start">
             {["f", "𝕏", "in", "▶"].map((label, i) => (
               <a
                 key={i}
@@ -59,7 +60,7 @@ export default function Footer() {
               </a>
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 justify-center xs:justify-start">
             <a href="#" className="bg-gray-700 hover:bg-[#129cd3] text-white text-xs px-3 py-1.5 rounded transition-colors">
               App Store
             </a>
@@ -81,7 +82,8 @@ export default function Footer() {
         {/* Link columns */}
         {Object.entries(footerLinks).map(([title, links]) => (
           <div key={title}>
-            <h4 className="text-white font-bold text-xs mb-3 uppercase tracking-wide">{title}</h4>
+            <h4 className="text-white font-bold text-xs uppercase tracking-wide mb-1">{title}</h4>
+            <div className="h-px bg-gradient-to-r from-transparent via-[#129cd3] to-transparent mb-3 xs:hidden" />
             <ul className="space-y-2">
               {links.map((link) => (
                 <li key={link}>
@@ -96,7 +98,7 @@ export default function Footer() {
       </div>
 
       {/* Newsletter */}
-      <div className="border-t border-gray-700 py-5 px-4">
+      <div className="border-t border-gray-700 py-5 px-[10px] xs:px-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-gray-300 font-medium whitespace-nowrap">
             Subscribe for exclusive deals &amp; offers:
