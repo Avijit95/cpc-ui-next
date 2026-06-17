@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
+import { useCart } from "@/lib/cart/CartProvider";
 import { isApiError, wishlistApi } from "@/lib/api";
 import type { WishlistCardItem } from "@/lib/api";
 import { X, ShoppingCart, Heart, ChevronRight, Check, Loader2 } from "lucide-react";
@@ -21,6 +22,7 @@ export default function WishlistPage() {
   const router = useRouter();
   const { status } = useAuth();
   const { items, loading, error, setItems, refresh } = useWishlist();
+  const { setCart: syncHeaderCart } = useCart();
 
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearBusy, setClearBusy] = useState(false);
@@ -81,8 +83,10 @@ export default function WishlistPage() {
       setLineErr(id, null);
       try {
         const resp = await wishlistApi.moveToCart(id, { qty: 1 });
-        // The API returns the updated wishlist; sync the provider so other surfaces stay accurate.
+        // The API returns the updated wishlist + cart; sync both providers so
+        // other surfaces (incl. the header badges) stay accurate.
         setItems(resp.wishlist.items);
+        syncHeaderCart(resp.cart);
         setMove(id, "moved");
         // Item leaves the grid on next render anyway (provider state changed).
       } catch (err) {
@@ -94,7 +98,7 @@ export default function WishlistPage() {
         window.setTimeout(() => setMove(id, "idle"), 2000);
       }
     },
-    [setItems],
+    [setItems, syncHeaderCart],
   );
 
   const handleClearAll = useCallback(async () => {

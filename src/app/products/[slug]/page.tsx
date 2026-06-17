@@ -9,6 +9,7 @@ import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
 import type { ProductDetail, Variant, Review, ReviewListResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
+import { useCart } from "@/lib/cart/CartProvider";
 import {
   Star,
   Heart,
@@ -175,8 +176,10 @@ export default function ProductDetailPage() {
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
   const [addState, setAddState] = useState<AddState>("idle");
   const [addError, setAddError] = useState<string | null>(null);
+  const [buying, setBuying] = useState(false);
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
+  const { setCart: syncHeaderCart } = useCart();
   const wishlisted = product ? isWishlisted(product.id) : false;
 
   // Reviews state.
@@ -728,11 +731,13 @@ export default function ProductDetailPage() {
                     setAddState("busy");
                     setAddError(null);
                     try {
-                      await cartApi.addItem({
-                        productId: product.id,
-                        variantId: selectedVariant?.id,
-                        qty,
-                      });
+                      syncHeaderCart(
+                        await cartApi.addItem({
+                          productId: product.id,
+                          variantId: selectedVariant?.id,
+                          qty,
+                        }),
+                      );
                       setAddState("added");
                       window.setTimeout(() => setAddState("idle"), 1500);
                     } catch (err) {
@@ -766,8 +771,38 @@ export default function ProductDetailPage() {
                     </>
                   )}
                 </button>
-                <button className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-lg transition-colors">
-                  Buy Now
+                <button
+                  onClick={async () => {
+                    if (status === "unauthenticated") {
+                      const path = `/products/${slug}`;
+                      router.push(`/login?next=${encodeURIComponent(path)}`);
+                      return;
+                    }
+                    if (!product) return;
+                    setBuying(true);
+                    setAddError(null);
+                    try {
+                      syncHeaderCart(
+                        await cartApi.addItem({
+                          productId: product.id,
+                          variantId: selectedVariant?.id,
+                          qty,
+                        }),
+                      );
+                      router.push("/checkout");
+                    } catch (err) {
+                      setBuying(false);
+                      setAddError(
+                        isApiError(err)
+                          ? err.displayMessage
+                          : "Could not start checkout",
+                      );
+                    }
+                  }}
+                  disabled={!inStock || buying}
+                  className={`flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-lg transition-colors ${(!inStock || buying) ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
+                  {buying ? "Starting…" : "Buy Now"}
                 </button>
               </div>
               {addError && (

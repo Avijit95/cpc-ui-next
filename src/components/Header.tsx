@@ -16,6 +16,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useWishlist } from "@/lib/wishlist/WishlistProvider";
+import { useCart } from "@/lib/cart/CartProvider";
 import { catalogApi } from "@/lib/api";
 
 type NavLink = {
@@ -63,6 +65,9 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
   const { user, status } = useAuth();
   const isAuthed = status === "authenticated" && !!user;
   const accountHref = "/account";
+  const { items: wishlistItems } = useWishlist();
+  const { count: cartCount } = useCart();
+  const wishlistCount = wishlistItems.length;
 
   useEffect(() => {
     if (initialNavLinks) return;
@@ -162,11 +167,15 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
           <div className="flex items-center gap-4">
             <Link href="/wishlist" className="hidden md:flex flex-col items-center text-gray-600 hover:text-[#129cd3] transition-colors relative">
               <Heart size={22} />
-              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#129cd3] text-white text-[9px] rounded-full flex items-center justify-center font-bold">3</span>
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#129cd3] text-white text-[9px] rounded-full flex items-center justify-center font-bold">{wishlistCount}</span>
+              )}
             </Link>
             <Link href="/cart" className="flex flex-col items-center text-gray-600 hover:text-[#129cd3] transition-colors relative">
               <ShoppingCart size={22} />
-              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#129cd3] text-white text-[9px] rounded-full flex items-center justify-center font-bold">2</span>
+              {cartCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#129cd3] text-white text-[9px] rounded-full flex items-center justify-center font-bold">{cartCount}</span>
+              )}
             </Link>
             <Link
               href={accountHref}

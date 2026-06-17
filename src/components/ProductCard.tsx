@@ -9,6 +9,7 @@ import { cartApi, isApiError } from "@/lib/api";
 import type { ListCard } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
+import { useCart } from "@/lib/cart/CartProvider";
 
 function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
@@ -22,6 +23,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
   const router = useRouter();
   const { status } = useAuth();
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
+  const { setCart: syncHeaderCart } = useCart();
   const wishlisted = isWishlisted(product.id);
   const hasDiscount = product.basePrice > product.finalPrice;
   const discount = hasDiscount
@@ -164,7 +166,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
             }
             setAddState("busy");
             try {
-              await cartApi.addItem({ productId: product.id, qty: 1 });
+              syncHeaderCart(await cartApi.addItem({ productId: product.id, qty: 1 }));
               setAddState("added");
               window.setTimeout(() => setAddState("idle"), 1500);
             } catch (err) {
