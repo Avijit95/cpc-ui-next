@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
@@ -81,17 +81,25 @@ function ProductsPageInner() {
   const [minRating, setMinRating] = useState<number | null>(null);
   const [sortLabel, setSortLabel] = useState<string>("Featured");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [headerHeight, setHeaderHeight] = useState(0);
+  // const [headerHeight, setHeaderHeight] = useState(0);
 
   // useEffect(() => {
   //   const header = document.querySelector("header");
   //   if (header) setHeaderHeight(header.offsetHeight);
   // }, []);
-  useEffect(() => {
+  
+const [headerHeight, setHeaderHeight] = useState(0);
+
+useEffect(() => {
   const header = document.querySelector("header");
   if (!header) return;
-  const height = header.offsetHeight;
-  setHeaderHeight(height);  // ✅ same thing but lint is happier
+
+  const observer = new ResizeObserver(([entry]) => {
+    setHeaderHeight(entry.contentRect.height);
+  });
+
+  observer.observe(header);
+  return () => observer.disconnect();
 }, []);
 
   const [data, setData] = useState<ProductListResponse | null>(null);
