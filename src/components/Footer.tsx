@@ -22,9 +22,9 @@ export default function Footer() {
   return (
     <footer className="bg-gray-800 text-gray-400">
       {/* Main Footer */}
-      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-1 xs:grid-cols-3 lg:grid-cols-6 gap-6 text-center xs:text-left">
+      <div className="max-w-7xl mx-auto px-4 py-10 grid grid-cols-2 xs:grid-cols-3 lg:grid-cols-6 gap-6 text-center xs:text-left">
         {/* Contact column */}
-        <div className="xs:col-span-2">
+        <div className="col-span-2 xs:col-span-2">
           <h4 className="text-white font-bold text-xs uppercase tracking-wide mb-1">CONTACT US</h4>
           <div className="h-px bg-gradient-to-r from-transparent via-[#129cd3] to-transparent mb-3 xs:hidden" />
           <p className="text-xs text-gray-400 mb-3 leading-relaxed">
