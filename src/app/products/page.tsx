@@ -81,13 +81,6 @@ function ProductsPageInner() {
   const [minRating, setMinRating] = useState<number | null>(null);
   const [sortLabel, setSortLabel] = useState<string>("Featured");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // const [headerHeight, setHeaderHeight] = useState(0);
-
-  // useEffect(() => {
-  //   const header = document.querySelector("header");
-  //   if (header) setHeaderHeight(header.offsetHeight);
-  // }, []);
-  
 const [headerHeight, setHeaderHeight] = useState(0);
 
 useEffect(() => {
