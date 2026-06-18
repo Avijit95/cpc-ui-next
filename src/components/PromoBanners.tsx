@@ -1,27 +1,27 @@
-import Image from "next/image";
+// import Image from "next/image";
 
-const promos = [
-  {
-    id: 1,
-    label: "COLORFUL DEALS",
-    title: "Punchy Audio Gear",
-    price: "Starting ₹1,299",
-    bg: "bg-gradient-to-r from-orange-100 to-yellow-50",
-    border: "border-[#b3e3f5]",
-    textColor: "text-[#0a6e99]",
-    image: "https://placehold.co/280x150/fed7aa/9a3412?text=Audio+Deals",
-  },
-  {
-    id: 2,
-    label: "GOING WIRELESS?",
-    title: "Latest Earphone Collection",
-    price: "Starting ₹2,499",
-    bg: "bg-gradient-to-r from-blue-100 to-cyan-50",
-    border: "border-blue-200",
-    textColor: "text-blue-700",
-    image: "https://placehold.co/280x150/bfdbfe/1e40af?text=Earphones",
-  },
-];
+// const promos = [
+//   {
+//     id: 1,
+//     label: "COLORFUL DEALS",
+//     title: "Punchy Audio Gear",
+//     price: "Starting ₹1,299",
+//     bg: "bg-gradient-to-r from-orange-100 to-yellow-50",
+//     border: "border-[#b3e3f5]",
+//     textColor: "text-[#0a6e99]",
+//     image: "https://placehold.co/280x150/fed7aa/9a3412?text=Audio+Deals",
+//   },
+//   {
+//     id: 2,
+//     label: "GOING WIRELESS?",
+//     title: "Latest Earphone Collection",
+//     price: "Starting ₹2,499",
+//     bg: "bg-gradient-to-r from-blue-100 to-cyan-50",
+//     border: "border-blue-200",
+//     textColor: "text-blue-700",
+//     image: "https://placehold.co/280x150/bfdbfe/1e40af?text=Earphones",
+//   },
+// ];
 
 export default function PromoBanners() {
   return (

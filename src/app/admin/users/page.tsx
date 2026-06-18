@@ -127,7 +127,7 @@ export default function UsersPage() {
 
   // Live users — used by customers + admins tabs.
   const [users, setUsers] = useState<AdminUserRow[]>([]);
-  const [usersTotal, setUsersTotal] = useState(0);
+  // const [usersTotal, setUsersTotal] = useState(0);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersErr, setUsersErr] = useState<string | null>(null);
   const [usersBusy, setUsersBusy] = useState<string | null>(null);
@@ -135,7 +135,7 @@ export default function UsersPage() {
   // Partners tab (Sprint 1) — still uses the dedicated partners endpoint.
   const [partnerStatus, setPartnerStatus] = useState<KycStatus>("PENDING");
   const [partners, setPartners] = useState<AdminPartner[]>([]);
-  const [partnersTotal, setPartnersTotal] = useState(0);
+  // const [partnersTotal, setPartnersTotal] = useState(0);
   const [partnersErr, setPartnersErr] = useState<string | null>(null);
   const [partnersLoading, setPartnersLoading] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -195,7 +195,7 @@ export default function UsersPage() {
       .then((resp) => {
         if (cancelled) return;
         setUsers(resp.rows);
-        setUsersTotal(resp.total);
+        // setUsersTotal(resp.total);
         setUsersErr(null);
       })
       .catch((err) => {
@@ -236,7 +236,7 @@ export default function UsersPage() {
       .then((data) => {
         if (cancelled) return;
         setPartners(data.items);
-        setPartnersTotal(data.total);
+        // setPartnersTotal(data.total);
         setPartnersErr(null);
       })
       .catch((err) => {
@@ -356,8 +356,9 @@ export default function UsersPage() {
       .filter(Boolean)
       .some((v) => v!.toLowerCase().includes(query.toLowerCase())),
   );
-
+ 
   return (
+   
     <>
       <AdminHeader
         title="Users & Roles"

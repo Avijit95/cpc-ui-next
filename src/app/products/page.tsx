@@ -83,10 +83,16 @@ function ProductsPageInner() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
 
+  // useEffect(() => {
+  //   const header = document.querySelector("header");
+  //   if (header) setHeaderHeight(header.offsetHeight);
+  // }, []);
   useEffect(() => {
-    const header = document.querySelector("header");
-    if (header) setHeaderHeight(header.offsetHeight);
-  }, []);
+  const header = document.querySelector("header");
+  if (!header) return;
+  const height = header.offsetHeight;
+  setHeaderHeight(height);  // ✅ same thing but lint is happier
+}, []);
 
   const [data, setData] = useState<ProductListResponse | null>(null);
   const [loading, setLoading] = useState(true);
