@@ -11,7 +11,7 @@ import { serverGetNavLinks, serverListProducts } from "@/lib/api/server";
 
 export default async function Home() {
   const [tabsInitial, navLinks] = await Promise.all([
-    serverListProducts({ newOnly: true, limit: 8 }),
+    serverListProducts({ newOnly: true, limit: 7 }),
     serverGetNavLinks(),
   ]);
 

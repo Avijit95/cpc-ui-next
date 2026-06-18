@@ -45,12 +45,27 @@ html {
   scroll-behavior: smooth;
 }
 
-.category-slider {
+@media (max-width: 639px) {
+  .product-section-slider {
+    gap: clamp(7px, 2.51vw, 16px) !important;
+  }
+}
+
+.category-slider,
+.product-section-slider {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-.category-slider::-webkit-scrollbar {
+.category-slider::-webkit-scrollbar,
+.product-section-slider::-webkit-scrollbar {
   display: none;
+}
+.product-section-slider .slider-item {
+  display: flex;
+  flex-direction: column;
+}
+.product-section-slider .slider-item > * {
+  flex: 1;
 }
 
 
