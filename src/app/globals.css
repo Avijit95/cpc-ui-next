@@ -45,7 +45,24 @@ html {
   scroll-behavior: smooth;
 }
 
+
+
+@media (max-width: 639px) {
+  .wishlist-card {
+    height: clamp(260px, 55.1vw, 352px) !important;
+  }
+  .wishlist-grid {
+    gap: clamp(7px, 2.35vw, 15px) !important;
+  }
+}
+
 @media (max-width: 499px) {
+  .product-home-card {
+    /* height: clamp(255px, 65vw, 310px) !important; */
+  }
+  .product-home-grid {
+    gap: clamp(7px, 2.35vw, 15px) !important;
+  }
   .trustbar-title {
     font-size: 11px;
     line-height: normal;

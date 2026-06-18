@@ -164,7 +164,7 @@ export default function WishlistPage() {
           {items.length === 0 ? (
             <EmptyWishlist />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            <div className="wishlist-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
               {items.map((item) => {
                 const id = item.wishlistItemId;
                 const move = moveState[id] ?? "idle";
@@ -182,7 +182,7 @@ export default function WishlistPage() {
                 return (
                   <div
                     key={id}
-                    className="bg-white rounded-xl border border-gray-200 overflow-hidden group relative hover:shadow-md transition-shadow flex flex-col"
+                    className="bg-white rounded-xl border border-gray-200 overflow-hidden group relative hover:shadow-md transition-shadow flex flex-col wishlist-card"
                   >
                     {/* Remove button */}
                     <button
@@ -217,35 +217,35 @@ export default function WishlistPage() {
                     {/* Image */}
                     <Link
                       href={`/products/${item.slug}`}
-                      className="block bg-gray-50 overflow-hidden"
+                      className="flex-1 min-h-0 sm:flex-none block bg-gray-50 overflow-hidden"
                     >
                       {item.primaryImageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={item.primaryImageUrl}
                           alt={item.name}
-                          className="w-full h-48 object-contain p-[10px] group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full sm:h-48 object-contain p-[10px] group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
-                        <div className="w-full h-48 bg-gray-100" />
+                        <div className="w-full h-full sm:h-48 bg-gray-100" />
                       )}
                     </Link>
 
                     {/* Info */}
-                    <div className="p-4 flex flex-col flex-1">
+                    <div className="p-4 max-[639px]:p-[10px] flex flex-col shrink-0 sm:flex-1">
                       {item.brand && (
                         <p className="text-[10px] text-[#129cd3] font-semibold uppercase mb-1">
                           {item.brand}
                         </p>
                       )}
                       <Link href={`/products/${item.slug}`}>
-                        <h3 className="text-sm font-semibold text-gray-800 mb-3 line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors">
+                        <h3 className="text-sm max-[639px]:text-[13px] max-[639px]:leading-normal font-semibold text-gray-800 mb-3 max-[639px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors">
                           {item.name}
                         </h3>
                       </Link>
 
-                      <div className="flex items-baseline gap-2 mb-4 mt-auto">
-                        <span className="text-base font-bold text-[#129cd3]">
+                      <div className="flex items-baseline gap-2 mb-4 max-[639px]:mb-[5px] mt-auto">
+                        <span className="text-base max-[639px]:text-[14px] max-[639px]:leading-normal font-bold text-[#129cd3]">
                           {formatPrice(item.finalPrice)}
                         </span>
                         {hasDiscount && (
@@ -375,7 +375,7 @@ function WishlistSkeleton() {
                 key={i}
                 className="bg-white rounded-xl border border-gray-200 overflow-hidden"
               >
-                <div className="bg-gray-100 w-full h-48 animate-pulse" />
+                <div className="bg-gray-100 w-full sm:h-48 animate-pulse" />
                 <div className="p-4 space-y-2">
                   <div className="h-3 w-12 bg-gray-100 rounded animate-pulse" />
                   <div className="h-4 w-3/4 bg-gray-100 rounded animate-pulse" />

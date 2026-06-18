@@ -34,13 +34,13 @@ export default function ProductCard({ product }: { product: ListCard }) {
   const badge = product.badges[0];
 
   return (
-    <div className="group bg-white border border-gray-200 hover:border-[#8dd4ee] hover:shadow-md transition-all overflow-hidden flex flex-col">
+    <div className="product-home-card group bg-white border border-gray-200 hover:border-[#8dd4ee] hover:shadow-md transition-all overflow-hidden flex flex-col max-[499px]:rounded-xl">
       {/* Image */}
       <Link
         href={`/products/${product.slug}`}
-        className="bg-gray-50 overflow-hidden block"
+        className="bg-gray-50 overflow-hidden block shrink-0"
       >
-        <div className="grid h-44">
+        <div className="grid h-44 max-[499px]:h-32">
           {product.primaryImageUrl ? (
             <Image
               src={product.primaryImageUrl}
@@ -48,10 +48,10 @@ export default function ProductCard({ product }: { product: ListCard }) {
               width={400}
               height={400}
               sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
-              className="w-full h-44 object-contain p-[10px] group-hover:scale-105 transition-transform duration-400 col-start-1 row-start-1"
+              className="w-full h-44 max-[499px]:h-32 object-contain p-[10px] group-hover:scale-105 transition-transform duration-400 col-start-1 row-start-1"
             />
           ) : (
-            <div className="w-full h-44 col-start-1 row-start-1" />
+            <div className="w-full h-44 max-[499px]:h-32 bg-gray-100 col-start-1 row-start-1" />
           )}
           {badge && (
             <span
@@ -103,14 +103,14 @@ export default function ProductCard({ product }: { product: ListCard }) {
       </Link>
 
       {/* Info */}
-      <div className="p-3 flex flex-col flex-1">
+      <div className="p-3 max-[499px]:p-[10px] flex flex-col flex-1 min-h-0">
         {product.brand && (
           <p className="text-[10px] text-[#129cd3] font-semibold uppercase mb-1">
             {product.brand}
           </p>
         )}
         <Link href={`/products/${product.slug}`}>
-          <h3 className="text-xs font-semibold text-gray-800 mb-2 line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
+          <h3 className="text-xs max-[499px]:text-[13px] max-[499px]:leading-normal font-semibold text-gray-800 mb-2 max-[499px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
             {product.name}
           </h3>
         </Link>
@@ -141,8 +141,8 @@ export default function ProductCard({ product }: { product: ListCard }) {
         )}
 
         {/* Price */}
-        <div className="flex items-baseline gap-2 mb-3 mt-auto">
-          <span className="text-sm font-bold text-[#129cd3]">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-3 max-[499px]:mb-[5px] mt-auto">
+          <span className="text-sm max-[499px]:text-[14px] max-[499px]:leading-normal font-bold text-[#129cd3]">
             {formatPrice(product.finalPrice)}
           </span>
           {hasDiscount && (
@@ -182,7 +182,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
               ? "bg-green-50 border border-green-500 text-green-600"
               : addState === "error"
               ? "bg-red-50 border border-red-300 text-red-600"
-              : "bg-white border border-[#129cd3] text-[#129cd3] hover:bg-[#129cd3] hover:text-white"
+              : "bg-white border border-[#129cd3] text-[#129cd3] hover:bg-[#129cd3] hover:text-white max-[499px]:bg-[#129cd3] max-[499px]:text-white max-[499px]:border-transparent max-[499px]:hover:bg-[#0e87b5]"
           } ${addState === "busy" ? "opacity-60 cursor-wait" : ""}`}
         >
           {addState === "added" ? (
@@ -205,7 +205,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
 export function ProductCardSkeleton() {
   return (
     <div className="bg-white border border-gray-200 overflow-hidden flex flex-col">
-      <div className="bg-gray-100 w-full h-44 animate-pulse" />
+      <div className="bg-gray-100 w-full h-44 max-[499px]:h-32 animate-pulse" />
       <div className="p-3 flex flex-col flex-1 gap-2">
         <div className="h-2 w-12 bg-gray-100 rounded animate-pulse" />
         <div className="h-3 w-full bg-gray-100 rounded animate-pulse" />

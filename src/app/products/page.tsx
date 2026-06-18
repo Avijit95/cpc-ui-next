@@ -418,16 +418,16 @@ function ProductsPageInner() {
           <div className="flex gap-6">
             {/* Sidebar — desktop */}
             <div className="hidden lg:block w-56 flex-shrink-0">
-              <div className="bg-white border border-gray-200 rounded-lg p-5 sticky top-24">
+              <div className="bg-white border border-gray-200 rounded-lg p-5 sticky top-24 z-[9999] max-h-[calc(100vh-7rem)] overflow-y-auto">
                 {filterSidebar}
               </div>
             </div>
 
             {/* Mobile sidebar overlay */}
             {sidebarOpen && (
-              <div className="lg:hidden fixed inset-0 z-[60] flex">
+              <div className="lg:hidden fixed inset-0 z-[9999] flex">
                 <div className="fixed inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
-                <div className="relative bg-white w-72 h-full overflow-y-auto p-5 z-50">
+                <div className="relative bg-white w-72 h-full overflow-y-auto p-5 z-[9999]">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="font-bold text-gray-800">Filters</h2>
                     <button onClick={() => setSidebarOpen(false)} className="text-gray-500 hover:text-gray-800">✕</button>

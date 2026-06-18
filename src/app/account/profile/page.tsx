@@ -270,13 +270,13 @@ function ProfileInner({ user }: { user: PublicUser }) {
             </div>
           </aside>
 
-          <div className="flex-1 space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+          <div className="flex-1 min-w-0 space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-5">
               <h1 className="text-xl font-bold text-gray-800">Profile</h1>
               <p className="text-sm text-gray-500 mt-1">Manage your account details.</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+            <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-5">
               <h2 className="font-bold text-gray-800 mb-4">Account</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
@@ -304,7 +304,7 @@ function ProfileInner({ user }: { user: PublicUser }) {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+            <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-5">
               <h2 className="font-bold text-gray-800 mb-4">Profile Picture</h2>
               <div className="flex items-center gap-5">
                 <div className="w-20 h-20 rounded-full bg-[#e8f7fc] flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -337,23 +337,23 @@ function ProfileInner({ user }: { user: PublicUser }) {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+            <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-5">
               <h2 className="font-bold text-gray-800 mb-4">Personal Details</h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Full Name</label>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col min-[500px]:flex-row min-[500px]:items-center gap-2 min-[500px]:gap-3">
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       maxLength={100}
-                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                      className="w-full min-[500px]:flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                     />
                     <button
                       onClick={handleSaveName}
                       disabled={!nameDirty || savingName}
-                      className="bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors inline-flex items-center gap-2"
+                      className="w-full min-[500px]:w-auto flex-shrink-0 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors inline-flex items-center justify-center gap-2"
                     >
                       {savingName && <Loader2 size={14} className="animate-spin" />}
                       Save
@@ -379,16 +379,16 @@ function ProfileInner({ user }: { user: PublicUser }) {
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col min-[500px]:flex-row min-[500px]:items-center gap-2 min-[500px]:gap-3">
                     <input
                       type="text"
                       value={user.phone ?? "Not set"}
                       readOnly
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-600"
+                      className="w-full min-[500px]:flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-600"
                     />
                     <button
                       onClick={openPhoneModal}
-                      className="border-2 border-[#129cd3] text-[#129cd3] hover:bg-[#e8f7fc] text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                      className="w-full min-[500px]:w-auto flex-shrink-0 border-2 border-[#129cd3] text-[#129cd3] hover:bg-[#e8f7fc] text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
                     >
                       {user.phone ? "Change" : "Add"}
                     </button>
