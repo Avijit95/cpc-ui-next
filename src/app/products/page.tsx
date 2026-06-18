@@ -466,7 +466,7 @@ function ProductsPageInner() {
                   <p className="text-sm text-gray-400">{error}</p>
                 </div>
               ) : loading ? (
-                <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 xl:grid-cols-5" style={{ gap: "clamp(7px, 1vw, 16px)" }}>
                   {[...Array(8)].map((_, i) => (
                     <ProductCardSkeleton key={i} />
                   ))}
@@ -478,7 +478,7 @@ function ProductsPageInner() {
                   <p className="text-sm mt-1">Try adjusting your filters</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 xl:grid-cols-5" style={{ gap: "clamp(7px, 1vw, 16px)" }}>
                   {items.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
