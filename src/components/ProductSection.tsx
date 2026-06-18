@@ -8,7 +8,7 @@ type Props = {
   filter?: "new" | "bestseller" | "featured" | "all";
 };
 
-const ITEM_LIMIT = 8;
+const ITEM_LIMIT = 12;
 
 function queryFromFilter(filter: Props["filter"]): {
   sort?: CatalogSort;
@@ -56,7 +56,7 @@ export default async function ProductSection({ title, filter = "all" }: Props) {
         </div>
 
         {/* Grid */}
-        <div className="product-home-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="product-home-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {items.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

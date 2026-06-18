@@ -18,7 +18,7 @@ export default function ProductTabs({ title, items }: Props) {
           </h2>
         </div>
 
-        <div className="product-home-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="product-home-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {items.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

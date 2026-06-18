@@ -164,7 +164,7 @@ export default function WishlistPage() {
           {items.length === 0 ? (
             <EmptyWishlist />
           ) : (
-            <div className="wishlist-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            <div className="wishlist-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
               {items.map((item) => {
                 const id = item.wishlistItemId;
                 const move = moveState[id] ?? "idle";
@@ -232,7 +232,7 @@ export default function WishlistPage() {
                     </Link>
 
                     {/* Info */}
-                    <div className="p-4 max-[639px]:p-[10px] flex flex-col shrink-0 sm:flex-1">
+                    <div className="p-4 max-[1023px]:p-[10px] flex flex-col shrink-0 sm:flex-1 max-[1023px]:justify-end">
                       {item.brand && (
                         <p className="text-[10px] text-[#129cd3] font-semibold uppercase mb-1">
                           {item.brand}
@@ -244,7 +244,7 @@ export default function WishlistPage() {
                         </h3>
                       </Link>
 
-                      <div className="flex items-baseline gap-2 mb-4 max-[639px]:mb-[5px] mt-auto">
+                      <div className="flex items-baseline gap-2 mb-4 max-[639px]:mb-[5px] mt-auto max-[1023px]:mt-0">
                         <span className="text-base max-[639px]:text-[14px] max-[639px]:leading-normal font-bold text-[#129cd3]">
                           {formatPrice(item.finalPrice)}
                         </span>

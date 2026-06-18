@@ -103,7 +103,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
       </Link>
 
       {/* Info */}
-      <div className="p-3 max-[499px]:p-[10px] flex flex-col flex-1 min-h-0">
+      <div className="p-3 max-[499px]:p-[10px] flex flex-col flex-1 min-h-0 justify-end">
         {product.brand && (
           <p className="text-[10px] text-[#129cd3] font-semibold uppercase mb-1">
             {product.brand}
@@ -141,7 +141,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
         )}
 
         {/* Price */}
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-3 max-[499px]:mb-[5px] mt-auto">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-3 max-[499px]:mb-[5px]">
           <span className="text-sm max-[499px]:text-[14px] max-[499px]:leading-normal font-bold text-[#129cd3]">
             {formatPrice(product.finalPrice)}
           </span>
