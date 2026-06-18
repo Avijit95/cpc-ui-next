@@ -56,7 +56,7 @@ export default function CategorySlider({ items }: { items: Category[] }) {
               href={`/products?category=${encodeURIComponent(cat.slug.toLowerCase())}`}
               className="group flex-shrink-0 w-[calc(50%-8px)] sm:w-[calc(33.333%-11px)] lg:w-[calc(20%-13px)] flex flex-col items-center gap-2 hover:opacity-90 transition-opacity"
             >
-              <div className="relative w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded">
+              <div className="relative w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded max-[1023px]:max-h-[260px] max-[639px]:max-h-[230px]">
                 <Image
                   src={cat.imageUrl}
                   alt={cat.name}

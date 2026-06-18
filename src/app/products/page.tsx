@@ -81,6 +81,12 @@ function ProductsPageInner() {
   const [minRating, setMinRating] = useState<number | null>(null);
   const [sortLabel, setSortLabel] = useState<string>("Featured");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (header) setHeaderHeight(header.offsetHeight);
+  }, []);
 
   const [data, setData] = useState<ProductListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -418,21 +424,36 @@ function ProductsPageInner() {
           <div className="flex gap-6">
             {/* Sidebar — desktop */}
             <div className="hidden lg:block w-56 flex-shrink-0">
-              <div className="bg-white border border-gray-200 rounded-lg p-5 sticky top-24 z-[9999] max-h-[calc(100vh-7rem)] overflow-y-auto">
+              <div className="bg-white border border-gray-200 rounded-lg p-5 sticky top-24 z-[999] max-h-[calc(100vh-7rem)] overflow-y-auto">
                 {filterSidebar}
               </div>
             </div>
 
             {/* Mobile sidebar overlay */}
             {sidebarOpen && (
-              <div className="lg:hidden fixed inset-0 z-[9999] flex">
-                <div className="fixed inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
-                <div className="relative bg-white w-72 h-full overflow-y-auto p-5 z-[9999]">
-                  <div className="flex items-center justify-between mb-4">
+              <div className="lg:hidden">
+                <div
+                  className="fixed inset-0 z-[9998] bg-black/40"
+                  style={{ top: headerHeight }}
+                  onClick={() => setSidebarOpen(false)}
+                />
+                <div
+                  className="fixed left-0 bottom-0 z-[9998] bg-white w-72 overflow-y-auto shadow-xl"
+                  style={{ top: headerHeight }}
+                >
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                     <h2 className="font-bold text-gray-800">Filters</h2>
-                    <button onClick={() => setSidebarOpen(false)} className="text-gray-500 hover:text-gray-800">✕</button>
+                    <button
+                      onClick={() => setSidebarOpen(false)}
+                      className="text-gray-500 hover:text-gray-800"
+                      aria-label="Close filters"
+                    >
+                      ✕
+                    </button>
                   </div>
-                  {filterSidebar}
+                  <div className="p-5">
+                    {filterSidebar}
+                  </div>
                 </div>
               </div>
             )}
