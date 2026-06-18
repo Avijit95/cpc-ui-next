@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -110,8 +110,26 @@ function generateIdempotencyKey(): string {
 }
 
 export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <CheckoutContent />
+    </Suspense>
+  );
+}
+
+function CheckoutContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status } = useAuth();
+
+  // Buy Now: `?items=<cartItemId,...>` scopes checkout to those cart lines.
+  const cartItemIds = useMemo(() => {
+    const raw = searchParams.get("items");
+    const ids = raw
+      ? raw.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+    return ids.length > 0 ? ids : null;
+  }, [searchParams]);
 
   const [cart, setCart] = useState<CartView | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -238,6 +256,7 @@ export default function CheckoutPage() {
       const resp = await checkoutApi.submit({
         addressId: selectedAddressId,
         idempotencyKey,
+        ...(cartItemIds ? { cartItemIds } : {}),
       });
       // Order created (PENDING_PAYMENT) → start payment and hand off to the
       // Pine Labs hosted page. If initiation fails, send the user to the order
@@ -267,9 +286,32 @@ export default function CheckoutPage() {
     } finally {
       setPlacing(false);
     }
-  }, [selectedAddressId, idempotencyKey, router]);
+  }, [selectedAddressId, idempotencyKey, cartItemIds, router]);
 
-  const isEmpty = !loading && cart !== null && cart.items.length === 0;
+  // What checkout actually displays/orders: the whole cart, or just the
+  // Buy-Now lines (with totals + warnings recomputed from those lines).
+  const view = useMemo<CartView | null>(() => {
+    if (!cart) return null;
+    if (!cartItemIds) return cart;
+    const selected = new Set(cartItemIds);
+    const items = cart.items.filter((l) => selected.has(l.cartItemId));
+    return {
+      ...cart,
+      items,
+      subtotal: items.reduce((s, l) => s + l.lineSubtotal, 0),
+      discountTotal: items.reduce((s, l) => s + l.discount.total, 0),
+      gstTotal: items.reduce((s, l) => s + l.gst.total, 0),
+      grandTotal: items.reduce((s, l) => s + l.lineGrandTotal, 0),
+      staleApplications: cart.staleApplications.filter((s) =>
+        selected.has(s.cartItemId),
+      ),
+      stockWarnings: cart.stockWarnings.filter((w) =>
+        selected.has(w.cartItemId),
+      ),
+    };
+  }, [cart, cartItemIds]);
+
+  const isEmpty = !loading && view !== null && view.items.length === 0;
   const selectedAddress =
     addresses.find((a) => a.id === selectedAddressId) ?? null;
 
@@ -319,7 +361,7 @@ export default function CheckoutPage() {
                 Browse Products
               </Link>
             </div>
-          ) : cart ? (
+          ) : view ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Left: address + items */}
               <div className="lg:col-span-2 space-y-5">
@@ -402,7 +444,7 @@ export default function CheckoutPage() {
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                     <h2 className="font-bold text-gray-800 text-sm">
-                      Order Items ({cart.items.length})
+                      Order Items ({view.items.length})
                     </h2>
                     <Link
                       href="/cart"
@@ -412,7 +454,7 @@ export default function CheckoutPage() {
                     </Link>
                   </div>
                   <div className="divide-y divide-gray-100">
-                    {cart.items.map((line) => {
+                    {view.items.map((line) => {
                       const discountTotal = line.discount.total;
                       return (
                         <div
@@ -442,7 +484,7 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {cart.staleApplications.length > 0 && (
+                {view.staleApplications.length > 0 && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-xs text-yellow-800 flex items-start gap-2">
                     <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
                     <div>
@@ -455,7 +497,7 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                {cart.stockWarnings.length > 0 && (
+                {view.stockWarnings.length > 0 && (
                   <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-xs text-orange-800 flex items-start gap-2">
                     <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
                     <div>
@@ -476,24 +518,24 @@ export default function CheckoutPage() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal</span>
-                      <span className="text-gray-800">{formatPrice(cart.subtotal)}</span>
+                      <span className="text-gray-800">{formatPrice(view.subtotal)}</span>
                     </div>
-                    {cart.discountTotal > 0 && (
+                    {view.discountTotal > 0 && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Discount</span>
                         <span className="text-green-600">
-                          −{formatPrice(cart.discountTotal)}
+                          −{formatPrice(view.discountTotal)}
                         </span>
                       </div>
                     )}
                     <div className="flex justify-between">
                       <span className="text-gray-600">GST</span>
-                      <span className="text-gray-800">{formatPrice(cart.gstTotal)}</span>
+                      <span className="text-gray-800">{formatPrice(view.gstTotal)}</span>
                     </div>
                     <div className="flex justify-between pt-3 border-t border-gray-100">
                       <span className="font-bold text-gray-800">Grand Total</span>
                       <span className="font-bold text-lg text-[#129cd3]">
-                        {formatPrice(cart.grandTotal)}
+                        {formatPrice(view.grandTotal)}
                       </span>
                     </div>
                   </div>
@@ -531,7 +573,7 @@ export default function CheckoutPage() {
                     disabled={
                       placing ||
                       !selectedAddressId ||
-                      cart.stockWarnings.length > 0
+                      view.stockWarnings.length > 0
                     }
                     className="mt-4 w-full flex items-center justify-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-colors"
                   >
@@ -541,7 +583,7 @@ export default function CheckoutPage() {
                       </>
                     ) : (
                       <>
-                        Place Order {selectedAddress ? `(${formatPrice(cart.grandTotal)})` : ""}
+                        Place Order {selectedAddress ? `(${formatPrice(view.grandTotal)})` : ""}
                       </>
                     )}
                   </button>

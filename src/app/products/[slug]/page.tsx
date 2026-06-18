@@ -782,14 +782,23 @@ export default function ProductDetailPage() {
                     setBuying(true);
                     setAddError(null);
                     try {
-                      syncHeaderCart(
-                        await cartApi.addItem({
-                          productId: product.id,
-                          variantId: selectedVariant?.id,
-                          qty,
-                        }),
+                      const cart = await cartApi.addItem({
+                        productId: product.id,
+                        variantId: selectedVariant?.id,
+                        qty,
+                      });
+                      syncHeaderCart(cart);
+                      // Check out only this product's line, not the whole cart.
+                      const line = cart.items.find(
+                        (it) =>
+                          it.productId === product.id &&
+                          it.variantId === (selectedVariant?.id ?? null),
                       );
-                      router.push("/checkout");
+                      router.push(
+                        line
+                          ? `/checkout?items=${encodeURIComponent(line.cartItemId)}`
+                          : "/checkout",
+                      );
                     } catch (err) {
                       setBuying(false);
                       setAddError(
