@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
@@ -53,26 +53,40 @@ function DealCountdown({ endsAt }: { endsAt: string }) {
   }, [target]);
   if (remainingMs <= 0) return null;
   const pad = (n: number) => String(n).padStart(2, "0");
-  const h = Math.floor(remainingMs / 3600000);
-  const m = Math.floor((remainingMs % 3600000) / 60000);
-  const s = Math.floor((remainingMs % 60000) / 1000);
+  // Past 24h, lead with days (D : H : M) instead of a huge hour count.
+  const units =
+    remainingMs >= 86400000
+      ? [
+          { v: Math.floor(remainingMs / 86400000), label: "d" },
+          { v: Math.floor((remainingMs % 86400000) / 3600000), label: "h" },
+          { v: Math.floor((remainingMs % 3600000) / 60000), label: "m" },
+        ]
+      : [
+          { v: Math.floor(remainingMs / 3600000), label: "h" },
+          { v: Math.floor((remainingMs % 3600000) / 60000), label: "m" },
+          { v: Math.floor((remainingMs % 60000) / 1000), label: "s" },
+        ];
   return (
-    <div className="inline-flex items-center gap-2 mb-4 text-xs text-gray-600">
-      <span className="font-semibold text-[#129cd3] uppercase tracking-wide">
+    <div className="inline-flex items-start gap-2 mb-4 text-xs text-gray-600">
+      <span className="font-semibold text-[#129cd3] uppercase tracking-wide leading-6">
         Deal ends in
       </span>
-      <span className="inline-flex items-center gap-0.5 tabular-nums">
-        <span className="bg-[#129cd3] text-white font-bold px-1.5 py-0.5 rounded">
-          {pad(h)}
-        </span>
-        <span className="text-[#129cd3] font-bold">:</span>
-        <span className="bg-[#129cd3] text-white font-bold px-1.5 py-0.5 rounded">
-          {pad(m)}
-        </span>
-        <span className="text-[#129cd3] font-bold">:</span>
-        <span className="bg-[#129cd3] text-white font-bold px-1.5 py-0.5 rounded">
-          {pad(s)}
-        </span>
+      <span className="inline-flex items-start gap-0.5 tabular-nums">
+        {units.map((u, i) => (
+          <span key={i} className="inline-flex items-start gap-0.5">
+            <span className="inline-flex flex-col items-center">
+              <span className="bg-[#129cd3] text-white font-bold px-1.5 py-0.5 rounded">
+                {pad(u.v)}
+              </span>
+              <span className="text-[9px] font-semibold text-[#129cd3] uppercase mt-0.5">
+                {u.label}
+              </span>
+            </span>
+            {i < 2 && (
+              <span className="text-[#129cd3] font-bold leading-6">:</span>
+            )}
+          </span>
+        ))}
       </span>
     </div>
   );
@@ -157,6 +171,9 @@ function formatReviewDate(iso: string) {
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Deep-link from a Today Deals card preselects the deal's variant.
+  const variantParam = searchParams?.get("variant") ?? null;
   const { user, status } = useAuth();
   const slug =
     typeof params?.slug === "string"
@@ -219,8 +236,11 @@ export default function ProductDetailPage() {
         if (ac.signal.aborted) return;
         setProduct(p);
         setActiveImageIdx(0);
-        const def = pickDefaultVariant(p.variants);
-        setSelectedAttrs(def ? attrsOf(def) : {});
+        const preselect =
+          (variantParam &&
+            p.variants.find((v) => v.id === variantParam)) ||
+          pickDefaultVariant(p.variants);
+        setSelectedAttrs(preselect ? attrsOf(preselect) : {});
         setError(null);
         setNotFound(false);
       })
@@ -240,7 +260,7 @@ export default function ProductDetailPage() {
         if (!ac.signal.aborted) setLoading(false);
       });
     return () => ac.abort();
-  }, [slug]);
+  }, [slug, variantParam]);
 
   // Fetch reviews when slug resolves (public endpoint, doesn't depend on auth).
   useEffect(() => {

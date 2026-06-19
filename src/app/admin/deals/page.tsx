@@ -55,6 +55,7 @@ type FormState = {
   productName: string;
   productImageUrl: string | null;
   productBasePrice: number | null;
+  productSellingPrice: number | null;
   variantId: string | null;
   scope: DealScope;
   discountPercent: string;
@@ -70,6 +71,7 @@ const EMPTY_FORM: FormState = {
   productName: "",
   productImageUrl: null,
   productBasePrice: null,
+  productSellingPrice: null,
   variantId: null,
   scope: "whole",
   discountPercent: "",
@@ -370,6 +372,7 @@ export default function AdminDealsPage() {
       productName: d.product.name,
       productImageUrl: d.product.primaryImageUrl,
       productBasePrice: d.basePrice,
+      productSellingPrice: null,
       variantId: d.variantId,
       scope: "whole",
       // Whole-product deals are entered as a % off the base price; reconstruct it.
@@ -410,6 +413,7 @@ export default function AdminDealsPage() {
       productName: card.name,
       productImageUrl: card.primaryImageUrl,
       productBasePrice: card.basePrice,
+      productSellingPrice: card.finalPrice,
       variantId: null,
       discountPercent: "",
       variantPrices: {},
@@ -429,7 +433,7 @@ export default function AdminDealsPage() {
   const productBase = form.productBasePrice ?? 0;
   const sellingPrice = selectedVariant
     ? (selectedVariant.priceOverride ?? productBase)
-    : productBase;
+    : (form.productSellingPrice ?? productBase);
   const baseDisplayPrice = selectedVariant
     ? (selectedVariant.basePrice ?? sellingPrice)
     : productBase;
@@ -739,8 +743,11 @@ export default function AdminDealsPage() {
                           ) : (
                             <div className="w-10 h-10 bg-gray-100 rounded" />
                           )}
-                          <div className="min-w-0">
-                            <span className="text-gray-800 block truncate">
+                          <div className="min-w-0 max-w-[320px]">
+                            <span
+                              className="text-gray-800 block truncate"
+                              title={d.product.name}
+                            >
                               {d.product.name}
                             </span>
                             <span className="text-[11px] text-gray-500">
