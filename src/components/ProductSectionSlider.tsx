@@ -32,7 +32,7 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
           <h2 className="text-xs font-bold text-white bg-[#129cd3] px-4 py-2 uppercase tracking-wide">
             {title}
           </h2>
-          <div className="flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-1">
             <button
               onClick={() => slide("prev")}
               aria-label="Previous products"
@@ -50,22 +50,22 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
           </div>
         </div>
 
-        {/* Slider */}
+        {/* Desktop Slider (≥768px) */}
         <div
           ref={scrollRef}
-          className="product-section-slider flex gap-4 overflow-x-auto scroll-smooth"
+          className="product-section-slider hidden md:flex gap-4 overflow-x-auto scroll-smooth"
         >
           {items.map((product) => (
             <div
               key={product.id}
-              className="slider-item flex-shrink-0 w-[calc(50%-8px)] xs:w-[calc(33.333%-10.7px)] md:w-[calc(25%-12px)] lg:w-[calc(20%-12.8px)] xl:w-[calc(16.667%-13.4px)]"
+              className="slider-item flex-shrink-0 w-[calc(25%-12px)] lg:w-[calc(20%-12.8px)] xl:w-[calc(16.667%-13.4px)]"
             >
               <ProductCard product={product} />
             </div>
           ))}
 
           {/* View All card */}
-          <div className="slider-item flex-shrink-0 w-[calc(50%-8px)] xs:w-[calc(33.333%-10.7px)] md:w-[calc(25%-12px)] lg:w-[calc(20%-12.8px)] xl:w-[calc(16.667%-13.4px)]">
+          <div className="slider-item flex-shrink-0 w-[calc(25%-12px)] lg:w-[calc(20%-12.8px)] xl:w-[calc(16.667%-13.4px)]">
             <Link
               href={viewAllHref}
               className="h-full min-h-[200px] flex flex-col items-center justify-center bg-[#e8f7fc] border border-[#8dd4ee] rounded-xl gap-3 hover:bg-[#d0edf8] transition-colors group"
@@ -76,6 +76,23 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
               <span className="text-sm font-semibold text-[#129cd3]">View All</span>
             </Link>
           </div>
+        </div>
+
+        {/* Mobile Grid (<768px): 2 cols below 500px, 3 cols from 500px, max 6 cards */}
+        <div className="md:hidden grid grid-cols-2 xs:grid-cols-3 gap-4">
+          {items.slice(0, 6).map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+
+        {/* Explore More button — mobile only */}
+        <div className="md:hidden flex justify-end mt-4">
+          <Link
+            href={viewAllHref}
+            className="text-sm font-semibold text-[#129cd3] flex items-center gap-1 hover:underline transition-colors"
+          >
+            Explore More <ArrowRight size={15} />
+          </Link>
         </div>
       </div>
     </section>

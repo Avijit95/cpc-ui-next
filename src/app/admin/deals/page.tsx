@@ -27,6 +27,7 @@ import SortByDropdown, {
 import { adminApi, catalogApi, isApiError } from "@/lib/api";
 import type {
   AdminProductVariantOption,
+  CategoryNode,
   CreateDealBody,
   Deal,
   DealLifecycle,
@@ -202,6 +203,8 @@ export default function AdminDealsPage() {
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerResults, setPickerResults] = useState<ListCard[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerCategory, setPickerCategory] = useState<string>("");
+  const [categoryOptions, setCategoryOptions] = useState<{ slug: string; name: string }[]>([]);
 
   // Variants of the selected product (for per-variant deal pricing).
   const [variants, setVariants] = useState<AdminProductVariantOption[]>([]);
@@ -284,29 +287,41 @@ export default function AdminDealsPage() {
     [statusFilter, sort, dateRange],
   );
 
-  // Debounce product search.
+  // Load categories once.
+  useEffect(() => {
+    catalogApi
+      .getCategories()
+      .then((cats: CategoryNode[]) => {
+        setCategoryOptions(
+          cats
+            .slice()
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((c) => ({ slug: c.slug.toLowerCase(), name: c.name })),
+        );
+      })
+      .catch(() => {});
+  }, []);
+
+  // Debounce product search input.
   useEffect(() => {
     const trimmed = pickerInput.trim();
-    if (!trimmed) {
-      const t = window.setTimeout(() => {
-        setPickerQuery("");
-        setPickerResults([]);
-        setPickerLoading(false);
-      }, 0);
-      return () => window.clearTimeout(t);
-    }
     const t = window.setTimeout(() => {
       setPickerQuery(trimmed);
-      setPickerLoading(true);
     }, 300);
     return () => window.clearTimeout(t);
   }, [pickerInput]);
 
+  // Fetch products whenever picker is open, category or search query changes.
   useEffect(() => {
-    if (!pickerOpen || !pickerQuery) return;
+    if (!pickerOpen) return;
     let cancelled = false;
+    setPickerLoading(true);
     catalogApi
-      .listProducts({ search: pickerQuery, limit: 8 })
+      .listProducts({
+        search: pickerQuery || undefined,
+        category: pickerCategory || undefined,
+        limit: 16,
+      })
       .then((resp) => {
         if (!cancelled) {
           setPickerResults(resp.items);
@@ -322,7 +337,7 @@ export default function AdminDealsPage() {
     return () => {
       cancelled = true;
     };
-  }, [pickerQuery, pickerOpen]);
+  }, [pickerQuery, pickerCategory, pickerOpen]);
 
   // Load a product's variants so the admin can scope the deal to one. Called
   // from the pick / edit handlers (an event), not an effect.
@@ -342,6 +357,10 @@ export default function AdminDealsPage() {
     setEditId(null);
     setFormError(null);
     setVariants([]);
+    setPickerCategory("");
+    setPickerInput("");
+    setPickerQuery("");
+    setPickerResults([]);
     setModalMode("create");
   };
 
@@ -377,6 +396,10 @@ export default function AdminDealsPage() {
     setForm(EMPTY_FORM);
     setFormError(null);
     setPickerOpen(false);
+    setPickerCategory("");
+    setPickerInput("");
+    setPickerQuery("");
+    setPickerResults([]);
     setVariants([]);
   };
 
@@ -814,61 +837,98 @@ export default function AdminDealsPage() {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              {/* Product picker (create only) */}
+              {/* Category + Product (create only) */}
               {modalMode === "create" && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                    Product
-                  </label>
-                  {form.productId ? (
-                    <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-                      {form.productImageUrl ? (
-                        <Image
-                          src={form.productImageUrl}
-                          alt={form.productName}
-                          width={48}
-                          height={48}
-                          className="w-12 h-12 object-contain rounded"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-gray-100 rounded" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 truncate">
-                          {form.productName}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setForm((p) => ({
-                            ...p,
-                            productId: "",
-                            productName: "",
-                            productImageUrl: null,
-                            productBasePrice: null,
-                            variantId: null,
-                            scope: "whole",
-                            discountPercent: "",
-                            variantPrices: {},
-                          }));
-                          setVariants([]);
-                          setPickerOpen(true);
-                        }}
-                        className="text-xs text-[#129cd3] hover:underline"
-                      >
-                        Change
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setPickerOpen(true)}
-                      className="w-full px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#129cd3] hover:text-[#129cd3]"
+                <>
+                  {/* Category dropdown */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                      Category
+                    </label>
+                    <select
+                      value={pickerCategory}
+                      onChange={(e) => {
+                        setPickerCategory(e.target.value);
+                        // Clear selected product when category changes
+                        setForm((p) => ({
+                          ...p,
+                          productId: "",
+                          productName: "",
+                          productImageUrl: null,
+                          productBasePrice: null,
+                          variantId: null,
+                          scope: "whole",
+                          discountPercent: "",
+                          variantPrices: {},
+                        }));
+                        setVariants([]);
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3] bg-white text-gray-700"
                     >
-                      <Search size={14} className="inline mr-1" />
-                      Pick an active product…
-                    </button>
-                  )}
-                </div>
+                      <option value="">All Categories</option>
+                      {categoryOptions.map((c) => (
+                        <option key={c.slug} value={c.slug}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Product picker */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                      Product
+                    </label>
+                    {form.productId ? (
+                      <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                        {form.productImageUrl ? (
+                          <Image
+                            src={form.productImageUrl}
+                            alt={form.productName}
+                            width={48}
+                            height={48}
+                            className="w-12 h-12 object-contain rounded"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-100 rounded" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800 truncate">{form.productName}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setForm((p) => ({
+                              ...p,
+                              productId: "",
+                              productName: "",
+                              productImageUrl: null,
+                              productBasePrice: null,
+                              variantId: null,
+                              scope: "whole",
+                              discountPercent: "",
+                              variantPrices: {},
+                            }));
+                            setVariants([]);
+                            setPickerInput("");
+                            setPickerQuery("");
+                            setPickerOpen(true);
+                          }}
+                          className="text-xs text-[#129cd3] hover:underline flex-shrink-0"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setPickerOpen(true)}
+                        className="w-full px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#129cd3] hover:text-[#129cd3] flex items-center justify-center gap-1.5"
+                      >
+                        <Search size={14} />
+                        Pick an active product…
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
 
               {modalMode === "edit" && (
@@ -885,68 +945,8 @@ export default function AdminDealsPage() {
                     <div className="w-12 h-12 bg-gray-100 rounded" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800 truncate">
-                      {form.productName}
-                    </p>
+                    <p className="text-sm text-gray-800 truncate">{form.productName}</p>
                   </div>
-                </div>
-              )}
-
-              {/* Picker dropdown */}
-              {pickerOpen && (
-                <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-                  <div className="relative">
-                    <Search
-                      size={14}
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
-                    <input
-                      autoFocus
-                      type="text"
-                      value={pickerInput}
-                      onChange={(e) => setPickerInput(e.target.value)}
-                      placeholder="Search products by name"
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3]"
-                    />
-                  </div>
-                  {pickerLoading && (
-                    <p className="text-xs text-gray-500">Searching…</p>
-                  )}
-                  {!pickerLoading &&
-                    pickerQuery &&
-                    pickerResults.length === 0 && (
-                      <p className="text-xs text-gray-500">No matches.</p>
-                    )}
-                  <ul className="space-y-1 max-h-60 overflow-y-auto">
-                    {pickerResults.map((p) => (
-                      <li key={p.id}>
-                        <button
-                          onClick={() => pickProduct(p)}
-                          className="w-full flex items-center gap-3 p-2 rounded hover:bg-gray-50 text-left"
-                        >
-                          {p.primaryImageUrl ? (
-                            <Image
-                              src={p.primaryImageUrl}
-                              alt={p.name}
-                              width={32}
-                              height={32}
-                              className="w-8 h-8 object-contain rounded"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 bg-gray-100 rounded" />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800 truncate">
-                              {p.name}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {formatPrice(p.basePrice)}
-                            </p>
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               )}
 
@@ -1175,6 +1175,111 @@ export default function AdminDealsPage() {
                 {saveBusy && <Loader2 size={14} className="animate-spin" />}
                 {modalMode === "create" ? "Create Deal" : "Save"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Picker Dialog */}
+      {pickerOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 flex-shrink-0">
+              <h3 className="font-bold text-gray-800">Select Product</h3>
+              <button
+                onClick={() => {
+                  setPickerOpen(false);
+                  setPickerInput("");
+                  setPickerQuery("");
+                }}
+                className="p-1 rounded hover:bg-gray-100"
+                aria-label="Close picker"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Filters */}
+            <div className="px-5 py-3 border-b border-gray-100 flex-shrink-0 space-y-3">
+              {/* Category filter */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setPickerCategory("")}
+                  className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                    pickerCategory === ""
+                      ? "bg-[#129cd3] text-white border-[#129cd3]"
+                      : "border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
+                  }`}
+                >
+                  All
+                </button>
+                {categoryOptions.map((c) => (
+                  <button
+                    key={c.slug}
+                    onClick={() => setPickerCategory(c.slug)}
+                    className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                      pickerCategory === c.slug
+                        ? "bg-[#129cd3] text-white border-[#129cd3]"
+                        : "border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+              {/* Search */}
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  autoFocus
+                  type="text"
+                  value={pickerInput}
+                  onChange={(e) => setPickerInput(e.target.value)}
+                  placeholder="Search products by name…"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3]"
+                />
+              </div>
+            </div>
+
+            {/* Results */}
+            <div className="overflow-y-auto flex-1 p-3">
+              {pickerLoading ? (
+                <div className="flex items-center justify-center py-10 text-gray-400 text-sm gap-2">
+                  <Loader2 size={16} className="animate-spin" /> Loading…
+                </div>
+              ) : pickerResults.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-10">No products found.</p>
+              ) : (
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {pickerResults.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => pickProduct(p)}
+                        className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-[#129cd3] hover:bg-[#f0faff] transition-colors text-left"
+                      >
+                        {p.primaryImageUrl ? (
+                          <Image
+                            src={p.primaryImageUrl}
+                            alt={p.name}
+                            width={48}
+                            height={48}
+                            className="w-12 h-12 object-contain rounded flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-100 rounded flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800 truncate font-medium">{p.name}</p>
+                          <p className="text-xs text-[#129cd3] font-semibold mt-0.5">
+                            {formatPrice(p.basePrice)}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </div>

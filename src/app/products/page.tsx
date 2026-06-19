@@ -14,7 +14,7 @@ import type {
   ListCard,
   ProductListResponse,
 } from "@/lib/api";
-import { SlidersHorizontal, ChevronDown, Star } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, Star, ArrowLeft } from "lucide-react";
 
 type CategoryOption = { slug: string; name: string };
 
@@ -390,6 +390,13 @@ useEffect(() => {
           {/* Top bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.back()}
+                className="flex items-center justify-center w-8 h-8 rounded-full border border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3] transition-colors"
+                aria-label="Go back"
+              >
+                <ArrowLeft size={16} />
+              </button>
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="lg:hidden flex items-center gap-2 border border-gray-300 text-gray-700 text-sm px-3 py-2 rounded hover:border-[#129cd3] hover:text-[#129cd3] transition-colors"

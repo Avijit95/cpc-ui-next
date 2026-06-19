@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import ProductCard from "./ProductCard";
+import ProductSectionSlider from "./ProductSectionSlider";
 import { catalogApi, dealsApi } from "@/lib/api";
 import type { Deal, ListCard } from "@/lib/api";
 
@@ -143,22 +144,12 @@ export default function DealsSection() {
   if (!hasDeals && bestSellers.length === 0) return null;
 
   if (!hasDeals) {
-    // Full-width Best Sellers grid, matching Featured / New Arrivals layout.
     return (
-      <section className="py-8 px-4 bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-            <h2 className="text-xs font-bold text-white bg-[#129cd3] px-4 py-2 uppercase tracking-wide">
-              BEST SELLERS
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {bestSellers.slice(0, 8).map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </div>
-      </section>
+      <ProductSectionSlider
+        title="Best Sellers"
+        items={bestSellers}
+        viewAllHref="/products?sort=popular"
+      />
     );
   }
 
@@ -168,7 +159,7 @@ export default function DealsSection() {
 
   return (
     <section className="py-8 px-[10px] xs:px-4 bg-gray-50">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3" style={{ gap: "clamp(7px, 1.1vw, 20px)" }}>
         {/* Today Deals */}
         <div className="md:col-span-2 border border-gray-200 p-4 bg-white shadow-sm">
           <div className="bg-white relative">
@@ -210,18 +201,18 @@ export default function DealsSection() {
                 {/* Product Image */}
                 <Link
                   href={`/products/${deal.product.slug}`}
-                  className="relative flex-1 min-w-0"
+                  className="relative flex-shrink-0 w-[220px] h-[280px]"
                 >
                   {deal.product.primaryImageUrl ? (
                     <Image
                       src={deal.product.primaryImageUrl}
                       alt={deal.product.name}
-                      width={160}
-                      height={160}
-                      className="w-full h-auto object-contain"
+                      fill
+                      sizes="220px"
+                      className="object-contain"
                     />
                   ) : (
-                    <div className="w-full aspect-square bg-gray-100" />
+                    <div className="w-full h-full bg-gray-100" />
                   )}
                   <span className="absolute top-1 right-1 bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center">
                     -{deal.percentOff}%
@@ -302,32 +293,24 @@ export default function DealsSection() {
 
         {/* Best Sellers */}
         {bestSellers.length > 0 && (
-          <div className="bg-white border border-gray-100 overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <div className="bg-white border border-gray-100 shadow-sm flex flex-col h-full">
+            <div className="flex items-center px-4 py-3 border-b border-gray-100 flex-shrink-0">
               <h2 className="text-xs font-bold text-white bg-[#129cd3] px-3 py-1.5 uppercase tracking-wide">
                 BEST SELLERS
               </h2>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  aria-label="Previous best sellers"
-                  className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
-                >
-                  <ChevronLeft size={13} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Next best sellers"
-                  className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
-                >
-                  <ChevronRight size={13} />
-                </button>
-              </div>
             </div>
-            <div className="divide-y divide-gray-100">
-              {bestSellers.slice(0, 4).map((product) => (
+            <div className="divide-y divide-gray-100 overflow-y-auto" style={{ maxHeight: "452px" }}>
+              {bestSellers.slice(0, 8).map((product) => (
                 <BestSellerRow key={product.id} product={product} />
               ))}
+            </div>
+            <div className="flex-shrink-0 border-t border-gray-100 px-4 py-3">
+              <Link
+                href="/products?sort=popular"
+                className="text-xs font-semibold text-[#129cd3] flex items-center justify-center gap-1 hover:underline"
+              >
+                View All <ChevronRight size={13} />
+              </Link>
             </div>
           </div>
         )}
