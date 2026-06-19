@@ -720,8 +720,11 @@ export default function AdminDealsPage() {
                           ) : (
                             <div className="w-10 h-10 bg-gray-100 rounded" />
                           )}
-                          <div className="min-w-0">
-                            <span className="text-gray-800 block truncate">
+                          <div className="min-w-0 max-w-[320px]">
+                            <span
+                              className="text-gray-800 block truncate"
+                              title={d.product.name}
+                            >
                               {d.product.name}
                             </span>
                             <span className="text-[11px] text-gray-500">
