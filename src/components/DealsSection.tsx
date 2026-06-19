@@ -12,6 +12,20 @@ function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
 }
 
+// A variant-scoped deal should show that variant's own image, not the
+// product's primary (default-variant) image.
+function dealImageUrl(deal: Deal): string | null {
+  return deal.variant?.primaryImageUrl ?? deal.product.primaryImageUrl;
+}
+
+// Deep-link to the deal's variant so the product page opens on it, not the
+// default variant.
+function dealHref(deal: Deal): string {
+  return deal.variantId
+    ? `/products/${deal.product.slug}?variant=${deal.variantId}`
+    : `/products/${deal.product.slug}`;
+}
+
 function Countdown({ endsAt }: { endsAt: string }) {
   const target = new Date(endsAt).getTime();
   const [remainingMs, setRemainingMs] = useState(() =>
@@ -23,20 +37,35 @@ function Countdown({ endsAt }: { endsAt: string }) {
     }, 1000);
     return () => clearInterval(t);
   }, [target]);
-  const time = {
-    h: Math.floor(remainingMs / 3600000),
-    m: Math.floor((remainingMs % 3600000) / 60000),
-    s: Math.floor((remainingMs % 60000) / 1000),
-  };
   const pad = (n: number) => String(n).padStart(2, "0");
+  // Past 24h, lead with days (D : H : M) instead of a huge hour count.
+  const units =
+    remainingMs >= 86400000
+      ? [
+          { v: Math.floor(remainingMs / 86400000), label: "d" },
+          { v: Math.floor((remainingMs % 86400000) / 3600000), label: "h" },
+          { v: Math.floor((remainingMs % 3600000) / 60000), label: "m" },
+        ]
+      : [
+          { v: Math.floor(remainingMs / 3600000), label: "h" },
+          { v: Math.floor((remainingMs % 3600000) / 60000), label: "m" },
+          { v: Math.floor((remainingMs % 60000) / 1000), label: "s" },
+        ];
   return (
-    <div className="flex items-center gap-1">
-      {[pad(time.h), pad(time.m), pad(time.s)].map((v, i) => (
-        <span key={i} className="flex items-center gap-0.5">
-          <span className="bg-[#129cd3] text-white text-xs font-bold w-8 h-8 rounded flex items-center justify-center tabular-nums">
-            {v}
+    <div className="flex items-start gap-1">
+      {units.map((u, i) => (
+        <span key={i} className="flex items-start gap-0.5">
+          <span className="flex flex-col items-center">
+            <span className="bg-[#129cd3] text-white text-xs font-bold w-8 h-8 rounded flex items-center justify-center tabular-nums">
+              {pad(u.v)}
+            </span>
+            <span className="text-[9px] font-semibold text-[#129cd3] uppercase mt-0.5">
+              {u.label}
+            </span>
           </span>
-          {i < 2 && <span className="text-[#129cd3] font-bold text-sm">:</span>}
+          {i < 2 && (
+            <span className="text-[#129cd3] font-bold text-sm leading-8">:</span>
+          )}
         </span>
       ))}
     </div>
@@ -209,12 +238,12 @@ export default function DealsSection() {
 
                 {/* Product Image */}
                 <Link
-                  href={`/products/${deal.product.slug}`}
+                  href={dealHref(deal)}
                   className="relative flex-1 min-w-0"
                 >
-                  {deal.product.primaryImageUrl ? (
+                  {dealImageUrl(deal) ? (
                     <Image
-                      src={deal.product.primaryImageUrl}
+                      src={dealImageUrl(deal)!}
                       alt={deal.product.name}
                       width={160}
                       height={160}
@@ -241,7 +270,7 @@ export default function DealsSection() {
               {/* Details */}
               <div className="flex-1 min-w-0">
                 <Link
-                  href={`/products/${deal.product.slug}`}
+                  href={dealHref(deal)}
                   className="block"
                 >
                   <h3 className="text-sm font-semibold text-gray-800 mb-1.5 line-clamp-1 hover:text-[#129cd3] transition-colors">
@@ -277,9 +306,9 @@ export default function DealsSection() {
                 }`}
               >
                 <div className="relative w-full h-16">
-                  {d.product.primaryImageUrl ? (
+                  {dealImageUrl(d) ? (
                     <Image
-                      src={d.product.primaryImageUrl}
+                      src={dealImageUrl(d)!}
                       alt={d.product.name}
                       fill
                       sizes="112px"
