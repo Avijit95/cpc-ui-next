@@ -89,7 +89,7 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
         <div className="md:hidden flex justify-end mt-4">
           <Link
             href={viewAllHref}
-            className="text-sm font-semibold text-[#129cd3] flex items-center gap-1 hover:underline transition-colors"
+            className="text-sm font-semibold text-[#106681] flex items-center gap-1 hover:underline transition-colors"
           >
             Explore More <ArrowRight size={15} />
           </Link>

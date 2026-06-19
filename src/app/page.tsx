@@ -32,17 +32,14 @@ export default async function Home() {
         {/* Side banner 1 — mobile only (below 768px), after Deals & Best Sellers */}
         {sideBanners[0] && (
           <div className="block min-[500px]:hidden px-3 py-2">
-            <a
-              href={sideBanners[0].linkUrl ?? "#"}
-              aria-label="Promotional banner"
-              className="block relative w-full overflow-hidden rounded" style={{ height: "200px", maxHeight: "200px" }}
-            >
+            <a href={sideBanners[0].linkUrl ?? "#"} aria-label="Promotional banner" className="block rounded overflow-hidden">
               <Image
                 src={sideBanners[0].imageUrl}
                 alt=""
-                fill
+                width={800}
+                height={400}
                 sizes="100vw"
-                className="object-cover"
+                className="w-full h-auto"
               />
             </a>
           </div>
@@ -50,20 +47,17 @@ export default async function Home() {
 
         <ProductSection title="Featured" filter="featured" />
 
-        {/* Side banner 2 — mobile only (below 768px), after Featured */}
+        {/* Side banner 2 — mobile only (below 500px), after Featured */}
         {sideBanners[1] && (
           <div className="block min-[500px]:hidden px-3 py-2">
-            <a
-              href={sideBanners[1].linkUrl ?? "#"}
-              aria-label="Promotional banner"
-              className="block relative w-full overflow-hidden rounded" style={{ height: "200px", maxHeight: "200px" }}
-            >
+            <a href={sideBanners[1].linkUrl ?? "#"} aria-label="Promotional banner" className="block rounded overflow-hidden">
               <Image
                 src={sideBanners[1].imageUrl}
                 alt=""
-                fill
+                width={800}
+                height={400}
                 sizes="100vw"
-                className="object-cover"
+                className="w-full h-auto"
               />
             </a>
           </div>
