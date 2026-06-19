@@ -33,7 +33,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   // Close drawer when route changes
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  // Close drawer when route changes
+useEffect(() => {
+  const closeDrawer = () => setMobileOpen(false);
+  closeDrawer();
+}, [pathname]);
 
   if (isLogin) return <>{children}</>;
 

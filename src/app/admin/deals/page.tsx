@@ -313,34 +313,6 @@ export default function AdminDealsPage() {
     return () => window.clearTimeout(t);
   }, [pickerInput]);
 
-  // Fetch products whenever picker is open, category or search query changes.
-  // useEffect(() => {
-  //   if (!pickerOpen) return;
-  //   let cancelled = false;
-  //   setPickerLoading(true);
-  //   catalogApi
-  //     .listProducts({
-  //       search: pickerQuery || undefined,
-  //       category: pickerCategory || undefined,
-  //       limit: 16,
-  //     })
-  //     .then((resp) => {
-  //       if (!cancelled) {
-  //         setPickerResults(resp.items);
-  //         setPickerLoading(false);
-  //       }
-  //     })
-  //     .catch(() => {
-  //       if (!cancelled) {
-  //         setPickerResults([]);
-  //         setPickerLoading(false);
-  //       }
-  //     });
-  //   return () => {
-  //     cancelled = true;
-  //   };
-  // }, [pickerQuery, pickerCategory, pickerOpen]);
-
   useEffect(() => {
   if (!pickerOpen) return;
   let cancelled = false;
