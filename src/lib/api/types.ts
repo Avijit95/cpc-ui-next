@@ -933,6 +933,7 @@ export type DealVariantSummary = {
   id: string;
   sku: string;
   attributes: Record<string, unknown>;
+  primaryImageUrl: string | null;
 };
 
 export type Deal = {
