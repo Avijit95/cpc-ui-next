@@ -40,7 +40,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
         href={`/products/${product.slug}`}
         className="bg-gray-50 overflow-hidden block shrink-0"
       >
-        <div className="grid h-44 max-[499px]:h-32">
+        <div className="grid h-44 max-[499px]:h-32 bg-black">
           {product.primaryImageUrl ? (
             <Image
               src={product.primaryImageUrl}
@@ -51,7 +51,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
               className="w-full h-44 max-[499px]:h-32 object-contain p-[10px] group-hover:scale-105 transition-transform duration-400 col-start-1 row-start-1"
             />
           ) : (
-            <div className="w-full h-44 max-[499px]:h-32 bg-gray-100 col-start-1 row-start-1" />
+            <div className="w-full h-44 max-[499px]:h-32 bg-gray-100 col-start-1 row-start-1 " />
           )}
           {badge && (
             <span

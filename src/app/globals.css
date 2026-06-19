@@ -182,3 +182,7 @@ html {
   box-shadow: 0 0 0 1px #cbd5e1;
   cursor: pointer;
 }
+
+.bg-black{
+ background: radial-gradient(circle,rgba(4, 4, 31, 1) 0%, rgba(99, 83, 83, 1) 0%, rgba(4, 4, 31, 1) 100%) !important;
+}
