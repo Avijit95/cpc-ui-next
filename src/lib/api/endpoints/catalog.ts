@@ -4,6 +4,7 @@ import type {
   CategoryNode,
   ProductDetail,
   ProductListResponse,
+  SuggestItem,
 } from "../types";
 
 export type ListProductsQuery = {
@@ -38,6 +39,13 @@ export const catalogApi = {
   getProduct(slug: string, signal?: AbortSignal) {
     return request<ProductDetail>(`/products/${encodeURIComponent(slug)}`, {
       anonymous: true,
+      signal,
+    });
+  },
+  suggest(q: string, limit = 6, signal?: AbortSignal) {
+    return request<SuggestItem[]>("/products/suggest", {
+      anonymous: true,
+      query: { q, limit },
       signal,
     });
   },

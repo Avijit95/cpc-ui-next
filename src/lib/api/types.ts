@@ -143,6 +143,16 @@ export type ListCard = {
   deal: DealPreview | null;
 };
 
+// Slim card returned by GET /products/suggest (header typeahead).
+export type SuggestItem = {
+  id: string;
+  slug: string;
+  name: string;
+  brand: string | null;
+  primaryImageUrl: string | null;
+  finalPrice: number;
+};
+
 export type PriceBucket = {
   label: string;
   min: number;
