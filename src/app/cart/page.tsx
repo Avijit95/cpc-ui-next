@@ -230,8 +230,12 @@ export default function CartPage() {
                       key={id}
                       className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex gap-3 sm:gap-4"
                     >
-                      {/* Image */}
-                      <div className="w-16 h-16 sm:w-24 sm:h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100 overflow-hidden">
+                      {/* Image — links to the product detail page */}
+                      <Link
+                        href={`/products/${line.slug}`}
+                        aria-label={`View ${line.name}`}
+                        className="block w-16 h-16 sm:w-24 sm:h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100 overflow-hidden"
+                      >
                         {line.primaryImageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -240,13 +244,15 @@ export default function CartPage() {
                             className="w-full h-full object-contain p-1"
                           />
                         ) : null}
-                      </div>
+                      </Link>
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-1 line-clamp-2">
-                          {line.name}
-                        </h3>
+                        <Link href={`/products/${line.slug}`}>
+                          <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-1 line-clamp-2 hover:text-[#129cd3] transition-colors">
+                            {line.name}
+                          </h3>
+                        </Link>
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
                           <span className="text-sm sm:text-base font-bold text-[#129cd3]">
                             {formatPrice(line.unitPrice)}

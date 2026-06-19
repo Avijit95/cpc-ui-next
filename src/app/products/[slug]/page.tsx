@@ -617,7 +617,12 @@ export default function ProductDetailPage() {
                 </span>
               )}
 
-              <h1 className="text-2xl font-bold text-gray-900 mb-3 leading-snug">{product.name}</h1>
+              <h1
+                title={product.name}
+                className="text-2xl font-bold text-gray-900 mb-3 leading-snug line-clamp-2"
+              >
+                {product.name}
+              </h1>
 
               {/* Rating (live from reviewsResp.aggregate) */}
               <button
