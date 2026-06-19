@@ -364,7 +364,7 @@ export type CartGstLine = {
 export type PricedCartLine = {
   cartItemId: string;
   productId: string;
-  slug?: string;
+  slug: string;
   variantId: string | null;
   name: string;
   qty: number;

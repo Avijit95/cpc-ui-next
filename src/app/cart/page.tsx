@@ -7,7 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCart } from "@/lib/cart/CartProvider";
-import { cartApi, catalogApi, isApiError } from "@/lib/api";
+import { cartApi, isApiError } from "@/lib/api";
 import type { CartView, PricedCartLine } from "@/lib/api";
 import {
   Trash2,
@@ -36,9 +36,6 @@ export default function CartPage() {
     if (cart) syncHeaderCart(cart);
   }, [cart, syncHeaderCart]);
 
-  // productId → slug map for cart item links
-  const [slugMap, setSlugMap] = useState<Record<string, string>>({});
-
   // Per-line pending qty for optimistic updates (rolled back on error).
   const [pendingQty, setPendingQty] = useState<Record<string, number>>({});
   const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
@@ -51,7 +48,7 @@ export default function CartPage() {
     }
   }, [status, router]);
 
-  // Initial cart load + slug resolution.
+  // Initial cart load.
   useEffect(() => {
     if (status !== "authenticated") return;
     const ac = new AbortController();
@@ -59,26 +56,9 @@ export default function CartPage() {
     setError(null);
     cartApi
       .view()
-      .then(async (c) => {
+      .then((c) => {
         if (ac.signal.aborted) return;
         setCart(c);
-        // Resolve slugs by searching each unique product name in parallel.
-        const unique = c.items.filter(
-          (item, idx, arr) => arr.findIndex((x) => x.productId === item.productId) === idx
-        );
-        const map: Record<string, string> = {};
-        await Promise.all(
-          unique.map(async (item) => {
-            try {
-              const resp = await catalogApi.listProducts({ search: item.name, limit: 5 });
-              const match = resp.items.find((p) => p.id === item.productId) ?? resp.items[0];
-              if (match) map[item.productId] = match.slug;
-            } catch {
-              // Non-fatal
-            }
-          })
-        );
-        setSlugMap(map);
       })
       .catch((err: unknown) => {
         if (ac.signal.aborted) return;
@@ -253,9 +233,10 @@ export default function CartPage() {
                       key={id}
                       className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex gap-3 sm:gap-4"
                     >
-                      {/* Image */}
+                      {/* Image — links to the product detail page */}
                       <Link
-                        href={`/products/${slugMap[line.productId] ?? line.productId}`}
+                        href={`/products/${line.slug}`}
+                        aria-label={`View ${line.name}`}
                         className="w-16 h-16 sm:w-24 sm:h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100 overflow-hidden hover:opacity-80 transition-opacity"
                       >
                         {line.primaryImageUrl ? (
@@ -271,7 +252,7 @@ export default function CartPage() {
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <Link
-                          href={`/products/${slugMap[line.productId] ?? line.productId}`}
+                          href={`/products/${line.slug}`}
                           className="block"
                         >
                           <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-1 line-clamp-2 hover:text-[#129cd3] transition-colors">
