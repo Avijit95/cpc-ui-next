@@ -213,7 +213,7 @@ export default function DealsSection() {
                   ) : (
                     <div className="w-full h-full bg-gray-100" />
                   )}
-                  <span className="absolute top-1 right-1 bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center">
+                  <span className="absolute bg-[#129cd3] text-white text-xs font-bold w-11 h-11 rounded-full flex items-center justify-center" style={{ top: "20%", right: "-12%" }}>
                     -{deal.percentOff}%
                   </span>
                 </Link>
