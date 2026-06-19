@@ -708,25 +708,24 @@ export default function AdminDealsPage() {
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr className="text-left text-xs font-bold text-gray-600 uppercase tracking-wide">
-                  <th className="px-4 py-3">Product</th>
+                  <th className="px-3 py-3">Product</th>
                   <SortableHeader
                     field="dealPrice"
                     currentSort={sort}
                     onSort={setSort}
-                    className="!px-4"
                   >
                     Deal Price
                   </SortableHeader>
-                  <th className="px-4 py-3">Base</th>
-                  <th className="px-4 py-3">Off</th>
+                  <th className="hidden xl:table-cell px-3 py-3">Base</th>
+                  <th className="px-3 py-3">Off</th>
                   <SortableHeader
                     field="startsAt"
                     currentSort={sort}
                     onSort={setSort}
-                    className="!px-4"
+                    className="hidden 2xl:table-cell"
                   >
                     Starts
                   </SortableHeader>
@@ -734,7 +733,6 @@ export default function AdminDealsPage() {
                     field="endsAt"
                     currentSort={sort}
                     onSort={setSort}
-                    className="!px-4"
                   >
                     Ends
                   </SortableHeader>
@@ -742,7 +740,7 @@ export default function AdminDealsPage() {
                     field="createdAt"
                     currentSort={sort}
                     onSort={setSort}
-                    className="!px-4"
+                    className="hidden 2xl:table-cell"
                   >
                     Added
                   </SortableHeader>
@@ -750,12 +748,12 @@ export default function AdminDealsPage() {
                     field="updatedAt"
                     currentSort={sort}
                     onSort={setSort}
-                    className="!px-4"
+                    className="hidden lg:table-cell"
                   >
                     Updated
                   </SortableHeader>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -763,56 +761,54 @@ export default function AdminDealsPage() {
                   const phase = lifecycleOf(d, now);
                   return (
                     <tr key={d.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
                           {d.product.primaryImageUrl ? (
                             <Image
                               src={d.product.primaryImageUrl}
                               alt={d.product.name}
-                              width={40}
-                              height={40}
-                              className="w-10 h-10 object-contain rounded"
+                              width={36}
+                              height={36}
+                              className="w-9 h-9 object-contain rounded flex-shrink-0"
                             />
                           ) : (
-                            <div className="w-10 h-10 bg-gray-100 rounded" />
+                            <div className="w-9 h-9 bg-gray-100 rounded flex-shrink-0" />
                           )}
-                          <div className="min-w-0 max-w-[320px]">
+                          <div className="min-w-0 max-w-[200px]">
                             <span
-                              className="text-gray-800 block truncate"
+                              className="text-gray-800 block truncate text-sm"
                               title={d.product.name}
                             >
                               {d.product.name}
                             </span>
                             <span className="text-[11px] text-gray-500">
-                              {d.variant
-                                ? variantLabel(d.variant)
-                                : "Whole product"}
+                              {d.variant ? variantLabel(d.variant) : "Whole product"}
                             </span>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-bold text-[#129cd3]">
+                      <td className="px-3 py-3 font-bold text-[#129cd3] whitespace-nowrap">
                         {formatPrice(d.dealPrice)}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 line-through">
+                      <td className="hidden xl:table-cell px-3 py-3 text-gray-500 line-through whitespace-nowrap">
                         {formatPrice(d.basePrice)}
                       </td>
-                      <td className="px-4 py-3 text-green-600 font-medium">
+                      <td className="px-3 py-3 text-green-600 font-medium">
                         -{d.percentOff}%
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                      <td className="hidden 2xl:table-cell px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
                         {formatTimestamp(d.startsAt)}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                      <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
                         {formatTimestamp(d.endsAt)}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                      <td className="hidden 2xl:table-cell px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
                         {formatTimestamp(d.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                      <td className="hidden lg:table-cell px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
                         {formatUpdated(d.createdAt, d.updatedAt)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <span
                           className={`px-2 py-1 text-[11px] font-medium rounded ${
                             phase === "live"
@@ -826,7 +822,7 @@ export default function AdminDealsPage() {
                           {!d.isActive && phase !== "expired" && " (off)"}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => toggle(d)}

@@ -64,11 +64,13 @@ const navGroups = [
 ];
 
 export default function AdminSidebar({
-  collapsed,
-  onToggle,
+  floating,
+  mobileOpen,
+  onMobileClose,
 }: {
-  collapsed: boolean;
-  onToggle: () => void;
+  floating: boolean;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -90,50 +92,49 @@ export default function AdminSidebar({
   const initial = (adminName[0] || "A").toUpperCase();
 
   return (
+    <>
+      {/* Backdrop — only in floating/drawer mode */}
+      {floating && mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30"
+          onClick={onMobileClose}
+        />
+      )}
     <aside
-      className={`fixed left-0 top-0 bottom-0 ${
-        collapsed ? "w-16" : "w-64"
-      } bg-[#0f172a] text-gray-300 flex flex-col z-30 transition-[width] duration-200`}
+      className={`fixed left-0 top-0 bottom-0 w-64 bg-[#0f172a] text-gray-300 flex flex-col z-40 transition-transform duration-200 ${
+        floating
+          ? mobileOpen ? "translate-x-0" : "-translate-x-full"
+          : "translate-x-0"
+      }`}
     >
-      <div
-        className={`flex items-center border-b border-white/10 py-5 ${
-          collapsed ? "justify-center px-2" : "justify-between px-6"
-        }`}
-      >
-        {!collapsed && (
-          <Link href="/admin" className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 bg-[#129cd3] rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">
-              C
-            </div>
-            <div className="min-w-0">
-              <p className="text-white font-bold text-sm leading-tight truncate">
-                CPC Admin
-              </p>
-              <p className="text-gray-400 text-[10px]">Control Panel</p>
-            </div>
-          </Link>
+      <div className="flex items-center justify-between border-b border-white/10 py-5 px-6">
+        <Link href="/admin" className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 bg-[#129cd3] rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">
+            C
+          </div>
+          <div className="min-w-0">
+            <p className="text-white font-bold text-sm leading-tight truncate">
+              CPC Admin
+            </p>
+            <p className="text-gray-400 text-[10px]">Control Panel</p>
+          </div>
+        </Link>
+        {floating && (
+          <button
+            onClick={onMobileClose}
+            aria-label="Close menu"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors flex-shrink-0"
+          >
+            <ChevronRight size={16} className="rotate-180" />
+          </button>
         )}
-        <button
-          onClick={onToggle}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors flex-shrink-0"
-        >
-          <ChevronRight size={16} className={collapsed ? "" : "rotate-180"} />
-        </button>
       </div>
-      <nav
-        className={`flex-1 overflow-y-auto py-4 space-y-5 scrollbar-thin ${
-          collapsed ? "px-2" : "px-3"
-        }`}
-      >
+      <nav className="flex-1 overflow-y-auto py-4 space-y-5 scrollbar-thin px-3">
         {navGroups.map((group) => (
           <div key={group.label}>
-            {!collapsed && (
-              <p className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                {group.label}
-              </p>
-            )}
+            <p className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+              {group.label}
+            </p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const active =
@@ -144,20 +145,15 @@ export default function AdminSidebar({
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      title={collapsed ? item.label : undefined}
-                      className={`flex items-center rounded-lg text-sm transition-colors ${
-                        collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2"
-                      } ${
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                         active
                           ? "bg-[#129cd3] text-white shadow-[0_4px_12px_rgba(18,156,211,0.3)]"
                           : "hover:bg-white/5 hover:text-white"
                       }`}
                     >
                       <Icon size={16} />
-                      {!collapsed && <span>{item.label}</span>}
-                      {!collapsed && active && (
-                        <ChevronRight size={14} className="ml-auto" />
-                      )}
+                      <span>{item.label}</span>
+                      {active && <ChevronRight size={14} className="ml-auto" />}
                     </Link>
                   </li>
                 );
@@ -166,43 +162,30 @@ export default function AdminSidebar({
           </div>
         ))}
       </nav>
-      <div className={`py-4 border-t border-white/10 ${collapsed ? "px-2" : "px-4"}`}>
-        <div
-          className={`flex items-center mb-3 ${
-            collapsed ? "justify-center" : "gap-3"
-          }`}
-        >
-          <div
-            className="w-9 h-9 rounded-full bg-[#129cd3] flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-            title={collapsed ? adminName : undefined}
-          >
+      <div className="py-4 border-t border-white/10 px-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-full bg-[#129cd3] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
             {initial}
           </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-semibold truncate">
-                {adminName}
-              </p>
-              <p className="text-gray-400 text-[10px] truncate">{adminEmail}</p>
-            </div>
-          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-semibold truncate">{adminName}</p>
+            <p className="text-gray-400 text-[10px] truncate">{adminEmail}</p>
+          </div>
         </div>
         <button
           onClick={handleSignOut}
           disabled={signingOut}
-          title={collapsed ? "Sign out" : undefined}
-          className={`flex items-center w-full py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-red-400 disabled:text-gray-500 disabled:hover:bg-transparent rounded-lg transition-colors ${
-            collapsed ? "justify-center px-0" : "gap-2 px-3"
-          }`}
+          className="flex items-center gap-2 px-3 w-full py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-red-400 disabled:text-gray-500 disabled:hover:bg-transparent rounded-lg transition-colors"
         >
           {signingOut ? (
             <Loader2 size={14} className="animate-spin" />
           ) : (
             <LogOut size={14} />
           )}
-          {!collapsed && (signingOut ? "Signing out…" : "Sign out")}
+          {signingOut ? "Signing out…" : "Sign out"}
         </button>
       </div>
     </aside>
+    </>
   );
 }

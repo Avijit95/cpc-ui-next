@@ -33,7 +33,7 @@ export default function SortableHeader({
 
   return (
     <th
-      className={`text-${align} font-semibold px-5 py-3 ${className}`}
+      className={`text-${align} font-semibold px-3 py-3 ${className}`}
       aria-sort={
         active ? (currentSort.order === "asc" ? "ascending" : "descending") : "none"
       }

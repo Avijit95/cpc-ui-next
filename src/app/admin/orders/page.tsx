@@ -334,7 +334,7 @@ export default function AdminOrdersPage() {
 
         {/* Table */}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <p className="text-sm text-gray-500">
               {loading ? "Loading…" : `${total} order${total === 1 ? "" : "s"}`}
             </p>
@@ -361,49 +361,43 @@ export default function AdminOrdersPage() {
                     <SortableHeader
                       field="orderNumber"
                       currentSort={sort}
-                      onSort={(s) => {
-                        setSort(s);
-                      }}
+                      onSort={setSort}
                     >
                       Order
                     </SortableHeader>
-                    <th className="text-left font-semibold px-5 py-3">Customer</th>
-                    <th className="text-left font-semibold px-5 py-3">Items</th>
+                    <th className="text-left font-semibold px-3 py-3">Customer</th>
+                    <th className="hidden lg:table-cell text-left font-semibold px-3 py-3">Items</th>
                     <SortableHeader
                       field="grandTotal"
                       currentSort={sort}
-                      onSort={(s) => {
-                        setSort(s);
-                      }}
+                      onSort={setSort}
                     >
                       Amount
                     </SortableHeader>
-                    <th className="text-left font-semibold px-5 py-3">Status</th>
+                    <th className="text-left font-semibold px-3 py-3">Status</th>
                     <SortableHeader
                       field="createdAt"
                       currentSort={sort}
-                      onSort={(s) => {
-                        setSort(s);
-                      }}
+                      onSort={setSort}
+                      className="hidden xl:table-cell"
                     >
                       Added
                     </SortableHeader>
                     <SortableHeader
                       field="updatedAt"
                       currentSort={sort}
-                      onSort={(s) => {
-                        setSort(s);
-                      }}
+                      onSort={setSort}
+                      className="hidden lg:table-cell"
                     >
                       Updated
                     </SortableHeader>
-                    <th className="px-5 py-3" />
+                    <th className="px-3 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {items.map((o) => (
                     <tr key={o.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-3 font-mono text-xs text-[#129cd3] font-semibold">
+                      <td className="px-3 py-3 font-mono text-xs text-[#129cd3] font-semibold whitespace-nowrap">
                         <Link
                           href={`/admin/orders/${encodeURIComponent(o.id)}`}
                           className="hover:underline"
@@ -411,32 +405,30 @@ export default function AdminOrdersPage() {
                           {o.orderNumber}
                         </Link>
                       </td>
-                      <td className="px-5 py-3">
-                        <p className="font-semibold text-gray-800">
-                          {o.user.name}
-                        </p>
+                      <td className="px-3 py-3">
+                        <p className="font-semibold text-gray-800 text-sm">{o.user.name}</p>
                         <p className="text-xs text-gray-500">
                           {o.user.email ?? o.user.phone ?? "—"}
                         </p>
                       </td>
-                      <td className="px-5 py-3 text-gray-700">{o.itemCount}</td>
-                      <td className="px-5 py-3 font-semibold text-gray-800">
+                      <td className="hidden lg:table-cell px-3 py-3 text-gray-700 text-sm">{o.itemCount}</td>
+                      <td className="px-3 py-3 font-semibold text-gray-800 text-sm whitespace-nowrap">
                         {formatPrice(o.grandTotal)}
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-3 py-3">
                         <span
                           className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${STATUS_STYLE[o.status]}`}
                         >
                           {STATUS_LABEL[o.status]}
                         </span>
                       </td>
-                      <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                      <td className="hidden xl:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
                         {formatTimestamp(o.createdAt)}
                       </td>
-                      <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                      <td className="hidden lg:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
                         {formatUpdated(o.createdAt, o.updatedAt)}
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-3 py-3">
                         <Link
                           href={`/admin/orders/${encodeURIComponent(o.id)}`}
                           className="p-1.5 rounded text-gray-400 hover:text-[#129cd3] hover:bg-[#e8f7fc] inline-flex"

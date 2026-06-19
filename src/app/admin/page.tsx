@@ -179,7 +179,7 @@ export default function AdminDashboard() {
                       {i + 1}
                     </span>
                     <p className="flex-1 text-sm font-semibold text-gray-800 truncate">
-                      {p.name}
+                      {p.name.split(" ").slice(0, 4).join(" ")}{p.name.split(" ").length > 4 ? "…" : ""}
                     </p>
                     <span className="text-xs text-gray-500">
                       {p.unitsSold} sold

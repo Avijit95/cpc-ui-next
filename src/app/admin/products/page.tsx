@@ -105,7 +105,7 @@ function ProductToggle({
         />
       </span>
       <span
-        className={`text-[11px] font-semibold ${
+        className={`hidden xl:inline text-[11px] font-semibold ${
           on ? "text-[#129cd3]" : "text-gray-400"
         }`}
       >
@@ -656,81 +656,46 @@ export default function AdminProductsPage() {
                   <SortableHeader
                     field="name"
                     currentSort={sort}
-                    onSort={(s) => {
-                      setUrl({
-                        sortBy: s.field,
-                        sortOrder: s.order,
-                        page: 0,
-                      });
-                    }}
+                    onSort={(s) => setUrl({ sortBy: s.field, sortOrder: s.order, page: 0 })}
                   >
                     Product
                   </SortableHeader>
-                  <th className="text-left font-semibold px-5 py-3">
+                  <th className="hidden lg:table-cell text-left font-semibold px-3 py-3">
                     Category
                   </th>
-                  <th className="text-left font-semibold px-5 py-3">Brand</th>
+                  <th className="hidden xl:table-cell text-left font-semibold px-3 py-3">Brand</th>
                   <SortableHeader
                     field="basePrice"
                     currentSort={sort}
-                    onSort={(s) => {
-                      setUrl({
-                        sortBy: s.field,
-                        sortOrder: s.order,
-                        page: 0,
-                      });
-                    }}
+                    onSort={(s) => setUrl({ sortBy: s.field, sortOrder: s.order, page: 0 })}
                   >
                     Price
                   </SortableHeader>
                   <SortableHeader
                     field="stock"
                     currentSort={sort}
-                    onSort={(s) => {
-                      setUrl({
-                        sortBy: s.field,
-                        sortOrder: s.order,
-                        page: 0,
-                      });
-                    }}
+                    onSort={(s) => setUrl({ sortBy: s.field, sortOrder: s.order, page: 0 })}
                   >
                     Stock
                   </SortableHeader>
-                  <th className="text-left font-semibold px-5 py-3">Variants</th>
-                  <th className="text-left font-semibold px-5 py-3">Status</th>
-                  <th className="text-left font-semibold px-5 py-3">
+                  <th className="hidden xl:table-cell text-left font-semibold px-3 py-3">Variants</th>
+                  <th className="text-left font-semibold px-3 py-3">Status</th>
+                  <th className="hidden lg:table-cell text-left font-semibold px-3 py-3">
                     Best&nbsp;Seller
                   </th>
-                  <th className="text-left font-semibold px-5 py-3">
+                  <th className="hidden lg:table-cell text-left font-semibold px-3 py-3">
                     Featured
                   </th>
-                  <SortableHeader
-                    field="createdAt"
-                    currentSort={sort}
-                    onSort={(s) => {
-                      setUrl({
-                        sortBy: s.field,
-                        sortOrder: s.order,
-                        page: 0,
-                      });
-                    }}
-                  >
-                    Added
-                  </SortableHeader>
+                  <th className="hidden xl:table-cell text-left font-semibold px-3 py-3">Added</th>
                   <SortableHeader
                     field="updatedAt"
                     currentSort={sort}
-                    onSort={(s) => {
-                      setUrl({
-                        sortBy: s.field,
-                        sortOrder: s.order,
-                        page: 0,
-                      });
-                    }}
+                    onSort={(s) => setUrl({ sortBy: s.field, sortOrder: s.order, page: 0 })}
+                    className="hidden lg:table-cell"
                   >
                     Updated
                   </SortableHeader>
-                  <th className="px-5 py-3" />
+                  <th className="px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -761,44 +726,42 @@ export default function AdminProductsPage() {
                     const variantCount = p._count?.variants ?? 0;
                     return (
                       <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center">
-                              <Package size={18} />
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center flex-shrink-0">
+                              <Package size={16} />
                             </div>
                             <div className="min-w-0">
-                              <p className="font-semibold text-gray-800 line-clamp-1">
+                              <p className="font-semibold text-gray-800 line-clamp-1 text-sm">
                                 {p.name}
                               </p>
-                              <code className="text-[11px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                              <code className="hidden sm:inline text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                                 {p.slug}
                               </code>
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-gray-700">
+                        <td className="hidden lg:table-cell px-3 py-3 text-gray-700 text-sm">
                           {categoryName}
                         </td>
-                        <td className="px-5 py-3 text-gray-700">
-                          {p.brand ?? (
-                            <span className="text-gray-400">—</span>
-                          )}
+                        <td className="hidden xl:table-cell px-3 py-3 text-gray-700 text-sm">
+                          {p.brand ?? <span className="text-gray-400">—</span>}
                         </td>
-                        <td className="px-5 py-3">
-                          <p className="font-semibold text-gray-800">
+                        <td className="px-3 py-3">
+                          <p className="font-semibold text-gray-800 text-sm whitespace-nowrap">
                             {formatPrice(p.basePrice)}
                           </p>
                         </td>
-                        <td className="px-5 py-3 text-gray-700">{p.stock}</td>
-                        <td className="px-5 py-3">
+                        <td className="px-3 py-3 text-gray-700 text-sm">{p.stock}</td>
+                        <td className="hidden xl:table-cell px-3 py-3">
                           <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-gray-50 text-gray-600 border-gray-200">
                             {variantCount}
                           </span>
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="px-3 py-3">
                           {p.status === "ARCHIVED" ? (
                             <span
-                              className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${statusBadgeClass(p.status)}`}
+                              className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${statusBadgeClass(p.status)}`}
                             >
                               ARCHIVED
                             </span>
@@ -812,7 +775,7 @@ export default function AdminProductsPage() {
                             />
                           )}
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="hidden lg:table-cell px-3 py-3">
                           <ProductToggle
                             on={p.isBestSeller}
                             busy={busyToggles[p.id] === "bestSeller"}
@@ -821,7 +784,7 @@ export default function AdminProductsPage() {
                             onClick={() => onToggleBestSeller(p)}
                           />
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="hidden lg:table-cell px-3 py-3">
                           <ProductToggle
                             on={p.isFeatured}
                             busy={busyToggles[p.id] === "featured"}
@@ -830,13 +793,13 @@ export default function AdminProductsPage() {
                             onClick={() => onToggleFeatured(p)}
                           />
                         </td>
-                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                        <td className="hidden xl:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
                           {formatTimestamp(p.createdAt)}
                         </td>
-                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
+                        <td className="hidden lg:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
                           {formatUpdated(p.createdAt, p.updatedAt)}
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
                             <Link
                               href={`/admin/products/${p.id}/edit`}
@@ -854,11 +817,7 @@ export default function AdminProductsPage() {
                               disabled={p.status === "ARCHIVED"}
                               className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400"
                               aria-label="Archive"
-                              title={
-                                p.status === "ARCHIVED"
-                                  ? "Already archived"
-                                  : "Archive"
-                              }
+                              title={p.status === "ARCHIVED" ? "Already archived" : "Archive"}
                             >
                               <Archive size={14} />
                             </button>

@@ -1,34 +1,58 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminGuard from "@/components/admin/AdminGuard";
+import AdminMobileContext from "@/components/admin/AdminMobileContext";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // The login page renders its own full-screen layout — skip the sidebar + auth guard.
   const isLogin = pathname === "/admin/login";
-  const [collapsed, setCollapsed] = useState(false);
 
-  if (isLogin) {
-    return <>{children}</>;
-  }
+  // isMobile = below 1200px → sidebar is a floating drawer
+  const [isMobile, setIsMobile] = useState(false);
+  // mobileOpen = drawer open state
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Below 1200px: drawer mode. At 1200px+: fixed sidebar.
+  useEffect(() => {
+    const apply = () => {
+      const w = window.innerWidth;
+      if (w < 1200) {
+        setIsMobile(true);
+        setMobileOpen(false);
+      } else {
+        setIsMobile(false);
+        setMobileOpen(false);
+      }
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
+
+  // Close drawer when route changes
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  if (isLogin) return <>{children}</>;
+
+  // Sidebar is a floating overlay below 1200px — no left padding needed.
+  const contentPadding = isMobile ? "pl-0" : "pl-64";
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50">
       <AdminSidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
+        floating={isMobile}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
       />
-      {/* Dedicated scroll container so tall pages scroll reliably (the sticky
-          AdminHeader sticks within this, not the window). */}
       <div
-        className={`${
-          collapsed ? "pl-16" : "pl-64"
-        } h-screen overflow-y-auto flex flex-col transition-[padding] duration-200`}
+        className={`${contentPadding} h-screen overflow-y-auto flex flex-col transition-[padding] duration-200`}
       >
-        <AdminGuard>{children}</AdminGuard>
+        <AdminMobileContext.Provider value={{ onMenuToggle: () => setMobileOpen((o) => !o), isMobile }}>
+          <AdminGuard>{children}</AdminGuard>
+        </AdminMobileContext.Provider>
       </div>
     </div>
   );
