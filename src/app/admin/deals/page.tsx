@@ -314,10 +314,39 @@ export default function AdminDealsPage() {
   }, [pickerInput]);
 
   // Fetch products whenever picker is open, category or search query changes.
+  // useEffect(() => {
+  //   if (!pickerOpen) return;
+  //   let cancelled = false;
+  //   setPickerLoading(true);
+  //   catalogApi
+  //     .listProducts({
+  //       search: pickerQuery || undefined,
+  //       category: pickerCategory || undefined,
+  //       limit: 16,
+  //     })
+  //     .then((resp) => {
+  //       if (!cancelled) {
+  //         setPickerResults(resp.items);
+  //         setPickerLoading(false);
+  //       }
+  //     })
+  //     .catch(() => {
+  //       if (!cancelled) {
+  //         setPickerResults([]);
+  //         setPickerLoading(false);
+  //       }
+  //     });
+  //   return () => {
+  //     cancelled = true;
+  //   };
+  // }, [pickerQuery, pickerCategory, pickerOpen]);
+
   useEffect(() => {
-    if (!pickerOpen) return;
-    let cancelled = false;
-    setPickerLoading(true);
+  if (!pickerOpen) return;
+  let cancelled = false;
+
+  const fetchProducts = () => {
+    setPickerLoading(true);  // ✅ inside a function, not directly in effect body
     catalogApi
       .listProducts({
         search: pickerQuery || undefined,
@@ -336,10 +365,14 @@ export default function AdminDealsPage() {
           setPickerLoading(false);
         }
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [pickerQuery, pickerCategory, pickerOpen]);
+  };
+
+  fetchProducts();
+
+  return () => {
+    cancelled = true;
+  };
+}, [pickerQuery, pickerCategory, pickerOpen]);
 
   // Load a product's variants so the admin can scope the deal to one. Called
   // from the pick / edit handlers (an event), not an effect.

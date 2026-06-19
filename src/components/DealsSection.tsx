@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
-import ProductCard from "./ProductCard";
 import ProductSectionSlider from "./ProductSectionSlider";
 import { catalogApi, dealsApi } from "@/lib/api";
 import type { Deal, ListCard } from "@/lib/api";
