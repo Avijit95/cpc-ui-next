@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Search,
   ShoppingCart,
@@ -19,6 +19,11 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
 import { catalogApi } from "@/lib/api";
+import type { SuggestItem } from "@/lib/api";
+
+function formatPrice(price: number) {
+  return "₹" + price.toLocaleString("en-IN");
+}
 
 type NavLink = {
   name: string;
@@ -56,6 +61,10 @@ type HeaderProps = {
 export default function Header({ initialNavLinks }: HeaderProps = {}) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<SuggestItem[]>([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const searchBoxRef = useRef<HTMLFormElement>(null);
   const [navLinks, setNavLinks] = useState<NavLink[]>(
     initialNavLinks
       ? [HOME_LINK, ...initialNavLinks, DEALS_LINK]
@@ -93,9 +102,80 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
     return () => ac.abort();
   }, [initialNavLinks]);
 
+  // Debounced typeahead: fetch suggestions ~250ms after the user stops typing.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    const ac = new AbortController();
+    const t = setTimeout(() => {
+      if (q.length < 2) {
+        setSuggestions([]);
+        setActiveIndex(-1);
+        return;
+      }
+      catalogApi
+        .suggest(q, 6, ac.signal)
+        .then((items) => {
+          setSuggestions(items);
+          setShowSuggest(true);
+          setActiveIndex(-1);
+        })
+        .catch(() => {
+          /* aborted or failed — keep the box usable */
+        });
+    }, 250);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
+  }, [searchQuery]);
+
+  // Close the dropdown when clicking outside the search box.
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (
+        searchBoxRef.current &&
+        !searchBoxRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggest(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const goToProduct = (slug: string) => {
+    setShowSuggest(false);
+    setSearchQuery("");
+    router.push(`/products/${slug}`);
+  };
+
+  const submitSearch = (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setShowSuggest(false);
+    router.push(`/products?search=${encodeURIComponent(trimmed)}`);
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+    if (activeIndex >= 0 && suggestions[activeIndex]) {
+      goToProduct(suggestions[activeIndex].slug);
+      return;
+    }
+    submitSearch(searchQuery);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggest || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1) % suggestions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => (i - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === "Escape") {
+      setShowSuggest(false);
+    }
   };
 
   return (
@@ -138,11 +218,15 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
           </Link>
 
           {/* Search — drops to its own full-width row below md, inline from md up */}
-          <form onSubmit={handleSearch} className="order-last basis-full md:order-none md:basis-auto md:flex-1 flex items-center border-2 border-[#129cd3] overflow-hidden">
+          <form ref={searchBoxRef} onSubmit={handleSearch} className="relative order-last basis-full md:order-none md:basis-auto md:flex-1 flex items-center border-2 border-[#129cd3]">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={() => {
+                if (suggestions.length > 0) setShowSuggest(true);
+              }}
               placeholder="Search for products..."
               className="flex-1 outline-none text-sm px-[7px] py-2.5 xs:px-4 text-gray-700 placeholder-gray-400"
             />
@@ -150,6 +234,62 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
               <Search size={16} />
               <span className="hidden sm:inline text-sm font-semibold tracking-wide">SEARCH</span>
             </button>
+
+            {/* Typeahead dropdown */}
+            {showSuggest && suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-b-lg shadow-lg z-[10000] max-h-[70vh] overflow-y-auto">
+                {suggestions.map((s, i) => (
+                  <button
+                    type="button"
+                    key={s.id}
+                    // onMouseDown (not onClick) so the navigation fires before the
+                    // input blur closes the dropdown.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      goToProduct(s.slug);
+                    }}
+                    onMouseEnter={() => setActiveIndex(i)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
+                      i === activeIndex ? "bg-[#e8f7fc]" : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="w-10 h-10 bg-gray-100 rounded flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {s.primaryImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={s.primaryImageUrl}
+                          alt={s.name}
+                          className="w-full h-full object-contain p-0.5"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm text-gray-800 truncate">
+                        {s.name}
+                      </span>
+                      {s.brand && (
+                        <span className="block text-[11px] text-gray-400 truncate">
+                          {s.brand}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-sm font-bold text-[#129cd3] flex-shrink-0">
+                      {formatPrice(s.finalPrice)}
+                    </span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    submitSearch(searchQuery);
+                  }}
+                  className="w-full text-center px-3 py-2.5 text-xs font-semibold text-[#0a6e99] hover:bg-gray-50 border-t border-gray-100"
+                >
+                  See all results for “{searchQuery.trim()}”
+                </button>
+              </div>
+            )}
           </form>
 
           {/* Phone */}
