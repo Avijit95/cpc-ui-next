@@ -7,6 +7,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { removeBackground } from "@imgly/background-removal";
+import ReactCrop, {
+  type Crop,
+  type PixelCrop,
+} from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -60,6 +66,75 @@ const ALLOWED_TYPES: ProductImageContentType[] = [
 ];
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 20;
+
+/** Extracts the cropped area from an img element into a canvas. */
+function getCroppedCanvas(
+  img: HTMLImageElement,
+  crop: PixelCrop,
+): HTMLCanvasElement {
+  const scaleX = img.naturalWidth / img.width;
+  const scaleY = img.naturalHeight / img.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.floor(crop.width * scaleX);
+  canvas.height = Math.floor(crop.height * scaleY);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(
+    img,
+    crop.x * scaleX,
+    crop.y * scaleY,
+    crop.width * scaleX,
+    crop.height * scaleY,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+  return canvas;
+}
+
+/** Strips the background from an image using an in-browser AI model. */
+async function stripBackground(file: File): Promise<File> {
+  // "isnet" is the highest-accuracy model — better at keeping complex subjects
+  // (e.g. a TV whose screen shows a realistic scene) intact.
+  const blob = await removeBackground(file, { model: "isnet" });
+  const name = file.name.replace(/\.[^.]+$/, ".png");
+  return new File([blob], name, { type: "image/png" });
+}
+
+/** Converts any accepted image to PNG via an offscreen canvas. */
+function convertToPng(file: File): Promise<File> {
+  if (file.type === "image/png") return Promise.resolve(file);
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("Canvas unavailable")); return; }
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob((blob) => {
+        if (!blob) { reject(new Error("PNG conversion failed")); return; }
+        const name = file.name.replace(/\.[^.]+$/, ".png");
+        resolve(new File([blob], name, { type: "image/png" }));
+      }, "image/png");
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Load failed")); };
+    img.src = url;
+  });
+}
+
+/** Fetches a remote image URL and returns it as a File object. */
+async function fetchUrlAsFile(url: string): Promise<File> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  const mime = blob.type || "image/jpeg";
+  const ext = mime.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+  return new File([blob], `scraped.${ext}`, { type: mime });
+}
 
 // One ordered list of product images — `existing` items carry the saved S3 key,
 // `pending` items carry a local File not yet uploaded. List order = display rank.
@@ -195,6 +270,14 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const [uploadProgress, setUploadProgress] = useState<
     { current: number; total: number } | null
   >(null);
+  const [processingCount, setProcessingCount] = useState(0);
+  const [autoRemoveBg, setAutoRemoveBg] = useState(true);
+  // Crop-modal queue: files validated but not yet cropped/processed.
+  const [cropQueue, setCropQueue] = useState<File[]>([]);
+  const [cropModal, setCropModal] = useState<{ src: string; file: File } | null>(null);
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
+  const cropImgRef = useRef<HTMLImageElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Scrape-from-URL state (create mode) ─────────────────────────────────
@@ -279,14 +362,70 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const totalImageCount = images.length + selectedScrapedCount;
   const remainingSlots = Math.max(0, MAX_IMAGES - totalImageCount);
 
+  // Open crop modal for the next file in the queue whenever the modal is idle.
+  useEffect(() => {
+    if (cropQueue.length === 0 || cropModal) return;
+    const file = cropQueue[0];
+    setCropModal({ src: URL.createObjectURL(file), file });
+    setCrop(undefined);
+    setCompletedCrop(null);
+  }, [cropQueue, cropModal]);
+
+  // Convert → (optionally) bg-remove → add one file to the images list.
+  const processAndAdd = useCallback(async (file: File, removeBg: boolean) => {
+    setProcessingCount((c) => c + 1);
+    let pngFile = file;
+    if (file.type !== "image/png") {
+      try { pngFile = await convertToPng(file); } catch { /* keep original */ }
+    }
+    let finalFile = pngFile;
+    if (removeBg) {
+      try { finalFile = await stripBackground(pngFile); } catch { /* keep png */ }
+    }
+    setImages((curr) => [
+      ...curr,
+      { id: uid(), kind: "pending", file: finalFile, previewUrl: URL.createObjectURL(finalFile) },
+    ]);
+    setProcessingCount((c) => c - 1);
+  }, []);
+
+  // Move the crop queue forward and close the modal.
+  const advanceCrop = useCallback(() => {
+    setCropModal((m) => { if (m) URL.revokeObjectURL(m.src); return null; });
+    setCropQueue((q) => q.slice(1));
+  }, []);
+
+  const handleCropApply = useCallback(() => {
+    const img = cropImgRef.current;
+    if (!img || !completedCrop || completedCrop.width === 0) {
+      const file = cropModal!.file;
+      advanceCrop();
+      processAndAdd(file, autoRemoveBg);
+      return;
+    }
+    const canvas = getCroppedCanvas(img, completedCrop);
+    const origName = cropModal!.file.name;
+    canvas.toBlob((blob) => {
+      if (!blob) { advanceCrop(); processAndAdd(cropModal!.file, autoRemoveBg); return; }
+      const cropped = new File([blob], origName.replace(/\.[^.]+$/, ".png"), { type: "image/png" });
+      advanceCrop();
+      processAndAdd(cropped, autoRemoveBg);
+    }, "image/png");
+  }, [completedCrop, cropModal, advanceCrop, processAndAdd, autoRemoveBg]);
+
+  const handleCropSkip = useCallback(() => {
+    const file = cropModal!.file;
+    advanceCrop();
+    processAndAdd(file, autoRemoveBg);
+  }, [cropModal, advanceCrop, processAndAdd, autoRemoveBg]);
+
+  // Validate files and push them into the crop queue.
   const onPickFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
       setImageError(null);
-
-      const accepted: ProductImageItem[] = [];
+      const valid: File[] = [];
       const rejections: string[] = [];
-
       let slotsLeft = remainingSlots;
       for (const file of Array.from(files)) {
         if (slotsLeft <= 0) {
@@ -301,23 +440,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           rejections.push(`"${file.name}" is ${fileSizeLabel(file.size)} (max 5 MB).`);
           continue;
         }
-        accepted.push({
-          id: uid(),
-          kind: "pending",
-          file,
-          previewUrl: URL.createObjectURL(file),
-        });
+        valid.push(file);
         slotsLeft -= 1;
       }
-
-      if (accepted.length > 0) {
-        setImages((curr) => [...curr, ...accepted]);
-      }
-      if (rejections.length > 0) {
-        setImageError(rejections.join("\n"));
-      }
-      // Reset the file input so picking the same file twice still fires onChange.
+      if (rejections.length > 0) setImageError(rejections.join("\n"));
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (valid.length > 0) setCropQueue((q) => [...q, ...valid]);
     },
     [remainingSlots],
   );
@@ -338,6 +466,18 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       if (i < 0 || j < 0 || j >= curr.length) return curr;
       const next = [...curr];
       [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+
+  // Move any image to position 0 (makes it the main/display photo).
+  const setAsMain = (id: string) => {
+    setImages((curr) => {
+      const i = curr.findIndex((it) => it.id === id);
+      if (i <= 0) return curr;
+      const next = [...curr];
+      const [item] = next.splice(i, 1);
+      next.unshift(item);
       return next;
     });
   };
@@ -500,15 +640,20 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
   // Persist the product image list: upload any pending files in order, then
   // confirm the full ordered key list (replace=true) so removals and ranking
-  // stick. Returns true on success.
-  const commitProductImages = async (productId: string): Promise<boolean> => {
-    if (images.length === 0) return true; // nothing to persist
-    const total = images.filter((it) => it.kind === "pending").length;
+  // stick. `extra` items (processed scraped images) are appended after the
+  // manually-picked list. Returns true on success.
+  const commitProductImages = async (
+    productId: string,
+    extra: ProductImageItem[] = [],
+  ): Promise<boolean> => {
+    const allImages = [...images, ...extra];
+    if (allImages.length === 0) return true; // nothing to persist
+    const total = allImages.filter((it) => it.kind === "pending").length;
     let uploaded = 0;
     if (total > 0) setUploadProgress({ current: 0, total });
     const orderedKeys: string[] = [];
     try {
-      for (const item of images) {
+      for (const item of allImages) {
         if (item.kind === "existing") {
           orderedKeys.push(item.key);
           continue;
@@ -537,17 +682,33 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     }
   };
 
-  // Re-host selected scraped image URLs server-side. Returns true on success.
-  const importScrapedImages = async (productId: string): Promise<boolean> => {
-    const urls = scrapedImages.filter((i) => i.selected).map((i) => i.url);
-    if (urls.length === 0) return true;
-    try {
-      await adminApi.importProductImages(productId, { imageUrls: urls });
-      return true;
-    } catch (err) {
-      setErrorMsg(readableError(err));
-      return false;
+  // Fetch, convert to PNG, and optionally strip backgrounds from selected
+  // scraped image URLs — entirely client-side so the same pipeline as
+  // manually-picked files is applied. Returns processed ProductImageItems.
+  const processScrapedImages = async (): Promise<ProductImageItem[]> => {
+    const selected = scrapedImages.filter((i) => i.selected);
+    if (selected.length === 0) return [];
+    const results: ProductImageItem[] = [];
+    for (const img of selected) {
+      try {
+        const rawFile = await fetchUrlAsFile(img.url);
+        let pngFile: File;
+        try { pngFile = await convertToPng(rawFile); } catch { pngFile = rawFile; }
+        let finalFile = pngFile;
+        if (autoRemoveBg) {
+          try { finalFile = await stripBackground(pngFile); } catch { /* keep png */ }
+        }
+        results.push({
+          id: uid(),
+          kind: "pending",
+          file: finalFile,
+          previewUrl: URL.createObjectURL(finalFile),
+        });
+      } catch {
+        // skip URLs that can't be fetched (CORS, 4xx, etc.)
+      }
     }
+    return results;
   };
 
   const submit = async (status: ProductStatus) => {
@@ -573,9 +734,19 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         productId = mode.productId;
       }
 
-      const imagesOk = await commitProductImages(productId);
-      const scrapedOk = imagesOk && (await importScrapedImages(productId));
-      if (!imagesOk || !scrapedOk) {
+      // Process scraped images client-side (fetch → PNG → bg removal) so they
+      // go through the same S3 upload path as manually-picked files.
+      const scrapedItems = await processScrapedImages();
+      // Revoke any preview URLs once upload is done.
+      const cleanupScrapedPreviews = () => {
+        for (const it of scrapedItems) {
+          if (it.kind === "pending") URL.revokeObjectURL(it.previewUrl);
+        }
+      };
+
+      const imagesOk = await commitProductImages(productId, scrapedItems);
+      cleanupScrapedPreviews();
+      if (!imagesOk) {
         // The product itself saved fine — keep the image list on screen so the
         // admin can fix it and click Save again (a retry is safe/idempotent).
         setErrorMsg(
@@ -634,6 +805,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         </Link>
 
         <div className="flex items-center gap-2">
+          {processingCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+              <Loader2 size={12} className="animate-spin" />
+              Processing {processingCount} image{processingCount > 1 ? "s" : ""}…
+            </span>
+          )}
           {uploadProgress && (
             <span className="text-xs text-gray-500">
               Uploading image {uploadProgress.current}/{uploadProgress.total}…
@@ -773,17 +950,36 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
           {/* ── Images ── */}
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-bold text-gray-800 text-sm">Product Images</h3>
                 <p className="text-[12px] text-gray-500 mt-0.5">
-                  JPEG, PNG, or WEBP. Up to 5&nbsp;MB each, max {MAX_IMAGES}{" "}
-                  images per product.
+                  JPEG, PNG, or WEBP — saved as PNG. Up to 5&nbsp;MB each, max {MAX_IMAGES} images per product.
                 </p>
               </div>
-              <span className="text-[11px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                {totalImageCount}/{MAX_IMAGES}
-              </span>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {/* Background removal toggle */}
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <div
+                    onClick={() => setAutoRemoveBg((v) => !v)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      autoRemoveBg ? "bg-[#129cd3]" : "bg-gray-300"
+                    }`}
+                  >
+                    <span
+                      className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                        autoRemoveBg ? "translate-x-[18px]" : "translate-x-0.5"
+                      }`}
+                    />
+                  </div>
+                  <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">
+                    Remove background
+                  </span>
+                </label>
+                <span className="text-[11px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  {totalImageCount}/{MAX_IMAGES}
+                </span>
+              </div>
             </div>
 
             {imageError && (
@@ -815,6 +1011,17 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 />
               </label>
 
+              {/* Spinner placeholder for each image currently being processed */}
+              {Array.from({ length: processingCount }).map((_, i) => (
+                <div
+                  key={`processing-${i}`}
+                  className="aspect-square rounded-lg border-2 border-dashed border-[#129cd3]/40 bg-[#e8f7fc]/40 flex flex-col items-center justify-center gap-2"
+                >
+                  <Loader2 size={22} className="animate-spin text-[#129cd3]" />
+                  <span className="text-[10px] text-[#129cd3] font-semibold">Processing…</span>
+                </div>
+              ))}
+
               {images.map((it, idx) => {
                 const src = it.kind === "existing" ? it.url : it.previewUrl;
                 // Backend can't store an empty image list, so block removing the
@@ -837,14 +1044,36 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                         saved
                       </div>
                     )}
+                    {/* Position badge */}
                     <span className="absolute top-1.5 left-1.5 min-w-[22px] h-6 px-1.5 rounded-full bg-black/60 text-white text-[11px] font-semibold flex items-center justify-center">
                       {idx + 1}
                     </span>
+                    {/* Default badge — always visible on #1, hover-triggered on others */}
+                    {idx === 0 ? (
+                      <span
+                        className="absolute top-1.5 right-1.5 h-6 px-2 rounded-full bg-amber-400 text-white text-[10px] font-bold shadow flex items-center justify-center"
+                        title="Main photo (shown on website)"
+                      >
+                        Default
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAsMain(it.id)}
+                        disabled={busy}
+                        className="absolute top-1.5 right-1.5 h-6 px-2 rounded-full bg-white/90 text-amber-500 hover:bg-amber-400 hover:text-white text-[10px] font-bold shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
+                        aria-label="Set as default photo"
+                        title="Set as default photo"
+                      >
+                        Default
+                      </button>
+                    )}
+                    {/* Remove button — shown on hover, shifted down to avoid star */}
                     <button
                       type="button"
                       onClick={() => removeImage(it.id)}
                       disabled={busy || !canRemove}
-                      className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
+                      className="absolute top-9 right-1.5 w-7 h-7 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
                       aria-label="Remove image"
                       title={canRemove ? "Remove image" : "At least one image is required"}
                     >
@@ -922,8 +1151,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             )}
 
             <p className="text-[11px] text-gray-400">
-              Image #1 is the main photo. Use the arrows to reorder and ✕ to
-              remove — changes save when you click Save.
+              The "Default" image is shown on the website. Hover any image and click "Default" to make it the main photo. Use arrows to reorder, ✕ to remove — changes save when you click Save.
             </p>
           </section>
 
@@ -1096,6 +1324,66 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           </section>
         </div>
       </div>
+
+      {/* ── Crop modal ─────────────────────────────────────────────────── */}
+      {cropModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col gap-4 p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-bold text-gray-800">Crop Image</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {cropQueue.length > 1
+                    ? `${cropQueue.length} images remaining — `
+                    : ""}
+                  Drag to select the area you want, then click Apply Crop.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCropSkip}
+                className="p-1 text-gray-400 hover:text-gray-600"
+                title="Skip crop"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-center max-h-[60vh] overflow-auto bg-gray-50 rounded-lg">
+              <ReactCrop
+                crop={crop}
+                onChange={(c) => setCrop(c)}
+                onComplete={(c) => setCompletedCrop(c)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  ref={cropImgRef}
+                  src={cropModal.src}
+                  alt="Crop preview"
+                  style={{ maxHeight: "60vh", maxWidth: "100%", objectFit: "contain" }}
+                />
+              </ReactCrop>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={handleCropSkip}
+                className="text-sm text-gray-500 hover:text-gray-700 border border-gray-200 px-4 py-2 rounded-lg"
+              >
+                Skip crop
+              </button>
+              <button
+                type="button"
+                onClick={handleCropApply}
+                className="text-sm font-semibold bg-[#129cd3] hover:bg-[#0e87b5] text-white px-5 py-2 rounded-lg"
+              >
+                Apply crop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
