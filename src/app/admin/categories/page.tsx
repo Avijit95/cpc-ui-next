@@ -25,7 +25,10 @@ import {
 } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
 import type { AdminCategoryListItem } from "@/lib/api";
-import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import {
+  DateTimeCell,
+  UpdatedDateTimeCell,
+} from "@/components/admin/list/DateTimeCell";
 import { useUrlState } from "@/lib/use-url-state";
 
 const SORT_OPTIONS: readonly SortOption[] = [
@@ -277,7 +280,7 @@ export default function AdminCategoriesPage() {
 
       <div className="p-6 space-y-5">
         {/* Summary */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {[
             {
               label: "Total Categories",
@@ -484,11 +487,11 @@ export default function AdminCategoriesPage() {
                             </span>
                           </button>
                         </td>
-                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
-                          {formatTimestamp(c.createdAt)}
+                        <td className="px-5 py-3 text-gray-600 text-xs">
+                          <DateTimeCell iso={c.createdAt} />
                         </td>
-                        <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
-                          {formatUpdated(c.createdAt, c.updatedAt)}
+                        <td className="px-5 py-3 text-gray-600 text-xs">
+                          <UpdatedDateTimeCell createdAt={c.createdAt} updatedAt={c.updatedAt} />
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-1">

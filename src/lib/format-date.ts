@@ -13,6 +13,20 @@ const DATE_TIME_FMT = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
 });
 
+const DATE_ONLY_FMT = new Intl.DateTimeFormat("en-IN", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  timeZone: "Asia/Kolkata",
+});
+
+const TIME_ONLY_FMT = new Intl.DateTimeFormat("en-IN", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: true,
+  timeZone: "Asia/Kolkata",
+});
+
 export function formatTimestamp(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -21,6 +35,21 @@ export function formatTimestamp(iso: string | null | undefined): string {
   return DATE_TIME_FMT.format(d).replace(/\b(am|pm)\b/i, (m) =>
     m.toUpperCase(),
   );
+}
+
+/** Returns separate date and time strings for two-line rendering. */
+export function formatTimestampParts(
+  iso: string | null | undefined,
+): { date: string; time: string } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    date: DATE_ONLY_FMT.format(d),
+    time: TIME_ONLY_FMT.format(d).replace(/\b(am|pm)\b/i, (m) =>
+      m.toUpperCase(),
+    ),
+  };
 }
 
 export function formatUpdated(

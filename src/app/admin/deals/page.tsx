@@ -33,7 +33,10 @@ import type {
   DealLifecycle,
   ListCard,
 } from "@/lib/api";
-import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import {
+  DateTimeCell,
+  UpdatedDateTimeCell,
+} from "@/components/admin/list/DateTimeCell";
 import { useUrlState } from "@/lib/use-url-state";
 
 const SORT_OPTIONS: readonly SortOption[] = [
@@ -768,17 +771,17 @@ export default function AdminDealsPage() {
                       <td className="px-3 py-3 text-green-600 font-medium">
                         -{d.percentOff}%
                       </td>
-                      <td className="hidden 2xl:table-cell px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
-                        {formatTimestamp(d.startsAt)}
+                      <td className="hidden 2xl:table-cell px-3 py-3 text-gray-600 text-xs">
+                        <DateTimeCell iso={d.startsAt} />
                       </td>
-                      <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
-                        {formatTimestamp(d.endsAt)}
+                      <td className="px-3 py-3 text-gray-600 text-xs">
+                        <DateTimeCell iso={d.endsAt} />
                       </td>
-                      <td className="hidden 2xl:table-cell px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
-                        {formatTimestamp(d.createdAt)}
+                      <td className="hidden 2xl:table-cell px-3 py-3 text-gray-600 text-xs">
+                        <DateTimeCell iso={d.createdAt} />
                       </td>
-                      <td className="hidden lg:table-cell px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
-                        {formatUpdated(d.createdAt, d.updatedAt)}
+                      <td className="hidden lg:table-cell px-3 py-3 text-gray-600 text-xs">
+                        <UpdatedDateTimeCell createdAt={d.createdAt} updatedAt={d.updatedAt} />
                       </td>
                       <td className="px-3 py-3">
                         <span

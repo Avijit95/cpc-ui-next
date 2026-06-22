@@ -19,7 +19,10 @@ import type {
   ListAdminOrdersQuery,
   OrderStatus,
 } from "@/lib/api";
-import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import {
+  DateTimeCell,
+  UpdatedDateTimeCell,
+} from "@/components/admin/list/DateTimeCell";
 import { useUrlState } from "@/lib/use-url-state";
 
 const SORT_OPTIONS: readonly SortOption[] = [
@@ -269,7 +272,7 @@ export default function AdminOrdersPage() {
         </div>
 
         {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
           {summaryCardsConfig.map((c) => {
             const Icon = c.icon;
             const v = counts[c.key];
@@ -422,11 +425,11 @@ export default function AdminOrdersPage() {
                           {STATUS_LABEL[o.status]}
                         </span>
                       </td>
-                      <td className="hidden xl:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
-                        {formatTimestamp(o.createdAt)}
+                      <td className="hidden xl:table-cell px-3 py-3 text-gray-600 text-xs">
+                        <DateTimeCell iso={o.createdAt} />
                       </td>
-                      <td className="hidden lg:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
-                        {formatUpdated(o.createdAt, o.updatedAt)}
+                      <td className="hidden lg:table-cell px-3 py-3 text-gray-600 text-xs">
+                        <UpdatedDateTimeCell createdAt={o.createdAt} updatedAt={o.updatedAt} />
                       </td>
                       <td className="px-3 py-3">
                         <Link

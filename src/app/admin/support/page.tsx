@@ -414,7 +414,7 @@ export default function AdminSupportPage() {
 
       <div className="p-6 space-y-5">
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <SummaryCard
             label="Open"
             value={statusCounts.OPEN ?? 0}
@@ -588,7 +588,7 @@ export default function AdminSupportPage() {
                       {formatTimestamp(detail.createdAt)}
                     </p>
                   </div>
-                  <div className="flex flex-col gap-1.5 items-stretch min-w-[180px]">
+                  <div className="flex flex-col gap-1.5 items-stretch w-full sm:w-auto sm:min-w-[150px]">
                     <select
                       value={detail.status}
                       onChange={(e) =>
@@ -676,7 +676,7 @@ export default function AdminSupportPage() {
                       ))}
                     </div>
                   )}
-                  <div className="flex items-end gap-2">
+                  <div className="flex flex-wrap items-end gap-2">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -718,7 +718,7 @@ export default function AdminSupportPage() {
                     <button
                       onClick={handleReply}
                       disabled={replyBusy || !replyBody.trim()}
-                      className="bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white px-4 py-2.5 rounded-lg flex items-center gap-1.5 text-sm font-semibold"
+                      className="bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-sm font-semibold w-full sm:w-auto"
                     >
                       {replyBusy ? (
                         <Loader2 size={14} className="animate-spin" />

@@ -38,7 +38,10 @@ import type {
   Role,
   UserStatus,
 } from "@/lib/api";
-import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import {
+  DateTimeCell,
+  UpdatedDateTimeCell,
+} from "@/components/admin/list/DateTimeCell";
 import { useUrlState } from "@/lib/use-url-state";
 
 const SORT_OPTIONS: readonly SortOption[] = [
@@ -833,14 +836,14 @@ function UsersTable({
                   <p>{u.email ?? "—"}</p>
                   <p className="text-gray-400">{u.phone ?? "—"}</p>
                 </td>
-                <td className="px-5 py-3 text-gray-500 whitespace-nowrap text-xs">
-                  {formatTimestamp(u.createdAt)}
+                <td className="px-5 py-3 text-gray-500 text-xs">
+                  <DateTimeCell iso={u.createdAt} />
                 </td>
-                <td className="px-5 py-3 text-gray-500 whitespace-nowrap text-xs">
-                  {formatUpdated(u.createdAt, u.updatedAt)}
+                <td className="px-5 py-3 text-gray-500 text-xs">
+                  <UpdatedDateTimeCell createdAt={u.createdAt} updatedAt={u.updatedAt} />
                 </td>
-                <td className="px-5 py-3 text-gray-500 whitespace-nowrap text-xs">
-                  {formatTimestamp(u.lastLoginAt)}
+                <td className="px-5 py-3 text-gray-500 text-xs">
+                  <DateTimeCell iso={u.lastLoginAt} />
                 </td>
                 <td className="px-5 py-3">
                   <span

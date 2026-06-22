@@ -31,7 +31,10 @@ import type {
   AdminProductListItem,
   ProductStatus,
 } from "@/lib/api";
-import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import {
+  DateTimeCell,
+  UpdatedDateTimeCell,
+} from "@/components/admin/list/DateTimeCell";
 import { useUrlState } from "@/lib/use-url-state";
 
 const SORT_OPTIONS: readonly SortOption[] = [
@@ -500,7 +503,7 @@ export default function AdminProductsPage() {
 
       <div className="p-6 space-y-5">
         {/* Inventory summary */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {[
             {
               label: "Total Products",
@@ -793,11 +796,11 @@ export default function AdminProductsPage() {
                             onClick={() => onToggleFeatured(p)}
                           />
                         </td>
-                        <td className="hidden xl:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
-                          {formatTimestamp(p.createdAt)}
+                        <td className="hidden xl:table-cell px-3 py-3 text-gray-600 text-xs">
+                          <DateTimeCell iso={p.createdAt} />
                         </td>
-                        <td className="hidden lg:table-cell px-3 py-3 whitespace-nowrap text-gray-600 text-xs">
-                          {formatUpdated(p.createdAt, p.updatedAt)}
+                        <td className="hidden lg:table-cell px-3 py-3 text-gray-600 text-xs">
+                          <UpdatedDateTimeCell createdAt={p.createdAt} updatedAt={p.updatedAt} />
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">

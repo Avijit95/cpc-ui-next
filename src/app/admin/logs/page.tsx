@@ -170,7 +170,7 @@ export default function LogsPage() {
               />
             </div>
           </div>
-          <div>
+          <div className="flex-1 min-w-[240px]">
             <label className="block text-xs text-gray-500 mb-1">Target type</label>
             <input
               value={targetType}
@@ -179,27 +179,29 @@ export default function LogsPage() {
                 setLoading(true);
               }}
               placeholder="users, orders, coupons…"
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#129cd3] bg-white text-gray-700"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#129cd3] bg-white text-gray-700"
             />
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Added date</label>
-            <DateRangeFilter
-              value={dateRange}
-              hideUpdated
-              onApply={(r) => {
-                setDateRange(r);
-                setLoading(true);
-              }}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Sort</label>
-            <SortByDropdown
-              options={SORT_OPTIONS}
-              currentSort={sort}
-              onSort={setSort}
-            />
+          <div className="flex items-end gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Added date</label>
+              <DateRangeFilter
+                value={dateRange}
+                hideUpdated
+                onApply={(r) => {
+                  setDateRange(r);
+                  setLoading(true);
+                }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Sort</label>
+              <SortByDropdown
+                options={SORT_OPTIONS}
+                currentSort={sort}
+                onSort={setSort}
+              />
+            </div>
           </div>
         </div>
 

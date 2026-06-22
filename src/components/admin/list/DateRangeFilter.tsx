@@ -30,6 +30,7 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange>(value);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const [alignLeft, setAlignLeft] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -40,6 +41,15 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  // When opening, check if right-aligned dropdown would overflow the left viewport
+  // edge. If so, flip to left-aligned.
+  useEffect(() => {
+    if (!open || !wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const dropdownWidth = window.innerWidth < 640 ? 288 : 384; // w-72 / w-96
+    setAlignLeft(rect.right - dropdownWidth < 16);
   }, [open]);
 
   const active = countActive(value);
@@ -80,13 +90,13 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-30">
+        <div className={`absolute mt-2 w-72 sm:w-96 max-w-[calc(100vw-1rem)] bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-30 ${alignLeft ? "left-0" : "right-0"}`}>
           <div className="space-y-3">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase mb-1.5">
                 Added between
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="date"
                   value={draft.createdFrom ?? ""}
@@ -111,7 +121,7 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
                 <p className="text-xs font-semibold text-gray-500 uppercase mb-1.5">
                   Updated between
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
                     type="date"
                     value={draft.updatedFrom ?? ""}

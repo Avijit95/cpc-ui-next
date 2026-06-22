@@ -370,7 +370,7 @@ function SalesView({ report }: { report: SalesReport }) {
   return (
     <div className="space-y-5">
       {/* Totals strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <SmallCard label="Orders" value={totals.orderCount.toLocaleString()} />
         <SmallCard label="Revenue" value={formatPrice(totals.grandTotal)} />
         <SmallCard label="Subtotal" value={formatPrice(totals.subtotal)} />

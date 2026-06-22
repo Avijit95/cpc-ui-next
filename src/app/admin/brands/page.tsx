@@ -14,7 +14,10 @@ import SortByDropdown, {
 } from "@/components/admin/list/SortByDropdown";
 import { adminApi, isApiError } from "@/lib/api";
 import type { AdminBrandRow } from "@/lib/api";
-import { formatTimestamp, formatUpdated } from "@/lib/format-date";
+import {
+  DateTimeCell,
+  UpdatedDateTimeCell,
+} from "@/components/admin/list/DateTimeCell";
 import { useUrlState } from "@/lib/use-url-state";
 import { Loader2, Package, Search, Tag } from "lucide-react";
 
@@ -255,11 +258,11 @@ export default function AdminBrandsPage() {
                         {b.productCount}{" "}
                         {b.productCount === 1 ? "product" : "products"}
                       </td>
-                      <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
-                        {formatTimestamp(b.createdAt)}
+                      <td className="px-5 py-3 text-gray-600 text-xs">
+                        <DateTimeCell iso={b.createdAt} />
                       </td>
-                      <td className="px-5 py-3 whitespace-nowrap text-gray-600 text-xs">
-                        {formatUpdated(b.createdAt, b.updatedAt)}
+                      <td className="px-5 py-3 text-gray-600 text-xs">
+                        <UpdatedDateTimeCell createdAt={b.createdAt} updatedAt={b.updatedAt} />
                       </td>
                     </tr>
                   ))
