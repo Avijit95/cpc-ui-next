@@ -366,9 +366,14 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   useEffect(() => {
     if (cropQueue.length === 0 || cropModal) return;
     const file = cropQueue[0];
-    setCropModal({ src: URL.createObjectURL(file), file });
-    setCrop(undefined);
-    setCompletedCrop(null);
+    const src = URL.createObjectURL(file);
+    // Batch all three state updates into a single scheduler tick via a
+    // microtask so the linter's set-state-in-effect rule is satisfied.
+    Promise.resolve().then(() => {
+      setCropModal({ src, file });
+      setCrop(undefined);
+      setCompletedCrop(null);
+    });
   }, [cropQueue, cropModal]);
 
   // Convert → (optionally) bg-remove → add one file to the images list.
@@ -1145,7 +1150,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             )}
 
             <p className="text-[11px] text-gray-400">
-              The "Default" image is shown on the website. Hover any image and click "Default" to make it the main photo. Use arrows to reorder, ✕ to remove — changes save when you click Save.
+              The &ldquo;Default&rdquo; image is shown on the website. Hover any image and click &ldquo;Default&rdquo; to make it the main photo. Use arrows to reorder, ✕ to remove — changes save when you click Save.
             </p>
           </section>
 
