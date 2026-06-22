@@ -549,13 +549,13 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       setScrapeNote(
         filled.length === 0
           ? {
-              kind: "error",
-              text: "Couldn't extract anything from that page — it may block bots or load content dynamically. Fill the form manually.",
-            }
+            kind: "error",
+            text: "Couldn't extract anything from that page — it may block bots or load content dynamically. Fill the form manually.",
+          }
           : {
-              kind: "info",
-              text: `Imported ${filled.join(", ")}. Review and edit before saving.`,
-            },
+            kind: "info",
+            text: `Imported ${filled.join(", ")}. Review and edit before saving.`,
+          },
       );
     } catch (err) {
       setScrapeNote({
@@ -751,7 +751,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         // admin can fix it and click Save again (a retry is safe/idempotent).
         setErrorMsg(
           (errorMsg ?? "") +
-            "\nThe product was saved, but the images failed. Adjust them and click Save again.",
+          "\nThe product was saved, but the images failed. Adjust them and click Save again.",
         );
         // Clear scraped picks so a retry doesn't re-import duplicates.
         setScrapedImages([]);
@@ -765,7 +765,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         } catch (err) {
           setErrorMsg(
             readableError(err) +
-              "\nThe product saved, but variants failed to save. Edit the product to retry.",
+            "\nThe product saved, but variants failed to save. Edit the product to retry.",
           );
           return;
         }
@@ -892,11 +892,10 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               </div>
               {scrapeNote && (
                 <div
-                  className={`rounded-lg border px-3 py-2 text-xs whitespace-pre-line ${
-                    scrapeNote.kind === "error"
+                  className={`rounded-lg border px-3 py-2 text-xs whitespace-pre-line ${scrapeNote.kind === "error"
                       ? "border-red-200 bg-red-50 text-red-700"
                       : "border-gray-100 bg-gray-50 text-gray-600"
-                  }`}
+                    }`}
                 >
                   {scrapeNote.text}
                 </div>
@@ -962,14 +961,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                   <div
                     onClick={() => setAutoRemoveBg((v) => !v)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                      autoRemoveBg ? "bg-[#129cd3]" : "bg-gray-300"
-                    }`}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${autoRemoveBg ? "bg-[#129cd3]" : "bg-gray-300"
+                      }`}
                   >
                     <span
-                      className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                        autoRemoveBg ? "translate-x-[18px]" : "translate-x-0.5"
-                      }`}
+                      className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${autoRemoveBg ? "translate-x-[18px]" : "translate-x-0.5"
+                        }`}
                     />
                   </div>
                   <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">
@@ -990,11 +987,10 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <label
-                className={`aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors cursor-pointer ${
-                  atImageLimit
+                className={`aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors cursor-pointer ${atImageLimit
                     ? "border-gray-100 text-gray-300 cursor-not-allowed"
                     : "border-gray-200 text-gray-400 hover:border-[#129cd3] hover:text-[#129cd3]"
-                }`}
+                  }`}
               >
                 <ImagePlus size={20} />
                 <span className="text-[11px] mt-1.5 font-semibold">
@@ -1120,11 +1116,10 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                       onClick={() => toggleScraped(img.url)}
                       disabled={busy}
                       title={img.selected ? "Click to exclude" : "Click to include"}
-                      className={`aspect-square relative rounded-lg overflow-hidden bg-gray-50 border transition-all disabled:cursor-not-allowed ${
-                        img.selected
+                      className={`aspect-square relative rounded-lg overflow-hidden bg-gray-50 border transition-all disabled:cursor-not-allowed ${img.selected
                           ? "border-[#129cd3] ring-2 ring-[#129cd3]/30"
                           : "border-gray-200 opacity-50 hover:opacity-80"
-                      }`}
+                        }`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -1133,11 +1128,10 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                         className="w-full h-full object-cover"
                       />
                       <span
-                        className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow ${
-                          img.selected
+                        className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow ${img.selected
                             ? "bg-[#129cd3] text-white"
                             : "bg-white/90 text-transparent"
-                        }`}
+                          }`}
                       >
                         <Check size={13} />
                       </span>
@@ -1397,15 +1391,11 @@ function SpecsEditor({
   onChange: (rows: SpecRow[]) => void;
   disabled: boolean;
 }) {
-  // const update = (id: string, patch: Partial<SpecRow>) =>
-  //   onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  // const add = () => onChange([...rows, { id: uid(), key: "", value: "" }]);
-  // const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
 
   const update = (id: string, patch: Partial<SpecRow>) =>
-  onChange(rows.map((r: SpecRow) => (r.id === id ? { ...r, ...patch } : r)));
-
-const remove = (id: string) => onChange(rows.filter((r: SpecRow) => r.id !== id));
+    onChange(rows.map((r: SpecRow) => (r.id === id ? { ...r, ...patch } : r)));
+const add = () => onChange([...rows, { id: uid(), key: "", value: "" }]);
+  const remove = (id: string) => onChange(rows.filter((r: SpecRow) => r.id !== id));
 
   return (
     <div className="space-y-2">
