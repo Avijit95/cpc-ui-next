@@ -1397,10 +1397,15 @@ function SpecsEditor({
   onChange: (rows: SpecRow[]) => void;
   disabled: boolean;
 }) {
+  // const update = (id: string, patch: Partial<SpecRow>) =>
+  //   onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  // const add = () => onChange([...rows, { id: uid(), key: "", value: "" }]);
+  // const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
+
   const update = (id: string, patch: Partial<SpecRow>) =>
-    onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const add = () => onChange([...rows, { id: uid(), key: "", value: "" }]);
-  const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
+  onChange(rows.map((r: SpecRow) => (r.id === id ? { ...r, ...patch } : r)));
+
+const remove = (id: string) => onChange(rows.filter((r: SpecRow) => r.id !== id));
 
   return (
     <div className="space-y-2">
