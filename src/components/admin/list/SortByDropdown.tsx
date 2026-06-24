@@ -13,19 +13,20 @@ type Props = {
   options: readonly SortOption[];
   currentSort: SortState;
   onSort: (next: SortState) => void;
+  className?: string;
 };
 
 function matchKey(opt: SortOption): string {
   return `${opt.sortBy}|${opt.sortOrder}`;
 }
 
-export default function SortByDropdown({ options, currentSort, onSort }: Props) {
+export default function SortByDropdown({ options, currentSort, onSort, className }: Props) {
   const current = `${currentSort.field}|${currentSort.order}`;
   const known = options.some((o) => matchKey(o) === current);
 
   return (
-    <div className="inline-flex items-center gap-1.5">
-      <ArrowUpDown size={13} className="text-gray-400" />
+    <div className={`flex items-center gap-1.5 ${className ?? ""}`}>
+      <ArrowUpDown size={13} className="text-gray-400 flex-shrink-0" />
       <select
         value={known ? current : ""}
         onChange={(e) => {
@@ -35,7 +36,7 @@ export default function SortByDropdown({ options, currentSort, onSort }: Props) 
           ];
           onSort({ field, order });
         }}
-        className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white text-gray-700"
+        className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white text-gray-700 flex-1"
       >
         {!known && (
           <option value="" disabled>

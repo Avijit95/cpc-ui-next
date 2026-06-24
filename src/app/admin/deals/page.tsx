@@ -62,6 +62,7 @@ type FormState = {
   variantId: string | null;
   scope: DealScope;
   discountPercent: string;
+  discountAmount: string;
   dealPrice: string;
   variantPrices: Record<string, string>;
   startsAt: string;
@@ -78,6 +79,7 @@ const EMPTY_FORM: FormState = {
   variantId: null,
   scope: "whole",
   discountPercent: "",
+  discountAmount: "",
   dealPrice: "",
   variantPrices: {},
   startsAt: "",
@@ -384,9 +386,10 @@ export default function AdminDealsPage() {
       variantId: d.variantId,
       scope: "whole",
       // Whole-product deals are entered as a % off the base price; reconstruct it.
-      discountPercent:
+      discountPercent: "",
+      discountAmount:
         d.variantId == null && d.basePrice > 0
-          ? String(Math.round(((d.basePrice - d.dealPrice) / d.basePrice) * 100))
+          ? String(d.basePrice - d.dealPrice)
           : "",
       dealPrice: String(d.dealPrice),
       variantPrices: {},
@@ -522,16 +525,20 @@ export default function AdminDealsPage() {
     // equivalent base-config deal price; the API applies the same % to each
     // variant's own MRP.
     if (wholeProductDeal) {
-      const pct = Number(form.discountPercent);
-      if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) {
-        setFormError("Discount must be between 1 and 99%.");
+      const discAmt = Number(form.discountAmount);
+      if (!Number.isFinite(discAmt) || discAmt <= 0) {
+        setFormError("Discount amount must be a positive number.");
         return;
       }
       if (productBase <= 0) {
         setFormError("This product has no base price to discount.");
         return;
       }
-      const dealPrice = Math.round(productBase * (1 - pct / 100));
+      if (discAmt >= productBase) {
+        setFormError("Discount cannot be equal to or greater than the base price.");
+        return;
+      }
+      const dealPrice = Math.round(productBase - discAmt);
       setSaveBusy(true);
       try {
         if (modalMode === "create") {
@@ -632,13 +639,14 @@ export default function AdminDealsPage() {
       />
       <main className="p-6 space-y-6">
         {/* Filter chips + create */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col min-[768px]:flex-row min-[768px]:items-center min-[768px]:justify-between gap-3">
+          {/* Status tabs */}
+          <div className="flex flex-col min-[767px]:flex-row min-[767px]:flex-wrap gap-2">
             {STATUS_TABS.map((t) => (
               <button
                 key={t.value}
                 onClick={() => setStatusFilter(t.value)}
-                className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                className={`px-4 py-2 text-sm rounded-lg transition-colors w-full min-[767px]:w-auto ${
                   statusFilter === t.value
                     ? "bg-[#129cd3] text-white"
                     : "bg-white border border-gray-200 text-gray-700 hover:border-[#129cd3]"
@@ -648,16 +656,22 @@ export default function AdminDealsPage() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
+          {/* Sort / Dates / New Deal */}
+          <div className="flex flex-col min-[440px]:flex-row min-[440px]:items-center gap-2 min-[768px]:flex-shrink-0">
             <SortByDropdown
+              className="w-full min-[440px]:w-auto"
               options={SORT_OPTIONS}
               currentSort={sort}
               onSort={setSort}
             />
-            <DateRangeFilter value={dateRange} onApply={setDateRange} />
+            <DateRangeFilter
+              className="w-full min-[440px]:w-auto"
+              value={dateRange}
+              onApply={setDateRange}
+            />
             <button
               onClick={openCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-[#129cd3] text-white text-sm rounded-lg hover:bg-[#0e87b5] transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#129cd3] text-white text-sm font-semibold rounded-lg hover:bg-[#0e87b5] transition-colors w-full min-[440px]:w-auto"
             >
               <Plus size={16} />
               New Deal
@@ -870,6 +884,7 @@ export default function AdminDealsPage() {
                           variantId: null,
                           scope: "whole",
                           discountPercent: "",
+                          discountAmount: "",
                           variantPrices: {},
                         }));
                         setVariants([]);
@@ -1088,22 +1103,29 @@ export default function AdminDealsPage() {
               {perVariant ? null : wholeProductDeal ? (
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                    Discount (%)
+                    Discount (₹)
                   </label>
                   <input
                     type="number"
                     step="1"
                     min="1"
-                    max="99"
-                    value={form.discountPercent}
+                    value={form.discountAmount}
                     onChange={(e) =>
-                      setForm((p) => ({ ...p, discountPercent: e.target.value }))
+                      setForm((p) => ({ ...p, discountAmount: e.target.value }))
                     }
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#129cd3]"
-                    placeholder="e.g., 8"
+                    placeholder="e.g., 500"
                   />
                   <p className="mt-1 text-[11px] text-gray-500">
-                    Applied as % off each variant&apos;s base price (MRP).
+                    {(() => {
+                      const amt = Number(form.discountAmount);
+                      const base = form.productBasePrice ?? 0;
+                      if (amt > 0 && base > 0 && amt < base) {
+                        const pct = Math.round((amt / base) * 100);
+                        return <>Discount of ₹{amt.toLocaleString("en-IN")} <span className="font-semibold text-[#129cd3]">({pct}% off)</span></>;
+                      }
+                      return "Enter discount amount in ₹ — percentage will be shown automatically.";
+                    })()}
                   </p>
                 </div>
               ) : (

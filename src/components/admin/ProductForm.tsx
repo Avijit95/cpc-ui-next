@@ -1166,59 +1166,6 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
           </section>
 
-          <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-            <h3 className="font-bold text-gray-800 text-sm">Pricing &amp; Inventory</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                  Base price (₹) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={form.basePrice}
-                  onChange={(e) => onChange("basePrice", e.target.value)}
-                  placeholder="0.00"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
-                />
-                <p className="text-[11px] text-gray-400 mt-1">
-                  MRP, shown struck-through. Up to 2 decimals.
-                </p>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                  Selling price (₹)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={form.priceOverride}
-                  onChange={(e) => onChange("priceOverride", e.target.value)}
-                  placeholder="Same as base"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
-                />
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Optional. Blank = sell at base price. Variants set their own.
-                </p>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                  Stock
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={form.stock}
-                  onChange={(e) => onChange("stock", e.target.value)}
-                  placeholder="0"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
-                />
-              </div>
-            </div>
-          </section>
 
           {showVariants && (
             <ProductVariantsEditor

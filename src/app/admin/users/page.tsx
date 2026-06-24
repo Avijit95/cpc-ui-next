@@ -432,8 +432,8 @@ export default function UsersPage() {
             ))}
           </div>
 
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 w-80 max-w-full">
+          <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 w-full sm:w-80">
               <Search size={14} className="text-gray-400" />
               <input
                 value={query}
@@ -442,11 +442,12 @@ export default function UsersPage() {
                 className="bg-transparent outline-none text-sm text-gray-700 flex-1"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               {tab !== "partners" && (
                 <>
-                  <DateRangeFilter value={dateRange} onApply={setDateRange} />
+                  <DateRangeFilter className="w-full sm:w-auto" value={dateRange} onApply={setDateRange} />
                   <SortByDropdown
+                    className="w-full sm:w-auto"
                     options={SORT_OPTIONS}
                     currentSort={sort}
                     onSort={setSort}
@@ -460,7 +461,7 @@ export default function UsersPage() {
                     setPartnerStatus(e.target.value as KycStatus);
                     setPartnersLoading(true);
                   }}
-                  className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+                  className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white w-full sm:w-auto"
                 >
                   <option value="PENDING">Pending</option>
                   <option value="VERIFIED">Approved</option>

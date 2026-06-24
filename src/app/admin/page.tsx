@@ -95,7 +95,7 @@ export default function AdminDashboard() {
         actions={
           <Link
             href="/admin/products/add"
-            className="hidden sm:inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
           >
             <ArrowUpRight size={14} /> New product
           </Link>

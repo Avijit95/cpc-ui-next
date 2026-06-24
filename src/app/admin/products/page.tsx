@@ -544,8 +544,8 @@ export default function AdminProductsPage() {
         </div>
 
         {/* Filters */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 flex-1 min-w-[240px]">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col min-[500px]:flex-row min-[500px]:flex-wrap min-[500px]:items-center gap-3">
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 w-full min-[500px]:flex-1 min-[500px]:min-w-[240px]">
             <Search size={14} className="text-gray-400" />
             <input
               value={searchInput}
@@ -562,7 +562,7 @@ export default function AdminProductsPage() {
                 page: 0,
               });
             }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white w-full min-[500px]:w-auto"
           >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -575,7 +575,7 @@ export default function AdminProductsPage() {
             onChange={(e) => {
               setUrl({ categoryId: e.target.value, page: 0 });
             }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white w-full min-[500px]:w-auto"
           >
             <option value="">All categories</option>
             {categories.map((c) => (
@@ -592,7 +592,7 @@ export default function AdminProductsPage() {
                 page: 0,
               });
             }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white w-full min-[500px]:w-auto"
           >
             {BEST_SELLER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -608,7 +608,7 @@ export default function AdminProductsPage() {
                 page: 0,
               });
             }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white"
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none hover:border-[#129cd3] bg-white w-full min-[500px]:w-auto"
           >
             {FEATURED_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -616,25 +616,29 @@ export default function AdminProductsPage() {
               </option>
             ))}
           </select>
-          <DateRangeFilter
-            value={dateRange}
-            onApply={(r) => {
-              setUrl({
-                createdFrom: r.createdFrom ?? "",
-                createdTo: r.createdTo ?? "",
-                updatedFrom: r.updatedFrom ?? "",
-                updatedTo: r.updatedTo ?? "",
-                page: 0,
-              });
-            }}
-          />
-          <SortByDropdown
-            options={SORT_OPTIONS}
-            currentSort={sort}
-            onSort={(s) =>
-              setUrl({ sortBy: s.field, sortOrder: s.order, page: 0 })
-            }
-          />
+          <div className="flex flex-col min-[400px]:flex-row min-[400px]:items-center gap-3 w-full min-[500px]:w-auto">
+            <DateRangeFilter
+              className="w-full min-[400px]:w-auto"
+              value={dateRange}
+              onApply={(r) => {
+                setUrl({
+                  createdFrom: r.createdFrom ?? "",
+                  createdTo: r.createdTo ?? "",
+                  updatedFrom: r.updatedFrom ?? "",
+                  updatedTo: r.updatedTo ?? "",
+                  page: 0,
+                });
+              }}
+            />
+            <SortByDropdown
+              className="w-full min-[400px]:w-auto"
+              options={SORT_OPTIONS}
+              currentSort={sort}
+              onSort={(s) =>
+                setUrl({ sortBy: s.field, sortOrder: s.order, page: 0 })
+              }
+            />
+          </div>
         </div>
 
         {/* Top-level error */}

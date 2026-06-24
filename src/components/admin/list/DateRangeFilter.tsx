@@ -13,8 +13,8 @@ export type DateRange = {
 type Props = {
   value: DateRange;
   onApply: (next: DateRange) => void;
-  // When true, hides the "Updated" pair (e.g. activity-logs).
   hideUpdated?: boolean;
+  className?: string;
 };
 
 function countActive(r: DateRange): number {
@@ -26,7 +26,7 @@ function countActive(r: DateRange): number {
   );
 }
 
-export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) {
+export default function DateRangeFilter({ value, onApply, hideUpdated, className }: Props) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange>(value);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -71,11 +71,11 @@ export default function DateRangeFilter({ value, onApply, hideUpdated }: Props) 
   };
 
   return (
-    <div className="relative" ref={wrapRef}>
+    <div className={`relative ${className ?? ""}`} ref={wrapRef}>
       <button
         type="button"
         onClick={toggle}
-        className={`inline-flex items-center gap-2 text-sm border rounded-lg px-3 py-2 outline-none bg-white ${
+        className={`flex w-full items-center gap-2 text-sm border rounded-lg px-3 py-2 outline-none bg-white ${
           active > 0
             ? "border-[#129cd3] text-[#129cd3]"
             : "border-gray-200 hover:border-[#129cd3]"

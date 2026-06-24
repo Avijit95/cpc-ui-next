@@ -40,8 +40,10 @@ type VariantRow = {
   storage: string; // ROM
   color: string;
   stock: string;
-  base: string; // MRP (struck); blank = no separate base price
-  price: string; // selling price; blank = use product base price
+  base: string;       // MRP (struck); blank = no separate base price
+  gst: string;        // GST % (default 18)
+  grossPrice: string; // auto-calc: MRP / (1 + gst/100), read-only display
+  price: string;      // selling price; blank = use product base price
 };
 
 // A color's images are one ordered list — order is the display rank (#1 first).
@@ -88,17 +90,30 @@ function buildAttributes(r: VariantRow): Record<string, unknown> {
   return a;
 }
 
+function calcGrossPrice(mrp: string, gst: string): string {
+  const m = Number(mrp);
+  const g = Number(gst);
+  if (!mrp.trim() || isNaN(m) || m <= 0 || isNaN(g) || g < 0) return "";
+  return (m / (1 + g / 100)).toFixed(2);
+}
+
 function initRows(variants: AdminVariant[]): VariantRow[] {
-  return variants.map((v) => ({
-    uid: uid(),
-    existingId: v.id,
-    ram: v.attributes.ram != null ? String(v.attributes.ram) : "",
-    storage: v.attributes.storage != null ? String(v.attributes.storage) : "",
-    color: v.attributes.color != null ? String(v.attributes.color) : "",
-    stock: String(v.stock ?? 0),
-    base: v.basePrice != null ? String(v.basePrice) : "",
-    price: v.priceOverride != null ? String(v.priceOverride) : "",
-  }));
+  return variants.map((v) => {
+    const base = v.basePrice != null ? String(v.basePrice) : "";
+    const gst = "18";
+    return {
+      uid: uid(),
+      existingId: v.id,
+      ram: v.attributes.ram != null ? String(v.attributes.ram) : "",
+      storage: v.attributes.storage != null ? String(v.attributes.storage) : "",
+      color: v.attributes.color != null ? String(v.attributes.color) : "",
+      stock: String(v.stock ?? 0),
+      base,
+      gst,
+      grossPrice: calcGrossPrice(base, gst),
+      price: v.priceOverride != null ? String(v.priceOverride) : "",
+    };
+  });
 }
 
 // Variants of the same color share one image set — take the first non-empty.
@@ -166,6 +181,8 @@ const ProductVariantsEditor = forwardRef<
         color: "",
         stock: "0",
         base: "",
+        gst: "18",
+        grossPrice: "",
         price: "",
       },
     ]);
@@ -245,6 +262,10 @@ const ProductVariantsEditor = forwardRef<
           ) {
             return "Each variant's stock must be a whole number ≥ 0.";
           }
+          const gstNum = Number(r.gst);
+          if (r.gst.trim() === "" || isNaN(gstNum) || gstNum < 0 || gstNum > 100) {
+            return "GST % must be a number between 0 and 100.";
+          }
           if (r.price.trim() !== "") {
             const p = Number(r.price);
             if (Number.isNaN(p) || p < 0) {
@@ -254,10 +275,10 @@ const ProductVariantsEditor = forwardRef<
           if (r.base.trim() !== "") {
             const b = Number(r.base);
             if (Number.isNaN(b) || b < 0) {
-              return "Variant base price must be a number ≥ 0 (leave blank for no struck price).";
+              return "Variant MRP must be a number ≥ 0 (leave blank for no struck price).";
             }
             if (r.price.trim() !== "" && b < Number(r.price)) {
-              return "Variant base price must be greater than or equal to the selling price.";
+              return "MRP must be greater than or equal to the selling price.";
             }
           }
           const key = comboKey(r);
@@ -324,11 +345,10 @@ const ProductVariantsEditor = forwardRef<
       <div>
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
-          Add each RAM / ROM / Color combination this phone is sold in, with its own
-          stock and prices. Base (₹) is the struck MRP; Selling (₹) is what the
-          customer pays — leave Selling blank to use the product base price, and
-          Base blank for no struck price. Images are shared per color — image #1 is
-          the primary; reorder or remove them below.
+          Add each RAM / ROM / Color combination with its own stock and prices.
+          Enter the MRP (inclusive of GST); Gross Price is auto-calculated as
+          MRP ÷ (1 + GST%). Selling Price is what the customer pays — leave blank
+          to use the product base price. Images are shared per color.
         </p>
       </div>
 
@@ -357,7 +377,7 @@ const ProductVariantsEditor = forwardRef<
         {rows.map((r) => (
           <div
             key={r.uid}
-            className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_70px_100px_100px_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
+            className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_60px_90px_55px_90px_90px_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
           >
             <Field label="RAM">
               <input
@@ -400,16 +420,50 @@ const ProductVariantsEditor = forwardRef<
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
-            <Field label="Base (₹)">
+            <Field label="MRP (₹)">
               <input
                 type="number"
                 min={0}
                 step="0.01"
                 value={r.base}
-                onChange={(e) => updateRow(r.uid, { base: e.target.value })}
-                placeholder="MRP"
+                onChange={(e) => {
+                  const base = e.target.value;
+                  updateRow(r.uid, {
+                    base,
+                    grossPrice: calcGrossPrice(base, r.gst),
+                  });
+                }}
+                placeholder="0"
                 disabled={disabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+              />
+            </Field>
+            <Field label="GST (%)">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                value={r.gst}
+                onChange={(e) => {
+                  const gst = e.target.value;
+                  updateRow(r.uid, {
+                    gst,
+                    grossPrice: calcGrossPrice(r.base, gst),
+                  });
+                }}
+                disabled={disabled}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+              />
+            </Field>
+            <Field label="Gross (₹)">
+              <input
+                type="number"
+                value={r.grossPrice}
+                readOnly
+                tabIndex={-1}
+                placeholder="auto"
+                className="w-full border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm text-gray-500 cursor-default outline-none"
               />
             </Field>
             <Field label="Selling (₹)">
@@ -419,7 +473,7 @@ const ProductVariantsEditor = forwardRef<
                 step="0.01"
                 value={r.price}
                 onChange={(e) => updateRow(r.uid, { price: e.target.value })}
-                placeholder="base"
+                placeholder="= MRP"
                 disabled={disabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
