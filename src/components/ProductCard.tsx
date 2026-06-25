@@ -73,9 +73,20 @@ export default function ProductCard({
   const displayBasePrice = variantOverride
     ? variantOverride.pricing.basePrice
     : product.basePrice;
-  const displayStock = variantOverride
-    ? variantOverride.stock
-    : (detail?.stock ?? (product.stock ?? null));
+
+  // Local stock: mutable so we can decrement on successful Add to Cart.
+  const [localStock, setLocalStock] = useState<number | null>(
+    () => variantOverride?.stock ?? detailCache.get(product.slug)?.stock ?? (product.stock ?? null)
+  );
+
+  // Sync localStock once when the background detail fetch resolves (non-variant cards).
+  useEffect(() => {
+    if (variantOverride) return;
+    if (localStock !== null) return;
+    const s = detail?.stock;
+    if (s != null) setLocalStock(s);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail]);
 
   const hasDiscount2 = displayBasePrice > displayFinalPrice;
   const discount2 = hasDiscount2
@@ -88,9 +99,9 @@ export default function ProductCard({
 
   const variantAttrLabel = variantOverride ? variantLabel(variantOverride) : null;
 
-  const isOutOfStock = displayStock !== null && displayStock === 0;
-  const isCriticalStock = displayStock !== null && displayStock > 0 && displayStock < 5;
-  const isLowStock = displayStock !== null && displayStock >= 5 && displayStock < 10;
+  const isOutOfStock = localStock !== null && localStock === 0;
+  const isCriticalStock = localStock !== null && localStock > 0 && localStock < 5;
+  const isLowStock = localStock !== null && localStock >= 5 && localStock < 10;
 
   return (
     <div className="product-home-card group bg-white border border-gray-200 hover:border-[#8dd4ee] hover:shadow-md transition-all overflow-hidden flex flex-col max-[499px]:rounded-xl">
@@ -214,7 +225,7 @@ export default function ProductCard({
         {/* Stock status */}
         {isCriticalStock && (
           <p className="text-[10px] font-semibold text-red-500 mb-1">
-            Only {displayStock} left!
+            Only {localStock} left!
           </p>
         )}
         {isLowStock && (
@@ -252,10 +263,11 @@ export default function ProductCard({
             setAddState("busy");
             try {
               syncHeaderCart(await cartApi.addItem({
-  productId: product.id,
-  variantId: variantOverride?.id,
-  qty: 1,
-}));
+                productId: product.id,
+                variantId: variantOverride?.id,
+                qty: 1,
+              }));
+              setLocalStock((s) => (s !== null ? Math.max(0, s - 1) : null));
               setAddState("added");
               window.setTimeout(() => setAddState("idle"), 1500);
             } catch (err) {
