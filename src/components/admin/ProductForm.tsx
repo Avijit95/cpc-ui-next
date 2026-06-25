@@ -189,25 +189,25 @@ function initSpecRows(specs?: Record<string, unknown> | null): SpecRow[] {
 
 // Heuristic: does this category look like phones? Walks parents too so
 // "Electronics › Smartphones › Apple" still triggers.
-function isPhoneCategory(
-  categoryId: string,
-  categories: AdminCategoryListItem[],
-): boolean {
-  const byId = new Map(categories.map((c) => [c.id, c]));
-  let cur = byId.get(categoryId);
-  while (cur) {
-    const haystack = `${cur.name} ${cur.slug}`.toLowerCase();
-    if (
-      haystack.includes("phone") ||
-      haystack.includes("mobile") ||
-      haystack.includes("smartphone")
-    ) {
-      return true;
-    }
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
-  }
-  return false;
-}
+// function isPhoneCategory(
+//   categoryId: string,
+//   categories: AdminCategoryListItem[],
+// ): boolean {
+//   const byId = new Map(categories.map((c) => [c.id, c]));
+//   let cur = byId.get(categoryId);
+//   while (cur) {
+//     const haystack = `${cur.name} ${cur.slug}`.toLowerCase();
+//     if (
+//       haystack.includes("phone") ||
+//       haystack.includes("mobile") ||
+//       haystack.includes("smartphone")
+//     ) {
+//       return true;
+//     }
+//     cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+//   }
+//   return false;
+// }
 
 function buildInitialForm(initial?: AdminProductDetail | AdminProduct): FormState {
   return {
