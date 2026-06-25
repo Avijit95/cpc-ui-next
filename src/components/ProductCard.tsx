@@ -84,7 +84,10 @@ export default function ProductCard({
     if (variantOverride) return;
     if (localStock !== null) return;
     const s = detail?.stock;
-    if (s != null) setLocalStock(s);
+    if (s != null) {
+    const syncStock = () => setLocalStock(s);
+    syncStock();
+  };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail]);
 
