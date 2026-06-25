@@ -195,9 +195,12 @@ export default function CartPage() {
   const removeLine = useCallback(
     async (line: PricedCartLine) => {
       const id = line.cartItemId;
+      const lineStockKey = line.variantId ? `v:${line.variantId}` : `p:${line.slug}`;
       setBusy(id, true);
       try {
         const updated = await cartApi.removeItem(id);
+        // Return all qty back to the global stock store immediately.
+        adjustStock(lineStockKey, line.qty);
         setCart(updated);
       } catch (err: unknown) {
         setLineErrors((e) => ({
@@ -208,7 +211,7 @@ export default function CartPage() {
         setBusy(id, false);
       }
     },
-    [setBusy],
+    [setBusy, adjustStock],
   );
 
   // While auth is bootstrapping or redirecting, show a skeleton.
@@ -332,8 +335,8 @@ export default function CartPage() {
                           {/* Qty */}
                           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
                             <button
-                              onClick={() => updateQty(line, displayQty - 1)}
-                              disabled={busy || displayQty <= 1}
+                              onClick={() => displayQty <= 1 ? removeLine(line) : updateQty(line, displayQty - 1)}
+                              disabled={busy}
                               className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               −
