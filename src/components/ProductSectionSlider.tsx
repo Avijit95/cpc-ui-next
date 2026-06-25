@@ -1,10 +1,18 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import ProductCard from "./ProductCard";
-import type { ListCard } from "@/lib/api";
+import { catalogApi } from "@/lib/api";
+import type { ListCard, Variant } from "@/lib/api";
+
+// Re-use the same module-level cache from ProductCard to avoid double-fetching.
+// We import indirectly by referencing the same catalogApi; the cache lives in
+// ProductCard.tsx module scope, so we inline a lightweight local one here.
+const sliderDetailCache = new Map<string, Variant[]>();
+
+type SliderItem = { product: ListCard; variant?: Variant };
 
 type Props = {
   title: string;
@@ -14,6 +22,43 @@ type Props = {
 
 export default function ProductSectionSlider({ title, items, viewAllHref }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Expand products with variants into individual slider items.
+  const [sliderItems, setSliderItems] = useState<SliderItem[]>(
+    () => items.map((p) => ({ product: p }))
+  );
+
+  useEffect(() => {
+    let active = true;
+    Promise.all(
+      items.map((p) => {
+        if (sliderDetailCache.has(p.slug)) {
+          return Promise.resolve(sliderDetailCache.get(p.slug)!);
+        }
+        return catalogApi
+          .getProduct(p.slug)
+          .then((d) => {
+            sliderDetailCache.set(p.slug, d.variants);
+            return d.variants;
+          })
+          .catch(() => [] as Variant[]);
+      })
+    ).then((allVariants) => {
+      if (!active) return;
+      const expanded: SliderItem[] = [];
+      items.forEach((p, i) => {
+        const variants = allVariants[i];
+        if (variants.length === 0) {
+          expanded.push({ product: p });
+        } else {
+          variants.forEach((v) => expanded.push({ product: p, variant: v }));
+        }
+      });
+      setSliderItems(expanded);
+    });
+    return () => { active = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const slide = (dir: "prev" | "next") => {
     const el = scrollRef.current;
@@ -55,12 +100,12 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
           ref={scrollRef}
           className="product-section-slider hidden md:flex gap-4 overflow-x-auto scroll-smooth"
         >
-          {items.map((product) => (
+          {sliderItems.map((item) => (
             <div
-              key={product.id}
+              key={item.variant ? item.variant.id : item.product.id}
               className="slider-item flex-shrink-0 w-[calc(25%-12px)] lg:w-[calc(20%-12.8px)] xl:w-[calc(16.667%-13.4px)]"
             >
-              <ProductCard product={product} />
+              <ProductCard product={item.product} variantOverride={item.variant} />
             </div>
           ))}
 
@@ -80,8 +125,12 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
 
         {/* Mobile Grid (<768px): 2 cols below 500px, 3 cols from 500px, max 6 cards */}
         <div className="md:hidden grid grid-cols-2 xs:grid-cols-3 gap-4">
-          {items.slice(0, 6).map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {sliderItems.slice(0, 6).map((item) => (
+            <ProductCard
+              key={item.variant ? item.variant.id : item.product.id}
+              product={item.product}
+              variantOverride={item.variant}
+            />
           ))}
         </div>
 

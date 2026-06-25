@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import ProductCard, { ProductCardSkeleton } from "@/components/ProductCard";
+import { ProductCardExpander, ProductCardSkeleton } from "@/components/ProductCard";
 import { catalogApi, isApiError } from "@/lib/api";
 import type {
   BrandFacet,
@@ -494,7 +494,7 @@ useEffect(() => {
               ) : (
                 <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 xl:grid-cols-5" style={{ gap: "clamp(7px, 1vw, 16px)" }}>
                   {items.map((product) => (
-                    <ProductCard key={product.id} product={product} />
+                    <ProductCardExpander key={product.id} product={product} />
                   ))}
                 </div>
               )}

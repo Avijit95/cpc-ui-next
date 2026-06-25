@@ -31,7 +31,13 @@ function variantLabel(v: Variant): string {
 
 type AddState = "idle" | "busy" | "added" | "error";
 
-export default function ProductCard({ product }: { product: ListCard }) {
+export default function ProductCard({
+  product,
+  variantOverride,
+}: {
+  product: ListCard;
+  variantOverride?: Variant;
+}) {
   const [addState, setAddState] = useState<AddState>("idle");
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const router = useRouter();
@@ -41,12 +47,13 @@ export default function ProductCard({ product }: { product: ListCard }) {
   const wishlisted = isWishlisted(product.id);
   const badge = product.badges[0];
 
+  // Only fetch detail when no variant is pre-supplied (needed for stock on non-variant products)
   const [detail, setDetail] = useState<CachedDetail | null>(
     () => detailCache.get(product.slug) ?? null
   );
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (variantOverride) return; // variant data already provided
     if (detailCache.has(product.slug)) return;
     catalogApi.getProduct(product.slug)
       .then((d) => {
@@ -58,27 +65,16 @@ export default function ProductCard({ product }: { product: ListCard }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const variants = detail?.variants ?? [];
-  const hasVariants = variants.length > 0;
-
-  // Resolve active variant: user pick → first in-stock → first variant
-  const activeVariant: Variant | null = hasVariants
-    ? (variants.find((v) => v.id === selectedVariantId) ??
-       variants.find((v) => v.stock > 0) ??
-       variants[0])
-    : null;
-
-  // Displayed values: prefer active variant, fall back to product-level data
-  const displayImage =
-    (activeVariant?.images[0]?.url) ?? product.primaryImageUrl;
-  const displayFinalPrice = activeVariant
-    ? activeVariant.pricing.finalPrice
+  // Displayed values: variant override → product-level data
+  const displayImage = (variantOverride?.images[0]?.url) ?? product.primaryImageUrl;
+  const displayFinalPrice = variantOverride
+    ? variantOverride.pricing.finalPrice
     : product.finalPrice;
-  const displayBasePrice = activeVariant
-    ? activeVariant.pricing.basePrice
+  const displayBasePrice = variantOverride
+    ? variantOverride.pricing.basePrice
     : product.basePrice;
-  const displayStock = activeVariant
-    ? activeVariant.stock
+  const displayStock = variantOverride
+    ? variantOverride.stock
     : (detail?.stock ?? (product.stock ?? null));
 
   const hasDiscount2 = displayBasePrice > displayFinalPrice;
@@ -86,9 +82,11 @@ export default function ProductCard({ product }: { product: ListCard }) {
     ? Math.round(((displayBasePrice - displayFinalPrice) / displayBasePrice) * 100)
     : 0;
 
-  const productLink = activeVariant
-    ? `/products/${product.slug}?variant=${activeVariant.id}`
+  const productLink = variantOverride
+    ? `/products/${product.slug}?variant=${variantOverride.id}`
     : `/products/${product.slug}`;
+
+  const variantAttrLabel = variantOverride ? variantLabel(variantOverride) : null;
 
   const isOutOfStock = displayStock !== null && displayStock === 0;
   const isCriticalStock = displayStock !== null && displayStock > 0 && displayStock < 5;
@@ -180,36 +178,12 @@ export default function ProductCard({ product }: { product: ListCard }) {
           </p>
         )}
         <Link href={productLink}>
-          <h3 className="text-xs max-[499px]:text-[13px] max-[499px]:leading-normal font-semibold text-gray-800 mb-2 max-[499px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
+          <h3 className="text-xs max-[499px]:text-[13px] max-[499px]:leading-normal font-semibold text-gray-800 mb-1 max-[499px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
             {product.name}
           </h3>
         </Link>
-
-        {/* Variant chips */}
-        {hasVariants && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {variants.map((v) => {
-              const isActive = (activeVariant?.id === v.id);
-              const outOfStock = v.stock === 0;
-              return (
-                <button
-                  key={v.id}
-                  onClick={() => setSelectedVariantId(v.id)}
-                  title={variantLabel(v)}
-                  className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors leading-tight truncate max-w-[70px] ${
-                    isActive
-                      ? "border-[#129cd3] bg-[#e8f7fc] text-[#129cd3] font-semibold"
-                      : outOfStock
-                      ? "border-gray-200 text-gray-300 line-through cursor-default"
-                      : "border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
-                  }`}
-                  disabled={outOfStock}
-                >
-                  {variantLabel(v)}
-                </button>
-              );
-            })}
-          </div>
+        {variantAttrLabel && (
+          <p className="text-[10px] text-gray-500 mb-1 truncate">{variantAttrLabel}</p>
         )}
 
         {/* Rating — live from catalog aggregate (Gap #12) */}
@@ -317,6 +291,40 @@ export default function ProductCard({ product }: { product: ListCard }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Fetches the product detail and renders one card per variant (if the product
+ * has variants), or a single card if it does not.
+ */
+export function ProductCardExpander({ product }: { product: ListCard }) {
+  const [variants, setVariants] = useState<Variant[]>(
+    () => detailCache.get(product.slug)?.variants ?? []
+  );
+
+  useEffect(() => {
+    if (detailCache.has(product.slug)) return;
+    catalogApi.getProduct(product.slug)
+      .then((d) => {
+        const cached: CachedDetail = { stock: d.stock, variants: d.variants };
+        detailCache.set(product.slug, cached);
+        setVariants(d.variants);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (variants.length === 0) {
+    return <ProductCard product={product} />;
+  }
+
+  return (
+    <>
+      {variants.map((v) => (
+        <ProductCard key={v.id} product={product} variantOverride={v} />
+      ))}
+    </>
   );
 }
 
