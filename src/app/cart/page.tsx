@@ -279,7 +279,7 @@ export default function CartPage() {
                           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
                             <button
                               onClick={() => updateQty(line, displayQty - 1)}
-                              disabled={busy || displayQty <= 1}
+                              disabled={busy || displayQty <= 1 || (stockWarning?.available ?? 99) === 0}
                               className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               −
@@ -289,7 +289,7 @@ export default function CartPage() {
                             </span>
                             <button
                               onClick={() => updateQty(line, displayQty + 1)}
-                              disabled={busy || displayQty >= 99}
+                              disabled={busy || displayQty >= (stockWarning?.available ?? 99)}
                               className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               +
@@ -320,8 +320,7 @@ export default function CartPage() {
                         {stockWarning && (
                           <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
                             <AlertTriangle size={12} />
-                            Only {stockWarning.available} in stock — qty reduced
-                            from {stockWarning.requested}
+                            Only {stockWarning.available} in stock
                           </p>
                         )}
 
