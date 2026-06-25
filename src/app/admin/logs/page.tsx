@@ -141,6 +141,9 @@ export default function LogsPage() {
       <AdminHeader
         title="Activity Logs"
         subtitle="Every admin mutation is auto-audited by the ActivityLog interceptor"
+        searchValue={actionFilter}
+        onSearch={setActionFilter}
+        searchPlaceholder="Filter by action, e.g. PATCH:/admin/users"
         actions={
           <ExportCsvButton
             path="/admin/activity-logs/export.csv"

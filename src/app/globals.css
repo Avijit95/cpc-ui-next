@@ -43,6 +43,7 @@ body {
 
 html {
   scroll-behavior: smooth;
+  /* Next.js: also set data-scroll-behavior to suppress router warning */
 }
 
 @media (max-width: 639px) {

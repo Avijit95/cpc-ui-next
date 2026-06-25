@@ -483,6 +483,9 @@ export default function AdminProductsPage() {
       <AdminHeader
         title="Products"
         subtitle="Add, edit or archive products in your catalog"
+        searchValue={searchInput}
+        onSearch={setSearchInput}
+        searchPlaceholder="Search products by name…"
         actions={
           <div className="flex items-center gap-2">
             <ExportCsvButton

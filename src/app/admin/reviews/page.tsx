@@ -64,6 +64,7 @@ export default function AdminReviewsPage() {
   });
   const statusFilter = url.status;
   const offset = url.offset;
+  const [searchInput, setSearchInput] = useState("");
   const sort: SortState = useMemo(
     () => ({ field: url.sortBy, order: url.sortOrder }),
     [url.sortBy, url.sortOrder],
@@ -219,6 +220,9 @@ export default function AdminReviewsPage() {
       <AdminHeader
         title="Reviews"
         subtitle="Moderate customer reviews — hide or unhide from PDP"
+        searchValue={searchInput}
+        onSearch={setSearchInput}
+        searchPlaceholder="Search by product or reviewer…"
         actions={
           <ExportCsvButton
             path="/admin/reviews/export.csv"
@@ -321,7 +325,15 @@ export default function AdminReviewsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {rows.map((r) => (
+                  {rows.filter((r) => {
+                    if (!searchInput.trim()) return true;
+                    const q = searchInput.trim().toLowerCase();
+                    return (
+                      r.product.name.toLowerCase().includes(q) ||
+                      r.user.name.toLowerCase().includes(q) ||
+                      (r.text ?? "").toLowerCase().includes(q)
+                    );
+                  }).map((r) => (
                     <tr
                       key={r.id}
                       onClick={() => setDetail(r)}

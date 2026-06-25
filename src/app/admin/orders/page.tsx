@@ -253,6 +253,9 @@ export default function AdminOrdersPage() {
       <AdminHeader
         title="Orders"
         subtitle="Track lifecycle, drive state machine, regenerate invoices"
+        searchValue={query}
+        onSearch={onSearchChange}
+        searchPlaceholder="Order number prefix, e.g. CPC-ORD-26-27"
       />
 
       <div className="p-6 space-y-5">

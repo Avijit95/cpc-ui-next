@@ -214,7 +214,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           {/* Logo */}
           <Link href="/" className="flex items-center flex-shrink-0">
-            <Image src="/logo-light.png" alt="CPC Logo" width={140} height={50} />
+            <Image src="/logo-light.png" alt="CPC Logo" width={140} height={50} priority />
           </Link>
 
           {/* Search — drops to its own full-width row below md, inline from md up */}

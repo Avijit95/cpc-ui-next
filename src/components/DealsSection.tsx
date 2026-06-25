@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import ProductSectionSlider from "./ProductSectionSlider";
 import { catalogApi, dealsApi } from "@/lib/api";
-import type { Deal, ListCard } from "@/lib/api";
+import type { Deal, ListCard, ProductDetail } from "@/lib/api";
 
 function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
@@ -102,6 +102,7 @@ function BestSellerRow({ product }: { product: ListCard }) {
 export default function DealsSection() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [bestSellers, setBestSellers] = useState<ListCard[]>([]);
+  const [dealDetails, setDealDetails] = useState<Record<string, ProductDetail>>({});
   const [loaded, setLoaded] = useState(false);
   const [dealIdx, setDealIdx] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -114,9 +115,22 @@ export default function DealsSection() {
     ])
       .then(([dealsRes, bestRes]) => {
         if (cancelled) return;
-        setDeals(dealsRes.status === "fulfilled" ? dealsRes.value : []);
+        const livDeals = dealsRes.status === "fulfilled" ? dealsRes.value : [];
+        setDeals(livDeals);
         setBestSellers(
           bestRes.status === "fulfilled" ? bestRes.value.items : [],
+        );
+        // Fetch product details for all deal products to get description/specs.
+        const slugs = [...new Set(livDeals.map((d) => d.product.slug))];
+        Promise.allSettled(slugs.map((s) => catalogApi.getProduct(s))).then(
+          (results) => {
+            if (cancelled) return;
+            const map: Record<string, ProductDetail> = {};
+            results.forEach((r, i) => {
+              if (r.status === "fulfilled") map[slugs[i]] = r.value;
+            });
+            setDealDetails(map);
+          }
         );
       })
       .finally(() => {
@@ -239,9 +253,33 @@ export default function DealsSection() {
                   </h3>
                 </Link>
                 <hr className="my-2.5 border-gray-100" />
-                <p className="text-xs text-gray-500 mb-3 line-clamp-3">
-                  Limited time offer — grab it before the deal ends.
-                </p>
+                {(() => {
+                  const detail = dealDetails[deal.product.slug];
+                  if (detail?.description) {
+                    return (
+                      <p className="text-xs text-gray-500 mb-3 line-clamp-4">
+                        {detail.description}
+                      </p>
+                    );
+                  }
+                  if (detail?.specs && Object.keys(detail.specs).length > 0) {
+                    return (
+                      <ul className="text-xs text-gray-500 mb-3 space-y-0.5">
+                        {Object.entries(detail.specs).slice(0, 4).map(([k, v]) => (
+                          <li key={k} className="flex gap-1 line-clamp-1">
+                            <span className="font-medium text-gray-600 shrink-0">{k}:</span>
+                            <span className="truncate">{String(v)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  }
+                  return (
+                    <p className="text-xs text-gray-500 mb-3 line-clamp-3">
+                      Limited time offer — grab it before the deal ends.
+                    </p>
+                  );
+                })()}
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-lg font-bold text-[#129cd3]">
                     {formatPrice(deal.dealPrice)}

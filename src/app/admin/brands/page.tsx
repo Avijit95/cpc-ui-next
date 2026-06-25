@@ -125,6 +125,9 @@ export default function AdminBrandsPage() {
       <AdminHeader
         title="Brands"
         subtitle="Distinct brand names derived from your product catalog"
+        searchValue={search}
+        onSearch={(v) => setUrl({ q: v })}
+        searchPlaceholder="Search brands by name…"
         actions={
           <ExportCsvButton
             path="/admin/brands/export.csv"

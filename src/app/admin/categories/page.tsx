@@ -261,6 +261,9 @@ export default function AdminCategoriesPage() {
       <AdminHeader
         title="Categories"
         subtitle="Organize your storefront into a category tree"
+        searchValue={query}
+        onSearch={setQuery}
+        searchPlaceholder="Search by name or slug…"
         actions={
           <div className="flex items-center gap-2">
             <ExportCsvButton

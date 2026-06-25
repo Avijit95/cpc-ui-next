@@ -403,6 +403,9 @@ export default function AdminSupportPage() {
       <AdminHeader
         title="Support"
         subtitle="Live support tickets — reply, change status, add internal notes"
+        searchValue={searchInput}
+        onSearch={setSearchInput}
+        searchPlaceholder="Search tickets…"
         actions={
           <ExportCsvButton
             path="/admin/tickets/export.csv"

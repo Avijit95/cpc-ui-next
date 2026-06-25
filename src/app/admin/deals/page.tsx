@@ -154,6 +154,7 @@ export default function AdminDealsPage() {
   const [items, setItems] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
   const [url, setUrl] = useUrlState({
     status: "all" as DealLifecycle,
     sortBy: "endsAt",
@@ -629,6 +630,9 @@ export default function AdminDealsPage() {
     <>
       <AdminHeader
         title="Today Deals"
+        searchValue={searchInput}
+        onSearch={setSearchInput}
+        searchPlaceholder="Search by product name…"
         actions={
           <ExportCsvButton
             path="/admin/deals/export.csv"
@@ -746,7 +750,10 @@ export default function AdminDealsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {items.map((d) => {
+                {items.filter((d) =>
+                  !searchInput.trim() ||
+                  d.product.name.toLowerCase().includes(searchInput.trim().toLowerCase())
+                ).map((d) => {
                   const phase = lifecycleOf(d, now);
                   return (
                     <tr key={d.id} className="hover:bg-gray-50">

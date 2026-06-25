@@ -366,6 +366,9 @@ export default function UsersPage() {
       <AdminHeader
         title="Users & Roles"
         subtitle="Manage customers, retail partners and admin accounts"
+        searchValue={query}
+        onSearch={setQuery}
+        searchPlaceholder={`Search ${tab}…`}
         actions={
           tab !== "partners" ? (
             <ExportCsvButton

@@ -427,82 +427,77 @@ export default function CartPage() {
                     Order Summary
                   </h2>
 
-                  <div className="space-y-3 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">
-                        Subtotal ({cart.items.length} items)
-                      </span>
-                      <span className="font-semibold text-gray-800">
-                        {formatPrice(cart.subtotal)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Discount</span>
-                      <span
-                        className={`font-semibold ${
-                          cart.discountTotal > 0
-                            ? "text-green-600"
-                            : "text-gray-400"
-                        }`}
-                      >
-                        {cart.discountTotal > 0
-                          ? `−${formatPrice(cart.discountTotal)}`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">GST</span>
-                      <span className="font-semibold text-gray-800">
-                        {formatPrice(cart.gstTotal)}
-                      </span>
-                    </div>
-                    {cart.shippingHint && (
-                      <div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Shipping</span>
-                          <span
-                            className={`font-semibold ${
-                              cart.shippingHint.estimatedRate === 0
-                                ? "text-green-600"
-                                : "text-gray-800"
-                            }`}
-                          >
-                            {cart.shippingHint.estimatedRate === 0
-                              ? "Free"
-                              : formatPrice(cart.shippingHint.estimatedRate)}
-                          </span>
-                        </div>
-                        {cart.shippingHint.amountAwayFromFree !== null &&
-                          cart.shippingHint.amountAwayFromFree > 0 && (
-                            <p className="text-[10px] text-gray-500 mt-0.5">
-                              Add{" "}
-                              {formatPrice(
-                                cart.shippingHint.amountAwayFromFree,
-                              )}{" "}
-                              more for free shipping
-                            </p>
+                  {(() => {
+                    const mrpTotal = cart.items.reduce((sum, line) => {
+                      const mrpPerUnit = line.deal ? line.deal.basePrice : line.unitPrice;
+                      return sum + mrpPerUnit * line.qty;
+                    }, 0);
+                    const mrpDiscount = mrpTotal - cart.subtotal;
+                    const grossAmount = cart.subtotal;
+                    const couponDiscount = cart.discountTotal;
+                    const totalSavings = mrpTotal - cart.grandTotal;
+                    return (
+                      <>
+                        <div className="space-y-3 mb-4">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">MRP ({cart.items.length} {cart.items.length === 1 ? "item" : "items"})</span>
+                            <span className="font-semibold text-gray-800">{formatPrice(mrpTotal)}</span>
+                          </div>
+                          {mrpDiscount > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Discount on MRP</span>
+                              <span className="font-semibold text-green-600">−{formatPrice(mrpDiscount)}</span>
+                            </div>
                           )}
-                      </div>
-                    )}
-                  </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Gross Amount</span>
+                            <span className="font-semibold text-gray-800">{formatPrice(grossAmount)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Coupon Discount</span>
+                            <span className={`font-semibold ${couponDiscount > 0 ? "text-green-600" : "text-gray-400"}`}>
+                              {couponDiscount > 0 ? `−${formatPrice(couponDiscount)}` : "—"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">GST</span>
+                            <span className="font-semibold text-gray-800">{formatPrice(cart.gstTotal)}</span>
+                          </div>
+                          {cart.shippingHint && (
+                            <div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Shipping</span>
+                                <span className={`font-semibold ${cart.shippingHint.estimatedRate === 0 ? "text-green-600" : "text-gray-800"}`}>
+                                  {cart.shippingHint.estimatedRate === 0 ? "Free" : formatPrice(cart.shippingHint.estimatedRate)}
+                                </span>
+                              </div>
+                              {cart.shippingHint.amountAwayFromFree !== null && cart.shippingHint.amountAwayFromFree > 0 && (
+                                <p className="text-[10px] text-gray-500 mt-0.5">
+                                  Add {formatPrice(cart.shippingHint.amountAwayFromFree)} more for free shipping
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
 
-                  <div className="border-t border-gray-100 pt-3 mb-4">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-gray-800">Grand Total</span>
-                      <span className="font-bold text-lg text-[#129cd3]">
-                        {formatPrice(cart.grandTotal)}
-                      </span>
-                    </div>
-                  </div>
+                        <div className="border-t border-gray-100 pt-3 mb-4">
+                          <div className="flex justify-between">
+                            <span className="font-bold text-gray-800">Total Purchase Amount</span>
+                            <span className="font-bold text-lg text-[#129cd3]">{formatPrice(cart.grandTotal)}</span>
+                          </div>
+                        </div>
 
-                  {cart.discountTotal > 0 && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 flex items-center gap-2">
-                      <span className="text-green-600 text-sm">🎉</span>
-                      <span className="text-green-700 text-xs font-semibold">
-                        You save {formatPrice(cart.discountTotal)} on this order!
-                      </span>
-                    </div>
-                  )}
+                        {totalSavings > 0 && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 flex items-center gap-2">
+                            <span className="text-green-600 text-sm">🎉</span>
+                            <span className="text-green-700 text-xs font-semibold">
+                              You save {formatPrice(totalSavings)} on this order!
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   <div className="bg-[#e8f7fc] rounded-lg px-3 py-2 mb-4 flex items-center gap-2 text-xs text-[#129cd3]">
                     <Truck size={14} />

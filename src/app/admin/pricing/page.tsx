@@ -94,6 +94,7 @@ export default function PricingPage() {
   const [items, setItems] = useState<AdminCouponRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
 
   const [editing, setEditing] = useState<AdminCouponRow | null>(null);
   const [creating, setCreating] = useState(false);
@@ -217,6 +218,9 @@ export default function PricingPage() {
       <AdminHeader
         title="Pricing & Discounts"
         subtitle="Manage global pricing rules, coupon codes and timed campaigns"
+        searchValue={searchInput}
+        onSearch={setSearchInput}
+        searchPlaceholder="Search coupons by name…"
         actions={
           tab === "coupons" ? (
             <div className="flex items-center gap-2">
@@ -356,7 +360,10 @@ export default function PricingPage() {
                     </td>
                   </tr>
                 ) : (
-                  items.map((c) => (
+                  items.filter((c) =>
+                    !searchInput.trim() ||
+                    c.name.toLowerCase().includes(searchInput.trim().toLowerCase())
+                  ).map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-5 py-3">
                         <span className="font-mono font-bold text-[#129cd3] bg-[#e8f7fc] px-2 py-1 rounded text-xs">

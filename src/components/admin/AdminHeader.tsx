@@ -8,9 +8,12 @@ interface AdminHeaderProps {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  searchValue?: string;
+  onSearch?: (value: string) => void;
+  searchPlaceholder?: string;
 }
 
-export default function AdminHeader({ title, subtitle, actions }: AdminHeaderProps) {
+export default function AdminHeader({ title, subtitle, actions, searchValue, onSearch, searchPlaceholder }: AdminHeaderProps) {
   const { onMenuToggle, isMobile } = useAdminMobile();
 
   return (
@@ -39,7 +42,9 @@ export default function AdminHeader({ title, subtitle, actions }: AdminHeaderPro
           <Search size={14} className="text-gray-400" />
           <input
             type="text"
-            placeholder="Search anything…"
+            value={onSearch !== undefined ? (searchValue ?? "") : undefined}
+            onChange={onSearch ? (e) => onSearch(e.target.value) : undefined}
+            placeholder={searchPlaceholder ?? "Search anything…"}
             className="bg-transparent outline-none text-sm text-gray-700 flex-1 placeholder:text-gray-400"
           />
         </div>
