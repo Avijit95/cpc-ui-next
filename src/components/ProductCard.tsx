@@ -252,10 +252,10 @@ export default function ProductCard({
             setAddState("busy");
             try {
               syncHeaderCart(await cartApi.addItem({
-                productId: product.id,
-                variantId: activeVariant?.id,
-                qty: 1,
-              }));
+  productId: product.id,
+  variantId: variantOverride?.id,
+  qty: 1,
+}));
               setAddState("added");
               window.setTimeout(() => setAddState("idle"), 1500);
             } catch (err) {
