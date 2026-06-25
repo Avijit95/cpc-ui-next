@@ -386,7 +386,7 @@ const ProductVariantsEditor = forwardRef<
         {rows.map((r) => (
           <div
             key={r.uid}
-            className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_60px_90px_90px_55px_85px_85px_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
+            className="grid grid-cols-2 sm:grid-cols-[repeat(9,1fr)_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
           >
             <Field label="RAM">
               <input
