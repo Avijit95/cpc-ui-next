@@ -37,13 +37,14 @@ type VariantRow = {
   uid: string;
   existingId?: string;
   ram: string;
-  storage: string; // ROM
+  storage: string;   // ROM
   color: string;
   stock: string;
-  base: string;       // MRP (struck); blank = no separate base price
-  gst: string;        // GST % (default 18)
-  grossPrice: string; // auto-calc: MRP / (1 + gst/100), read-only display
-  price: string;      // selling price; blank = use product base price
+  base: string;      // MRP (struck price); blank = no separate MRP
+  price: string;     // selling price (GST-inclusive); blank = use product base price
+  gst: string;       // GST % (default 18)
+  gstAmount: string; // auto-calc: selling × gst / (100 + gst), read-only display
+  netBase: string;   // auto-calc: selling − gstAmount (base price excl. GST), read-only display
 };
 
 // A color's images are one ordered list — order is the display rank (#1 first).
@@ -90,17 +91,23 @@ function buildAttributes(r: VariantRow): Record<string, unknown> {
   return a;
 }
 
-function calcGrossPrice(mrp: string, gst: string): string {
-  const m = Number(mrp);
+function calcGstFields(selling: string, gst: string): { gstAmount: string; netBase: string } {
+  const s = Number(selling);
   const g = Number(gst);
-  if (!mrp.trim() || isNaN(m) || m <= 0 || isNaN(g) || g < 0) return "";
-  return (m / (1 + g / 100)).toFixed(2);
+  if (!selling.trim() || isNaN(s) || s <= 0 || isNaN(g) || g < 0) {
+    return { gstAmount: "", netBase: "" };
+  }
+  const gstAmount = (s * g) / (100 + g);
+  const netBase = s - gstAmount;
+  return { gstAmount: gstAmount.toFixed(2), netBase: netBase.toFixed(2) };
 }
 
 function initRows(variants: AdminVariant[]): VariantRow[] {
   return variants.map((v) => {
     const base = v.basePrice != null ? String(v.basePrice) : "";
+    const price = v.priceOverride != null ? String(v.priceOverride) : "";
     const gst = "18";
+    const { gstAmount, netBase } = calcGstFields(price, gst);
     return {
       uid: uid(),
       existingId: v.id,
@@ -109,9 +116,10 @@ function initRows(variants: AdminVariant[]): VariantRow[] {
       color: v.attributes.color != null ? String(v.attributes.color) : "",
       stock: String(v.stock ?? 0),
       base,
+      price,
       gst,
-      grossPrice: calcGrossPrice(base, gst),
-      price: v.priceOverride != null ? String(v.priceOverride) : "",
+      gstAmount,
+      netBase,
     };
   });
 }
@@ -181,9 +189,10 @@ const ProductVariantsEditor = forwardRef<
         color: "",
         stock: "0",
         base: "",
-        gst: "18",
-        grossPrice: "",
         price: "",
+        gst: "18",
+        gstAmount: "",
+        netBase: "",
       },
     ]);
 
@@ -346,9 +355,9 @@ const ProductVariantsEditor = forwardRef<
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
           Add each RAM / ROM / Color combination with its own stock and prices.
-          Enter the MRP (inclusive of GST); Gross Price is auto-calculated as
-          MRP ÷ (1 + GST%). Selling Price is what the customer pays — leave blank
-          to use the product base price. Images are shared per color.
+          Enter MRP (original struck price) and Selling Price (GST-inclusive, what the
+          customer pays). GST Amount and Base Price are auto-calculated from the
+          Selling Price. Images are shared per color.
         </p>
       </div>
 
@@ -377,7 +386,7 @@ const ProductVariantsEditor = forwardRef<
         {rows.map((r) => (
           <div
             key={r.uid}
-            className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_60px_90px_55px_90px_90px_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
+            className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_60px_90px_90px_55px_85px_85px_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
           >
             <Field label="RAM">
               <input
@@ -426,14 +435,23 @@ const ProductVariantsEditor = forwardRef<
                 min={0}
                 step="0.01"
                 value={r.base}
-                onChange={(e) => {
-                  const base = e.target.value;
-                  updateRow(r.uid, {
-                    base,
-                    grossPrice: calcGrossPrice(base, r.gst),
-                  });
-                }}
+                onChange={(e) => updateRow(r.uid, { base: e.target.value })}
                 placeholder="0"
+                disabled={disabled}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+              />
+            </Field>
+            <Field label="Selling (₹)">
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={r.price}
+                onChange={(e) => {
+                  const price = e.target.value;
+                  updateRow(r.uid, { price, ...calcGstFields(price, r.gst) });
+                }}
+                placeholder="= MRP"
                 disabled={disabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
@@ -447,35 +465,30 @@ const ProductVariantsEditor = forwardRef<
                 value={r.gst}
                 onChange={(e) => {
                   const gst = e.target.value;
-                  updateRow(r.uid, {
-                    gst,
-                    grossPrice: calcGrossPrice(r.base, gst),
-                  });
+                  updateRow(r.uid, { gst, ...calcGstFields(r.price, gst) });
                 }}
                 disabled={disabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
-            <Field label="Gross (₹)">
+            <Field label="GST Amt (₹)">
               <input
                 type="number"
-                value={r.grossPrice}
+                value={r.gstAmount}
                 readOnly
                 tabIndex={-1}
                 placeholder="auto"
                 className="w-full border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm text-gray-500 cursor-default outline-none"
               />
             </Field>
-            <Field label="Selling (₹)">
+            <Field label="Base (₹)">
               <input
                 type="number"
-                min={0}
-                step="0.01"
-                value={r.price}
-                onChange={(e) => updateRow(r.uid, { price: e.target.value })}
-                placeholder="= MRP"
-                disabled={disabled}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                value={r.netBase}
+                readOnly
+                tabIndex={-1}
+                placeholder="auto"
+                className="w-full border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm text-gray-500 cursor-default outline-none"
               />
             </Field>
             <button
