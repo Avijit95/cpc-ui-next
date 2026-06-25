@@ -93,7 +93,14 @@ export default function CartPage() {
       });
       setBusy(id, true);
       try {
-        const updated = await cartApi.updateItem(id, { qty: nextQty });
+        let updated = await cartApi.updateItem(id, { qty: nextQty });
+        // If the backend accepted a qty that exceeds available stock, auto-correct
+        // it back to the available amount so the price reflects reality.
+        const sw = updated.stockWarnings.find((s) => s.cartItemId === id);
+        if (sw && sw.available > 0 && nextQty > sw.available) {
+          setPendingQty((p) => ({ ...p, [id]: sw.available }));
+          updated = await cartApi.updateItem(id, { qty: sw.available });
+        }
         setCart(updated);
       } catch (err: unknown) {
         // Rollback the optimistic qty on error.
