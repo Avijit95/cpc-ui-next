@@ -272,7 +272,7 @@ export default function ProductDetailPage() {
         if (!ac.signal.aborted) setLoading(false);
       });
     return () => ac.abort();
-  }, [slug, variantParam]);
+  }, [slug, variantParam, stocks, setStock]);
 
   // Fetch reviews when slug resolves (public endpoint, doesn't depend on auth).
   useEffect(() => {
@@ -301,18 +301,18 @@ export default function ProductDetailPage() {
     };
   }, [slug]);
 
-  // Cap qty if live stock drops below the current qty (e.g., another add-to-cart on this page).
-  useEffect(() => {
-    if (!product) return;
-    const variantGroups = buildVariantGroups(product.variants);
-    const sv = product.variants.length > 0
-      ? findVariant(product.variants, selectedAttrs, variantGroups)
-      : undefined;
-    const key = sv ? `v:${sv.id}` : `p:${product.slug}`;
-    const live = stocks[key] !== undefined ? stocks[key] : (sv ? sv.stock : product.stock);
-    if (live > 0 && qty > live) setQty(live);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks]);
+useEffect(() => {
+  if (!product) return;
+  const variantGroups = buildVariantGroups(product.variants);
+  const sv = product.variants.length > 0
+    ? findVariant(product.variants, selectedAttrs, variantGroups)
+    : undefined;
+  const key = sv ? `v:${sv.id}` : `p:${product.slug}`;
+  const live = stocks[key] !== undefined ? stocks[key] : (sv ? sv.stock : product.stock);
+  const capQty = () => setQty(live);
+  if (live > 0 && qty > live) capQty();  // ✅
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [stocks]);
 
   const refreshReviews = useCallback(async () => {
     if (!slug) return;
