@@ -375,7 +375,7 @@ export default function CartPage() {
                         />
 
                         {(lineStock === 0 || stockWarning?.available === 0) && (
-                          <p className="mt-2 text-xs font-semibold text-red-600 flex items-center gap-1.5 bg-red-50 border border-red-300 rounded px-2 py-1.5">
+                          <p className="mt-2 text-xs font-semibold text-red-600 flex items-center gap-1.5">
                             <AlertTriangle size={13} />
                             Out of stock
                           </p>

@@ -46,7 +46,7 @@ export default function ProductCard({
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
   const { setCart: syncHeaderCart } = useCart();
   const { stocks, setStock, adjustStock } = useStock();
-  const wishlisted = isWishlisted(product.id);
+  const wishlisted = isWishlisted(product.id, variantOverride?.id);
   const badge = product.badges[0];
 
   // Stock key: per-variant or per-product
@@ -170,9 +170,9 @@ export default function ProductCard({
               setWishlistBusy(true);
               try {
                 if (wishlisted) {
-                  await removeByProductId(product.id);
+                  await removeByProductId(product.id, variantOverride?.id);
                 } else {
-                  await addToWishlist(product.id);
+                  await addToWishlist(product.id, variantOverride?.id);
                 }
               } catch {
                 // Silent fail on heart toggle — full-page error UX would be intrusive.

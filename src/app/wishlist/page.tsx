@@ -7,28 +7,22 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
-import { useCart } from "@/lib/cart/CartProvider";
-import { isApiError, wishlistApi } from "@/lib/api";
-import type { WishlistCardItem } from "@/lib/api";
-import { X, ShoppingCart, Heart, ChevronRight, ChevronLeft, Check, Loader2 } from "lucide-react";
-
-function formatPrice(price: number) {
-  return "₹" + price.toLocaleString("en-IN");
-}
-
-type MoveState = "idle" | "busy" | "moved" | "error";
+import { catalogApi, wishlistApi } from "@/lib/api";
+import type { ProductDetail, WishlistCardItem } from "@/lib/api";
+import { useStock } from "@/lib/stock/StockProvider";
+import { Heart, ChevronRight, ChevronLeft, Loader2 } from "lucide-react";
+import ProductCard, { ProductCardSkeleton } from "@/components/ProductCard";
+import type { ListCard, Variant } from "@/lib/api";
 
 export default function WishlistPage() {
   const router = useRouter();
   const { status } = useAuth();
   const { items, loading, error, setItems, refresh } = useWishlist();
-  const { setCart: syncHeaderCart } = useCart();
+  const { stocks, setStock } = useStock();
 
+  const [productDetails, setProductDetails] = useState<Record<string, ProductDetail>>({});
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearBusy, setClearBusy] = useState(false);
-  const [moveState, setMoveState] = useState<Record<string, MoveState>>({});
-  const [removeBusy, setRemoveBusy] = useState<Record<string, boolean>>({});
-  const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
 
   // Auth gate.
   useEffect(() => {
@@ -37,69 +31,31 @@ export default function WishlistPage() {
     }
   }, [status, router]);
 
-  // Initial fetch is handled by WishlistProvider on auth flip.
-
-  const setMove = (id: string, s: MoveState) =>
-    setMoveState((prev) => ({ ...prev, [id]: s }));
-  const setRm = (id: string, busy: boolean) =>
-    setRemoveBusy((prev) => {
-      const next = { ...prev };
-      if (busy) next[id] = true;
-      else delete next[id];
-      return next;
-    });
-  const setLineErr = (id: string, msg: string | null) =>
-    setLineErrors((prev) => {
-      const next = { ...prev };
-      if (msg) next[id] = msg;
-      else delete next[id];
-      return next;
-    });
-
-  const handleRemove = useCallback(
-    async (item: WishlistCardItem) => {
-      const id = item.wishlistItemId;
-      setRm(id, true);
-      setLineErr(id, null);
-      try {
-        const resp = await wishlistApi.removeItem(id);
-        setItems(resp.items);
-      } catch (err) {
-        setLineErr(
-          id,
-          isApiError(err) ? err.displayMessage : "Could not remove item",
-        );
-      } finally {
-        setRm(id, false);
+  // Seed global stock store and store product details for variant info.
+  useEffect(() => {
+    if (!items.length) return;
+    const slugs = [...new Set(items.map((i) => i.slug))];
+    Promise.all(slugs.map((slug) => catalogApi.getProduct(slug).catch(() => null))).then(
+      (details) => {
+        const newDetails: Record<string, ProductDetail> = {};
+        details.forEach((detail, i) => {
+          if (!detail) return;
+          const slug = slugs[i];
+          newDetails[slug] = detail;
+          detail.variants.forEach((v) => {
+            const cur = stocks[`v:${v.id}`];
+            if (cur === undefined || v.stock < cur) setStock(`v:${v.id}`, v.stock);
+          });
+          if (detail.variants.length === 0) {
+            const cur = stocks[`p:${slug}`];
+            if (cur === undefined || detail.stock < cur) setStock(`p:${slug}`, detail.stock);
+          }
+        });
+        setProductDetails((prev) => ({ ...prev, ...newDetails }));
       }
-    },
-    [setItems],
-  );
-
-  const handleMove = useCallback(
-    async (item: WishlistCardItem) => {
-      const id = item.wishlistItemId;
-      setMove(id, "busy");
-      setLineErr(id, null);
-      try {
-        const resp = await wishlistApi.moveToCart(id, { qty: 1 });
-        // The API returns the updated wishlist + cart; sync both providers so
-        // other surfaces (incl. the header badges) stay accurate.
-        setItems(resp.wishlist.items);
-        syncHeaderCart(resp.cart);
-        setMove(id, "moved");
-        // Item leaves the grid on next render anyway (provider state changed).
-      } catch (err) {
-        setMove(id, "error");
-        setLineErr(
-          id,
-          isApiError(err) ? err.displayMessage : "Could not move to cart",
-        );
-        window.setTimeout(() => setMove(id, "idle"), 2000);
-      }
-    },
-    [setItems, syncHeaderCart],
-  );
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   const handleClearAll = useCallback(async () => {
     setClearBusy(true);
@@ -164,135 +120,18 @@ export default function WishlistPage() {
           {items.length === 0 ? (
             <EmptyWishlist />
           ) : (
-            <div className="wishlist-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {items.map((item) => {
-                const id = item.wishlistItemId;
-                const move = moveState[id] ?? "idle";
-                const removing = !!removeBusy[id];
-                const lineErr = lineErrors[id];
-                const hasDiscount = item.basePrice > item.finalPrice;
-                const discount = hasDiscount
-                  ? Math.round(
-                      ((item.basePrice - item.finalPrice) / item.basePrice) *
-                        100,
-                    )
-                  : 0;
-                const badge = item.badges[0];
-
+                const listCard = toListCard(item);
+                const variantOverride: Variant | undefined = item.variantId
+                  ? productDetails[item.slug]?.variants.find((v) => v.id === item.variantId)
+                  : undefined;
                 return (
-                  <div
-                    key={id}
-                    className="bg-white rounded-xl border border-gray-200 overflow-hidden group relative hover:shadow-md transition-shadow flex flex-col wishlist-card"
-                  >
-                    {/* Remove button */}
-                    <button
-                      onClick={() => handleRemove(item)}
-                      disabled={removing}
-                      className="absolute top-2 right-2 z-10 w-7 h-7 bg-white shadow rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      {removing ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : (
-                        <X size={14} />
-                      )}
-                    </button>
-
-                    {/* Badge */}
-                    {badge && (
-                      <div className="absolute top-2 left-2 z-10">
-                        <span
-                          className={`text-white text-[10px] font-bold px-2 py-0.5 rounded ${
-                            badge === "NEW"
-                              ? "bg-green-500"
-                              : badge === "HOT"
-                              ? "bg-red-500"
-                              : "bg-[#129cd3]"
-                          }`}
-                        >
-                          {badge}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Image */}
-                    <Link
-                      href={`/products/${item.slug}`}
-                      className="flex-1 min-h-0 sm:flex-none block bg-gray-50 overflow-hidden"
-                    >
-                      {item.primaryImageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.primaryImageUrl}
-                          alt={item.name}
-                          className="w-full h-full sm:h-48 object-contain p-[10px] group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full sm:h-48 bg-gray-100" />
-                      )}
-                    </Link>
-
-                    {/* Info */}
-                    <div className="p-4 max-[1023px]:p-[10px] flex flex-col shrink-0 sm:flex-1 max-[1023px]:justify-end">
-                      {item.brand && (
-                        <p className="text-[10px] text-[#129cd3] font-semibold uppercase mb-1">
-                          {item.brand}
-                        </p>
-                      )}
-                      <Link href={`/products/${item.slug}`}>
-                        <h3 className="text-sm max-[639px]:text-[13px] max-[639px]:leading-normal font-semibold text-gray-800 mb-3 max-[639px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors">
-                          {item.name}
-                        </h3>
-                      </Link>
-
-                      <div className="flex items-baseline gap-2 mb-4 max-[639px]:mb-[5px] mt-auto max-[1023px]:mt-0">
-                        <span className="text-base max-[639px]:text-[14px] max-[639px]:leading-normal font-bold text-[#129cd3]">
-                          {formatPrice(item.finalPrice)}
-                        </span>
-                        {hasDiscount && (
-                          <>
-                            <span className="text-xs text-gray-400 line-through">
-                              {formatPrice(item.basePrice)}
-                            </span>
-                            <span className="text-[10px] text-green-600 font-semibold">
-                              {discount}% off
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => handleMove(item)}
-                        disabled={move === "busy"}
-                        className={`w-full flex items-center justify-center gap-2 text-xs font-semibold py-2.5 rounded-lg transition-colors ${
-                          move === "moved"
-                            ? "bg-green-500 text-white"
-                            : move === "error"
-                            ? "bg-red-500 text-white"
-                            : "bg-[#129cd3] hover:bg-[#0e87b5] text-white"
-                        } ${move === "busy" ? "opacity-60 cursor-wait" : ""}`}
-                      >
-                        {move === "moved" ? (
-                          <>
-                            <Check size={14} /> Moved
-                          </>
-                        ) : move === "error" ? (
-                          <>Could not move</>
-                        ) : move === "busy" ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin" />{" "}
-                            Moving…
-                          </>
-                        ) : (
-                          <>
-                            <ShoppingCart size={14} /> Move to Cart
-                          </>
-                        )}
-                      </button>
-                      {lineErr && (
-                        <p className="text-[11px] text-red-600 mt-2">{lineErr}</p>
-                      )}
-                    </div>
-                  </div>
+                  <ProductCard
+                    key={item.wishlistItemId}
+                    product={listCard}
+                    variantOverride={variantOverride}
+                  />
                 );
               })}
             </div>
@@ -339,6 +178,26 @@ export default function WishlistPage() {
   );
 }
 
+function toListCard(item: WishlistCardItem): ListCard {
+  return {
+    id: item.id,
+    slug: item.slug,
+    name: item.name,
+    brand: item.brand,
+    basePrice: item.basePrice,
+    finalPrice: item.finalPrice,
+    lowestVariantPrice: item.lowestVariantPrice,
+    primaryImageUrl: item.primaryImageUrl,
+    badges: item.badges,
+    ratingAverage: null,
+    reviewCount: 0,
+    isBestSeller: false,
+    isFeatured: false,
+    deal: null,
+    stock: null,
+  };
+}
+
 function EmptyWishlist() {
   return (
     <div className="bg-white rounded-xl border border-gray-200 py-20 text-center">
@@ -369,20 +228,9 @@ function WishlistSkeleton() {
         </div>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="h-8 w-56 bg-gray-100 rounded animate-pulse mb-6" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="bg-white rounded-xl border border-gray-200 overflow-hidden"
-              >
-                <div className="bg-gray-100 w-full sm:h-48 animate-pulse" />
-                <div className="p-4 space-y-2">
-                  <div className="h-3 w-12 bg-gray-100 rounded animate-pulse" />
-                  <div className="h-4 w-3/4 bg-gray-100 rounded animate-pulse" />
-                  <div className="h-4 w-1/2 bg-gray-100 rounded animate-pulse" />
-                  <div className="h-9 w-full bg-gray-100 rounded animate-pulse mt-3" />
-                </div>
-              </div>
+              <ProductCardSkeleton key={i} />
             ))}
           </div>
         </div>

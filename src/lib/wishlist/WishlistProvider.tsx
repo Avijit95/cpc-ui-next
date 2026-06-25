@@ -16,9 +16,9 @@ type WishlistContextValue = {
   items: WishlistCardItem[];
   loading: boolean;
   error: string | null;
-  isWishlisted: (productId: string) => boolean;
+  isWishlisted: (productId: string, variantId?: string) => boolean;
   add: (productId: string, variantId?: string) => Promise<void>;
-  removeByProductId: (productId: string) => Promise<void>;
+  removeByProductId: (productId: string, variantId?: string) => Promise<void>;
   removeByItemId: (wishlistItemId: string) => Promise<void>;
   setItems: (items: WishlistCardItem[]) => void;
   refresh: () => Promise<void>;
@@ -84,7 +84,12 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   }, [status]);
 
   const isWishlisted = useCallback(
-    (productId: string) => items.some((it) => it.id === productId),
+    (productId: string, variantId?: string) => {
+      if (variantId) {
+        return items.some((it) => it.id === productId && it.variantId === variantId);
+      }
+      return items.some((it) => it.id === productId);
+    },
     [items],
   );
 
@@ -97,8 +102,10 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   );
 
   const removeByProductId = useCallback(
-    async (productId: string) => {
-      const target = items.find((it) => it.id === productId);
+    async (productId: string, variantId?: string) => {
+      const target = variantId
+        ? items.find((it) => it.id === productId && it.variantId === variantId)
+        : items.find((it) => it.id === productId);
       if (!target) return;
       const v = await wishlistApi.removeItem(target.wishlistItemId);
       setItems(v.items);
