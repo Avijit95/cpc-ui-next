@@ -1,18 +1,32 @@
 "use client";
 
 import { Check, Heart, ShoppingCart, Star } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { cartApi, isApiError } from "@/lib/api";
-import type { ListCard } from "@/lib/api";
+import { cartApi, catalogApi, isApiError } from "@/lib/api";
+import type { ListCard, Variant } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
 
 function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
+}
+
+// Module-level detail cache: avoids duplicate fetches in StrictMode / re-mounts.
+type CachedDetail = { stock: number; variants: Variant[] };
+const detailCache = new Map<string, CachedDetail>();
+
+// Build a short human-readable label for a variant chip.
+function variantLabel(v: Variant): string {
+  const attrs = v.attributes;
+  const parts: string[] = [];
+  for (const key of ["color", "ram", "storage", "rom"]) {
+    if (attrs[key] != null) parts.push(String(attrs[key]));
+  }
+  return parts.join(" / ") || v.sku;
 }
 
 type AddState = "idle" | "busy" | "added" | "error";
@@ -25,35 +39,86 @@ export default function ProductCard({ product }: { product: ListCard }) {
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
   const { setCart: syncHeaderCart } = useCart();
   const wishlisted = isWishlisted(product.id);
-  const hasDiscount = product.basePrice > product.finalPrice;
-  const discount = hasDiscount
-    ? Math.round(
-        ((product.basePrice - product.finalPrice) / product.basePrice) * 100,
-      )
-    : 0;
   const badge = product.badges[0];
+
+  const [detail, setDetail] = useState<CachedDetail | null>(
+    () => detailCache.get(product.slug) ?? null
+  );
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (detailCache.has(product.slug)) return;
+    catalogApi.getProduct(product.slug)
+      .then((d) => {
+        const cached: CachedDetail = { stock: d.stock, variants: d.variants };
+        detailCache.set(product.slug, cached);
+        setDetail(cached);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const variants = detail?.variants ?? [];
+  const hasVariants = variants.length > 0;
+
+  // Resolve active variant: user pick → first in-stock → first variant
+  const activeVariant: Variant | null = hasVariants
+    ? (variants.find((v) => v.id === selectedVariantId) ??
+       variants.find((v) => v.stock > 0) ??
+       variants[0])
+    : null;
+
+  // Displayed values: prefer active variant, fall back to product-level data
+  const displayImage =
+    (activeVariant?.images[0]?.url) ?? product.primaryImageUrl;
+  const displayFinalPrice = activeVariant
+    ? activeVariant.pricing.finalPrice
+    : product.finalPrice;
+  const displayBasePrice = activeVariant
+    ? activeVariant.pricing.basePrice
+    : product.basePrice;
+  const displayStock = activeVariant
+    ? activeVariant.stock
+    : (detail?.stock ?? (product.stock ?? null));
+
+  const hasDiscount2 = displayBasePrice > displayFinalPrice;
+  const discount2 = hasDiscount2
+    ? Math.round(((displayBasePrice - displayFinalPrice) / displayBasePrice) * 100)
+    : 0;
+
+  const productLink = activeVariant
+    ? `/products/${product.slug}?variant=${activeVariant.id}`
+    : `/products/${product.slug}`;
+
+  const isOutOfStock = displayStock !== null && displayStock === 0;
+  const isCriticalStock = displayStock !== null && displayStock > 0 && displayStock < 5;
+  const isLowStock = displayStock !== null && displayStock >= 5 && displayStock < 10;
 
   return (
     <div className="product-home-card group bg-white border border-gray-200 hover:border-[#8dd4ee] hover:shadow-md transition-all overflow-hidden flex flex-col max-[499px]:rounded-xl">
       {/* Image */}
       <Link
-        href={`/products/${product.slug}`}
+        href={productLink}
         className="bg-gray-50 overflow-hidden block shrink-0"
       >
         <div className="grid h-44 max-[499px]:h-32 bg-black">
-          {product.primaryImageUrl ? (
+          {displayImage ? (
             <Image
-              src={product.primaryImageUrl}
+              src={displayImage}
               alt={product.name}
               width={400}
               height={400}
               sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
-              className="w-full h-44 max-[499px]:h-32 object-contain p-[10px] group-hover:scale-105 transition-transform duration-400 col-start-1 row-start-1"
+              className={`w-full h-44 max-[499px]:h-32 object-contain p-[10px] transition-transform duration-400 col-start-1 row-start-1 ${
+                isOutOfStock
+                  ? "opacity-40 grayscale"
+                  : "group-hover:scale-105"
+              }`}
             />
           ) : (
             <div className="w-full h-44 max-[499px]:h-32 bg-gray-100 col-start-1 row-start-1 " />
           )}
-          {badge && (
+          {badge && !isOutOfStock && (
             <span
               className={`col-start-1 row-start-1 self-start justify-self-start m-2 text-white text-[10px] font-bold px-2 py-0.5 rounded ${
                 badge === "NEW"
@@ -104,16 +169,48 @@ export default function ProductCard({ product }: { product: ListCard }) {
 
       {/* Info */}
       <div className="p-3 max-[499px]:p-[10px] flex flex-col flex-1 min-h-0 justify-end">
+        {isOutOfStock && (
+          <p className="text-[11px] font-semibold text-red-500 mb-1">
+            Currently unavailable
+          </p>
+        )}
         {product.brand && (
           <p className="text-[10px] text-[#129cd3] font-semibold uppercase mb-1">
             {product.brand}
           </p>
         )}
-        <Link href={`/products/${product.slug}`}>
+        <Link href={productLink}>
           <h3 className="text-xs max-[499px]:text-[13px] max-[499px]:leading-normal font-semibold text-gray-800 mb-2 max-[499px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
             {product.name}
           </h3>
         </Link>
+
+        {/* Variant chips */}
+        {hasVariants && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {variants.map((v) => {
+              const isActive = (activeVariant?.id === v.id);
+              const outOfStock = v.stock === 0;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setSelectedVariantId(v.id)}
+                  title={variantLabel(v)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors leading-tight truncate max-w-[70px] ${
+                    isActive
+                      ? "border-[#129cd3] bg-[#e8f7fc] text-[#129cd3] font-semibold"
+                      : outOfStock
+                      ? "border-gray-200 text-gray-300 line-through cursor-default"
+                      : "border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
+                  }`}
+                  disabled={outOfStock}
+                >
+                  {variantLabel(v)}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Rating — live from catalog aggregate (Gap #12) */}
         {product.ratingAverage !== null && (
@@ -140,18 +237,30 @@ export default function ProductCard({ product }: { product: ListCard }) {
           </div>
         )}
 
+        {/* Stock status */}
+        {isCriticalStock && (
+          <p className="text-[10px] font-semibold text-red-500 mb-1">
+            Only {stock} left!
+          </p>
+        )}
+        {isLowStock && (
+          <p className="text-[10px] font-semibold text-orange-500 mb-1">
+            Few left
+          </p>
+        )}
+
         {/* Price */}
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-3 max-[499px]:mb-[5px]">
           <span className="text-sm max-[499px]:text-[14px] max-[499px]:leading-normal font-bold text-[#129cd3]">
-            {formatPrice(product.finalPrice)}
+            {formatPrice(displayFinalPrice)}
           </span>
-          {hasDiscount && (
+          {hasDiscount2 && (
             <>
               <span className="text-xs text-gray-400 line-through">
-                {formatPrice(product.basePrice)}
+                {formatPrice(displayBasePrice)}
               </span>
               <span className="text-[10px] text-green-600 font-semibold">
-                {discount}% off
+                {discount2}% off
               </span>
             </>
           )}
@@ -160,6 +269,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
         {/* Add to Cart */}
         <button
           onClick={async () => {
+            if (isOutOfStock) return;
             if (status === "unauthenticated") {
               const path = window.location.pathname + window.location.search;
               router.push(`/login?next=${encodeURIComponent(path)}`);
@@ -167,7 +277,11 @@ export default function ProductCard({ product }: { product: ListCard }) {
             }
             setAddState("busy");
             try {
-              syncHeaderCart(await cartApi.addItem({ productId: product.id, qty: 1 }));
+              syncHeaderCart(await cartApi.addItem({
+                productId: product.id,
+                variantId: activeVariant?.id,
+                qty: 1,
+              }));
               setAddState("added");
               window.setTimeout(() => setAddState("idle"), 1500);
             } catch (err) {
@@ -176,16 +290,20 @@ export default function ProductCard({ product }: { product: ListCard }) {
               if (!isApiError(err)) console.error(err);
             }
           }}
-          disabled={addState === "busy"}
+          disabled={addState === "busy" || isOutOfStock}
           className={`w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2 transition-colors rounded ${
-            addState === "added"
+            isOutOfStock
+              ? "bg-gray-100 border border-gray-300 text-gray-400 cursor-not-allowed"
+              : addState === "added"
               ? "bg-green-50 border border-green-500 text-green-600"
               : addState === "error"
               ? "bg-red-50 border border-red-300 text-red-600"
               : "bg-white border border-[#129cd3] text-[#129cd3] hover:bg-[#129cd3] hover:text-white max-[499px]:bg-[#129cd3] max-[499px]:text-white max-[499px]:border-transparent max-[499px]:hover:bg-[#0e87b5]"
           } ${addState === "busy" ? "opacity-60 cursor-wait" : ""}`}
         >
-          {addState === "added" ? (
+          {isOutOfStock ? (
+            <>Add to Cart</>
+          ) : addState === "added" ? (
             <>
               <Check size={13} /> Added
             </>

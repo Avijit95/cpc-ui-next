@@ -790,14 +790,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const currentStatus = isEdit ? mode.initial.status : "DRAFT";
   const atImageLimit = totalImageCount >= MAX_IMAGES;
 
-  // Show the variant editor for phone-like categories, or whenever an existing
-  // product already has variants (so they stay editable regardless of category).
-  const showVariants = useMemo(
-    () =>
-      isPhoneCategory(form.categoryId, categories) ||
-      (mode.kind === "edit" && mode.initial.variants.length > 0),
-    [form.categoryId, categories, mode],
-  );
+  // Show variants for all products so any category can manage stock via variants.
+  const showVariants = true;
 
   return (
     <div className="p-6">

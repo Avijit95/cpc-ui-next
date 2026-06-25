@@ -141,6 +141,7 @@ export type ListCard = {
   isBestSeller: boolean;
   isFeatured: boolean;
   deal: DealPreview | null;
+  stock?: number | null;
 };
 
 // Slim card returned by GET /products/suggest (header typeahead).
