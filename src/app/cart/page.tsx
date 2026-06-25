@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCart } from "@/lib/cart/CartProvider";
 import { cartApi, catalogApi, isApiError } from "@/lib/api";
+import { useStock } from "@/lib/stock/StockProvider";
 import type { CartView, PricedCartLine } from "@/lib/api";
 import {
   Trash2,
@@ -27,6 +28,7 @@ export default function CartPage() {
   const { status } = useAuth();
 
   const { setCart: syncHeaderCart } = useCart();
+  const { stocks, setStock, adjustStock } = useStock();
   const [cart, setCart] = useState<CartView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,29 +38,42 @@ export default function CartPage() {
     if (cart) syncHeaderCart(cart);
   }, [cart, syncHeaderCart]);
 
-  // Per-line stock fetched from product detail (cartItemId -> stock).
-  const [itemStocks, setItemStocks] = useState<Record<string, number>>({});
-
-  // After cart loads, fetch product detail for each line to get current stock.
+  // After cart changes, fetch product detail and seed global stock store with
+  // EFFECTIVE remaining stock = API stock − qty already in this cart.
+  // This prevents the cart page from overwriting adjustments made on other pages.
   useEffect(() => {
     if (!cart || cart.items.length === 0) return;
     const slugs = [...new Set(cart.items.map((l) => l.slug))];
+    // Build maps of how many units are already in the cart per variant / product.
+    const variantCartQty: Record<string, number> = {};
+    const productCartQty: Record<string, number> = {};
+    cart.items.forEach((line) => {
+      if (line.variantId) {
+        variantCartQty[line.variantId] = (variantCartQty[line.variantId] ?? 0) + line.qty;
+      } else {
+        productCartQty[line.slug] = (productCartQty[line.slug] ?? 0) + line.qty;
+      }
+    });
     Promise.all(slugs.map((slug) => catalogApi.getProduct(slug).catch(() => null))).then(
       (details) => {
-        const map: Record<string, number> = {};
-        cart.items.forEach((line) => {
-          const detail = details[slugs.indexOf(line.slug)];
+        details.forEach((detail, i) => {
           if (!detail) return;
-          if (line.variantId) {
-            const v = detail.variants.find((vt) => vt.id === line.variantId);
-            map[line.cartItemId] = v?.stock ?? detail.stock;
+          const slug = slugs[i];
+          if (detail.variants.length > 0) {
+            // Variant product: effective stock per variant = API variant stock − cart qty for that variant.
+            detail.variants.forEach((v) => {
+              const effective = Math.max(0, v.stock - (variantCartQty[v.id] ?? 0));
+              setStock(`v:${v.id}`, effective);
+            });
           } else {
-            map[line.cartItemId] = detail.stock;
+            // Non-variant product: effective stock = API stock − cart qty for this slug.
+            const effective = Math.max(0, detail.stock - (productCartQty[slug] ?? 0));
+            setStock(`p:${slug}`, effective);
           }
         });
-        setItemStocks(map);
       }
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart]);
 
   // Per-line pending qty for optimistic updates (rolled back on error).
@@ -108,6 +123,8 @@ export default function CartPage() {
     async (line: PricedCartLine, nextQty: number) => {
       if (nextQty < 1 || nextQty > 99) return;
       const id = line.cartItemId;
+      const lineStockKey = line.variantId ? `v:${line.variantId}` : `p:${line.slug}`;
+      const delta = nextQty - line.qty;
       // Optimistic: stash the new qty for instant feedback.
       setPendingQty((p) => ({ ...p, [id]: nextQty }));
       setLineErrors((e) => {
@@ -127,6 +144,8 @@ export default function CartPage() {
           updated = await cartApi.updateItem(id, { qty: sw.available });
         }
         setCart(updated);
+        // Reflect the qty change in the global stock store.
+        adjustStock(lineStockKey, -delta);
       } catch (err: unknown) {
         // Rollback the optimistic qty on error.
         setLineErrors((e) => ({
@@ -142,7 +161,7 @@ export default function CartPage() {
         setBusy(id, false);
       }
     },
-    [setBusy],
+    [setBusy, adjustStock],
   );
 
   const toggleCoupon = useCallback(
@@ -259,6 +278,9 @@ export default function CartPage() {
                   const stockWarning = cart.stockWarnings.find(
                     (s) => s.cartItemId === id,
                   );
+                  // Live stock from global store (populated by the detail fetch above).
+                  const lineStockKey = line.variantId ? `v:${line.variantId}` : `p:${line.slug}`;
+                  const lineStock = stocks[lineStockKey];
 
                   return (
                     <div
@@ -311,7 +333,7 @@ export default function CartPage() {
                           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
                             <button
                               onClick={() => updateQty(line, displayQty - 1)}
-                              disabled={busy || displayQty <= 1 || (stockWarning?.available ?? 99) === 0}
+                              disabled={busy || displayQty <= 1}
                               className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               −
@@ -321,7 +343,7 @@ export default function CartPage() {
                             </span>
                             <button
                               onClick={() => updateQty(line, displayQty + 1)}
-                              disabled={busy || itemStocks[id] === 0 || displayQty >= (stockWarning?.available ?? 99)}
+                              disabled={busy || lineStock === 0 || displayQty >= (stockWarning?.available ?? 99)}
                               className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               +
@@ -349,10 +371,10 @@ export default function CartPage() {
                           onToggle={toggleCoupon}
                         />
 
-                        {(itemStocks[id] === 0 || stockWarning?.available === 0) && (
+                        {(lineStock === 0 || stockWarning?.available === 0) && (
                           <p className="mt-2 text-xs font-semibold text-red-600 flex items-center gap-1.5 bg-red-50 border border-red-300 rounded px-2 py-1.5">
                             <AlertTriangle size={13} />
-                            Out of stock — please remove this item
+                            Out of stock
                           </p>
                         )}
                         {stockWarning && stockWarning.available > 0 && (

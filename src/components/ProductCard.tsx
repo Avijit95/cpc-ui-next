@@ -10,6 +10,7 @@ import type { ListCard, Variant } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
+import { useStock } from "@/lib/stock/StockProvider";
 
 function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
@@ -44,22 +45,47 @@ export default function ProductCard({
   const { status } = useAuth();
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
   const { setCart: syncHeaderCart } = useCart();
+  const { stocks, setStock, adjustStock } = useStock();
   const wishlisted = isWishlisted(product.id);
   const badge = product.badges[0];
 
-  // Only fetch detail when no variant is pre-supplied (needed for stock on non-variant products)
-  const [detail, setDetail] = useState<CachedDetail | null>(
-    () => detailCache.get(product.slug) ?? null
-  );
+  // Stock key: per-variant or per-product
+  const stockKey = variantOverride ? `v:${variantOverride.id}` : `p:${product.slug}`;
 
+  // Seed the global store with this variant's stock — only if not already tracked,
+  // to preserve any live adjustments made from the detail page or cart.
   useEffect(() => {
-    if (variantOverride) return; // variant data already provided
-    if (detailCache.has(product.slug)) return;
+    if (!variantOverride) return;
+    if (stocks[`v:${variantOverride.id}`] === undefined) {
+      setStock(`v:${variantOverride.id}`, variantOverride.stock);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variantOverride?.id]);
+
+  // Fetch product detail for non-variant cards; populate global stock store.
+  // Only seeds keys not already in the store to avoid overwriting live adjustments.
+  useEffect(() => {
+    if (variantOverride) return;
+    const cached = detailCache.get(product.slug);
+    if (cached) {
+      if (stocks[`p:${product.slug}`] === undefined) {
+        setStock(`p:${product.slug}`, cached.stock);
+      }
+      cached.variants.forEach((v) => {
+        if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
+      });
+      return;
+    }
     catalogApi.getProduct(product.slug)
       .then((d) => {
-        const cached: CachedDetail = { stock: d.stock, variants: d.variants };
-        detailCache.set(product.slug, cached);
-        setDetail(cached);
+        const entry: CachedDetail = { stock: d.stock, variants: d.variants };
+        detailCache.set(product.slug, entry);
+        if (stocks[`p:${product.slug}`] === undefined) {
+          setStock(`p:${product.slug}`, d.stock);
+        }
+        d.variants.forEach((v) => {
+          if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
+        });
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,22 +100,11 @@ export default function ProductCard({
     ? variantOverride.pricing.basePrice
     : product.basePrice;
 
-  // Local stock: mutable so we can decrement on successful Add to Cart.
-  const [localStock, setLocalStock] = useState<number | null>(
-    () => variantOverride?.stock ?? detailCache.get(product.slug)?.stock ?? (product.stock ?? null)
-  );
-
-  // Sync localStock once when the background detail fetch resolves (non-variant cards).
-  useEffect(() => {
-    if (variantOverride) return;
-    if (localStock !== null) return;
-    const s = detail?.stock;
-    if (s != null) {
-    const syncStock = () => setLocalStock(s);
-    syncStock();
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail]);
+  // Read stock from global store, falling back to static data before fetch completes.
+  const stockValue: number | null =
+    stocks[stockKey] !== undefined
+      ? stocks[stockKey]
+      : (variantOverride?.stock ?? detailCache.get(product.slug)?.stock ?? product.stock ?? null);
 
   const hasDiscount2 = displayBasePrice > displayFinalPrice;
   const discount2 = hasDiscount2
@@ -102,9 +117,9 @@ export default function ProductCard({
 
   const variantAttrLabel = variantOverride ? variantLabel(variantOverride) : null;
 
-  const isOutOfStock = localStock !== null && localStock === 0;
-  const isCriticalStock = localStock !== null && localStock > 0 && localStock < 5;
-  const isLowStock = localStock !== null && localStock >= 5 && localStock < 10;
+  const isOutOfStock = stockValue !== null && stockValue === 0;
+  const isCriticalStock = stockValue !== null && stockValue > 0 && stockValue < 5;
+  const isLowStock = stockValue !== null && stockValue >= 5 && stockValue < 10;
 
   return (
     <div className="product-home-card group bg-white border border-gray-200 hover:border-[#8dd4ee] hover:shadow-md transition-all overflow-hidden flex flex-col max-[499px]:rounded-xl">
@@ -200,7 +215,7 @@ export default function ProductCard({
           <p className="text-[10px] text-gray-500 mb-1 truncate">{variantAttrLabel}</p>
         )}
 
-        {/* Rating — live from catalog aggregate (Gap #12) */}
+        {/* Rating */}
         {product.ratingAverage !== null && (
           <div className="flex items-center gap-1 mb-2">
             <div className="flex">
@@ -228,7 +243,7 @@ export default function ProductCard({
         {/* Stock status */}
         {isCriticalStock && (
           <p className="text-[10px] font-semibold text-red-500 mb-1">
-            Only {localStock} left!
+            Only {stockValue} left!
           </p>
         )}
         {isLowStock && (
@@ -270,7 +285,7 @@ export default function ProductCard({
                 variantId: variantOverride?.id,
                 qty: 1,
               }));
-              setLocalStock((s) => (s !== null ? Math.max(0, s - 1) : null));
+              adjustStock(stockKey, -1);
               setAddState("added");
               window.setTimeout(() => setAddState("idle"), 1500);
             } catch (err) {
@@ -314,16 +329,33 @@ export default function ProductCard({
  * has variants), or a single card if it does not.
  */
 export function ProductCardExpander({ product }: { product: ListCard }) {
+  const { stocks, setStock } = useStock();
   const [variants, setVariants] = useState<Variant[]>(
     () => detailCache.get(product.slug)?.variants ?? []
   );
 
   useEffect(() => {
-    if (detailCache.has(product.slug)) return;
+    const cached = detailCache.get(product.slug);
+    if (cached) {
+      // Only seed keys not already in the live store.
+      if (stocks[`p:${product.slug}`] === undefined) {
+        setStock(`p:${product.slug}`, cached.stock);
+      }
+      cached.variants.forEach((v) => {
+        if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
+      });
+      return;
+    }
     catalogApi.getProduct(product.slug)
       .then((d) => {
-        const cached: CachedDetail = { stock: d.stock, variants: d.variants };
-        detailCache.set(product.slug, cached);
+        const entry: CachedDetail = { stock: d.stock, variants: d.variants };
+        detailCache.set(product.slug, entry);
+        if (stocks[`p:${product.slug}`] === undefined) {
+          setStock(`p:${product.slug}`, d.stock);
+        }
+        d.variants.forEach((v) => {
+          if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
+        });
         setVariants(d.variants);
       })
       .catch(() => {});

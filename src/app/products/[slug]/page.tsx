@@ -10,6 +10,7 @@ import type { ProductDetail, Variant, Review, ReviewListResponse } from "@/lib/a
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
+import { useStock } from "@/lib/stock/StockProvider";
 import {
   Star,
   Heart,
@@ -198,6 +199,7 @@ export default function ProductDetailPage() {
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
   const { setCart: syncHeaderCart } = useCart();
+  const { stocks, setStock, adjustStock } = useStock();
   const wishlisted = product ? isWishlisted(product.id) : false;
 
   // Reviews state.
@@ -236,6 +238,15 @@ export default function ProductDetailPage() {
       .then((p) => {
         if (ac.signal.aborted) return;
         setProduct(p);
+        // Seed global stock store. If the store already has a lower value from a
+        // cart-add adjustment, keep it — the API doesn't deduct cart reservations.
+        // Only update if not yet tracked, or if the API reports even less stock.
+        const curP = stocks[`p:${p.slug}`];
+        if (curP === undefined || p.stock < curP) setStock(`p:${p.slug}`, p.stock);
+        p.variants.forEach((v) => {
+          const curV = stocks[`v:${v.id}`];
+          if (curV === undefined || v.stock < curV) setStock(`v:${v.id}`, v.stock);
+        });
         setActiveImageIdx(0);
         const preselect =
           (variantParam &&
@@ -289,6 +300,19 @@ export default function ProductDetailPage() {
       cancelled = true;
     };
   }, [slug]);
+
+  // Cap qty if live stock drops below the current qty (e.g., another add-to-cart on this page).
+  useEffect(() => {
+    if (!product) return;
+    const variantGroups = buildVariantGroups(product.variants);
+    const sv = product.variants.length > 0
+      ? findVariant(product.variants, selectedAttrs, variantGroups)
+      : undefined;
+    const key = sv ? `v:${sv.id}` : `p:${product.slug}`;
+    const live = stocks[key] !== undefined ? stocks[key] : (sv ? sv.stock : product.stock);
+    if (live > 0 && qty > live) setQty(live);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stocks]);
 
   const refreshReviews = useCallback(async () => {
     if (!slug) return;
@@ -523,7 +547,11 @@ export default function ProductDetailPage() {
         }))
       : productImages;
   const activeImage = galleryImages[activeImageIdx] ?? galleryImages[0];
-  const inStock = (selectedVariant ? selectedVariant.stock : product.stock) > 0;
+  const stockKey = selectedVariant ? `v:${selectedVariant.id}` : `p:${product.slug}`;
+  const liveStock = stocks[stockKey] !== undefined
+    ? stocks[stockKey]
+    : (selectedVariant ? selectedVariant.stock : product.stock);
+  const inStock = liveStock > 0;
 
   return (
     <>
@@ -686,12 +714,18 @@ export default function ProductDetailPage() {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Stock */}
-              <div className="flex items-center gap-2 mb-5">
-                <span className={`w-2 h-2 rounded-full ${inStock ? "bg-green-500" : "bg-red-500"}`}></span>
+              <div className="flex flex-wrap items-center gap-2 mb-5">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${inStock ? "bg-green-500" : "bg-red-500"}`}></span>
                 <span className={`text-sm font-semibold ${inStock ? "text-green-600" : "text-red-600"}`}>
                   {inStock ? "In Stock" : "Out of Stock"}
                 </span>
-                {inStock && (
+                {inStock && liveStock < 10 && liveStock >= 5 && (
+                  <span className="text-sm font-semibold text-orange-500">· Few left</span>
+                )}
+                {inStock && liveStock < 5 && (
+                  <span className="text-sm font-semibold text-red-500">· Only {liveStock} left!</span>
+                )}
+                {inStock && liveStock >= 10 && (
                   <span className="text-sm text-gray-400">· Usually dispatched in 24 hours</span>
                 )}
               </div>
@@ -733,8 +767,8 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {/* Quantity */}
-              <div className="flex items-center gap-4 mb-5">
+              {/* Quantity — hidden when out of stock */}
+              <div className={`flex items-center gap-4 mb-5 ${!inStock ? "hidden" : ""}`}>
                 <span className="text-sm font-medium text-gray-700">Quantity:</span>
                 <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
                   <button
@@ -745,8 +779,9 @@ export default function ProductDetailPage() {
                   </button>
                   <span className="w-10 text-center text-sm font-semibold text-gray-800">{qty}</span>
                   <button
-                    onClick={() => setQty((q) => q + 1)}
-                    className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-lg font-medium transition-colors"
+                    onClick={() => setQty((q) => Math.min(q + 1, liveStock))}
+                    disabled={qty >= liveStock}
+                    className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     +
                   </button>
@@ -754,101 +789,111 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 mb-6">
-                <button
-                  onClick={async () => {
-                    if (status === "unauthenticated") {
-                      const path = `/products/${slug}`;
-                      router.push(`/login?next=${encodeURIComponent(path)}`);
-                      return;
-                    }
-                    if (!product) return;
-                    setAddState("busy");
-                    setAddError(null);
-                    try {
-                      syncHeaderCart(
-                        await cartApi.addItem({
+              {!inStock ? (
+                <div className="mb-6">
+                  <p className="w-full text-center font-semibold text-red-600 bg-red-50 border border-red-300 py-3 rounded-lg">
+                    Currently unavailable
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                  <button
+                    onClick={async () => {
+                      if (status === "unauthenticated") {
+                        const path = `/products/${slug}`;
+                        router.push(`/login?next=${encodeURIComponent(path)}`);
+                        return;
+                      }
+                      if (!product) return;
+                      setAddState("busy");
+                      setAddError(null);
+                      try {
+                        syncHeaderCart(
+                          await cartApi.addItem({
+                            productId: product.id,
+                            variantId: selectedVariant?.id,
+                            qty,
+                          }),
+                        );
+                        adjustStock(stockKey, -qty);
+                        setAddState("added");
+                        window.setTimeout(() => setAddState("idle"), 1500);
+                      } catch (err) {
+                        setAddState("error");
+                        setAddError(
+                          isApiError(err)
+                            ? err.displayMessage
+                            : "Could not add to cart",
+                        );
+                        window.setTimeout(() => setAddState("idle"), 2500);
+                      }
+                    }}
+                    disabled={addState === "busy"}
+                    className={`flex-1 flex items-center justify-center gap-2 font-semibold py-3 rounded-lg transition-colors ${
+                      addState === "added"
+                        ? "bg-green-500 text-white"
+                        : addState === "error"
+                        ? "bg-red-500 text-white"
+                        : "bg-[#129cd3] hover:bg-[#0e87b5] text-white"
+                    } ${addState === "busy" ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    {addState === "added" ? (
+                      <>
+                        <Check size={18} /> Added to Cart
+                      </>
+                    ) : addState === "error" ? (
+                      <>Could not add</>
+                    ) : (
+                      <>
+                        <ShoppingCart size={18} /> Add to Cart
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (status === "unauthenticated") {
+                        const path = `/products/${slug}`;
+                        router.push(`/login?next=${encodeURIComponent(path)}`);
+                        return;
+                      }
+                      if (!product) return;
+                      setBuying(true);
+                      setAddError(null);
+                      try {
+                        const cart = await cartApi.addItem({
                           productId: product.id,
                           variantId: selectedVariant?.id,
                           qty,
-                        }),
-                      );
-                      setAddState("added");
-                      window.setTimeout(() => setAddState("idle"), 1500);
-                    } catch (err) {
-                      setAddState("error");
-                      setAddError(
-                        isApiError(err)
-                          ? err.displayMessage
-                          : "Could not add to cart",
-                      );
-                      window.setTimeout(() => setAddState("idle"), 2500);
-                    }
-                  }}
-                  disabled={!inStock || addState === "busy"}
-                  className={`flex-1 flex items-center justify-center gap-2 font-semibold py-3 rounded-lg transition-colors ${
-                    addState === "added"
-                      ? "bg-green-500 text-white"
-                      : addState === "error"
-                      ? "bg-red-500 text-white"
-                      : "bg-[#129cd3] hover:bg-[#0e87b5] text-white"
-                  } ${(!inStock || addState === "busy") ? "opacity-60 cursor-not-allowed" : ""}`}
-                >
-                  {addState === "added" ? (
-                    <>
-                      <Check size={18} /> Added to Cart
-                    </>
-                  ) : addState === "error" ? (
-                    <>Could not add</>
-                  ) : (
-                    <>
-                      <ShoppingCart size={18} /> Add to Cart
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={async () => {
-                    if (status === "unauthenticated") {
-                      const path = `/products/${slug}`;
-                      router.push(`/login?next=${encodeURIComponent(path)}`);
-                      return;
-                    }
-                    if (!product) return;
-                    setBuying(true);
-                    setAddError(null);
-                    try {
-                      const cart = await cartApi.addItem({
-                        productId: product.id,
-                        variantId: selectedVariant?.id,
-                        qty,
-                      });
-                      syncHeaderCart(cart);
-                      // Check out only this product's line, not the whole cart.
-                      const line = cart.items.find(
-                        (it) =>
-                          it.productId === product.id &&
-                          it.variantId === (selectedVariant?.id ?? null),
-                      );
-                      router.push(
-                        line
-                          ? `/checkout?items=${encodeURIComponent(line.cartItemId)}`
-                          : "/checkout",
-                      );
-                    } catch (err) {
-                      setBuying(false);
-                      setAddError(
-                        isApiError(err)
-                          ? err.displayMessage
-                          : "Could not start checkout",
-                      );
-                    }
-                  }}
-                  disabled={!inStock || buying}
-                  className={`flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-lg transition-colors ${(!inStock || buying) ? "opacity-60 cursor-not-allowed" : ""}`}
-                >
-                  {buying ? "Starting…" : "Buy Now"}
-                </button>
-              </div>
+                        });
+                        syncHeaderCart(cart);
+                        adjustStock(stockKey, -qty);
+                        // Check out only this product's line, not the whole cart.
+                        const line = cart.items.find(
+                          (it) =>
+                            it.productId === product.id &&
+                            it.variantId === (selectedVariant?.id ?? null),
+                        );
+                        router.push(
+                          line
+                            ? `/checkout?items=${encodeURIComponent(line.cartItemId)}`
+                            : "/checkout",
+                        );
+                      } catch (err) {
+                        setBuying(false);
+                        setAddError(
+                          isApiError(err)
+                            ? err.displayMessage
+                            : "Could not start checkout",
+                        );
+                      }
+                    }}
+                    disabled={buying}
+                    className={`flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-lg transition-colors ${buying ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    {buying ? "Starting…" : "Buy Now"}
+                  </button>
+                </div>
+              )}
               {addError && (
                 <p className="text-xs text-red-600 -mt-4 mb-4">{addError}</p>
               )}
