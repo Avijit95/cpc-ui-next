@@ -240,7 +240,7 @@ export default function ProductCard({ product }: { product: ListCard }) {
         {/* Stock status */}
         {isCriticalStock && (
           <p className="text-[10px] font-semibold text-red-500 mb-1">
-            Only {stock} left!
+            Only {displayStock} left!
           </p>
         )}
         {isLowStock && (
