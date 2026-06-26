@@ -32,6 +32,7 @@ export default function CartPage() {
   const [cart, setCart] = useState<CartView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [variantImages, setVariantImages] = useState<Record<string, string>>({});
 
   // Mirror cart changes (load, qty, coupons, removal) into the header badge.
   useEffect(() => {
@@ -56,6 +57,7 @@ export default function CartPage() {
     });
     Promise.all(slugs.map((slug) => catalogApi.getProduct(slug).catch(() => null))).then(
       (details) => {
+        const newVariantImages: Record<string, string> = {};
         details.forEach((detail, i) => {
           if (!detail) return;
           const slug = slugs[i];
@@ -64,6 +66,9 @@ export default function CartPage() {
             detail.variants.forEach((v) => {
               const effective = Math.max(0, v.stock - (variantCartQty[v.id] ?? 0));
               setStock(`v:${v.id}`, effective);
+              // Capture variant-specific image URL if available.
+              const imgUrl = v.images[0]?.url;
+              if (imgUrl) newVariantImages[v.id] = imgUrl;
             });
           } else {
             // Non-variant product: effective stock = API stock − cart qty for this slug.
@@ -71,6 +76,9 @@ export default function CartPage() {
             setStock(`p:${slug}`, effective);
           }
         });
+        if (Object.keys(newVariantImages).length > 0) {
+          setVariantImages((prev) => ({ ...prev, ...newVariantImages }));
+        }
       }
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -292,24 +300,27 @@ export default function CartPage() {
                     >
                       {/* Image — links to the product detail page */}
                       <Link
-                        href={`/products/${line.slug}`}
+                        href={`/products/${line.slug}${line.variantId ? `?variant=${line.variantId}` : ""}`}
                         aria-label={`View ${line.name}`}
                         className="w-16 h-16 sm:w-24 sm:h-24 bg-gray-100 rounded-lg flex-shrink-0 border border-gray-100 overflow-hidden hover:opacity-80 transition-opacity"
                       >
-                        {line.primaryImageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={line.primaryImageUrl}
-                            alt={line.name}
-                            className="w-full h-full object-contain p-1"
-                          />
-                        ) : null}
+                        {(() => {
+                          const imgSrc = (line.variantId && variantImages[line.variantId]) || line.primaryImageUrl;
+                          return imgSrc ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={imgSrc}
+                              alt={line.name}
+                              className="w-full h-full object-contain p-1"
+                            />
+                          ) : null;
+                        })()}
                       </Link>
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <Link
-                          href={`/products/${line.slug}`}
+                          href={`/products/${line.slug}${line.variantId ? `?variant=${line.variantId}` : ""}`}
                           className="block"
                         >
                           <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-1 line-clamp-2 hover:text-[#129cd3] transition-colors">

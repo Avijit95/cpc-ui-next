@@ -1167,6 +1167,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               productName={form.name}
               initialVariants={isEdit ? mode.initial.variants : []}
               disabled={busy}
+              categorySlug={categories.find((c) => c.id === form.categoryId)?.slug}
             />
           )}
         </div>

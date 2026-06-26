@@ -15,6 +15,20 @@ import type { AdminVariant, ProductImageContentType } from "@/lib/api";
 // Presets are suggestions only (datalist) — the merchant can type anything.
 const RAM_PRESETS = ["4GB", "6GB", "8GB", "12GB", "16GB"];
 const STORAGE_PRESETS = ["64GB", "128GB", "256GB", "512GB", "1TB"];
+const LENS_OPTIONS = [
+  "Body Only",
+  "Kit Lens (18-55mm f/3.5-5.6)",
+  "18-135mm f/3.5-5.6",
+  "18-200mm f/3.5-6.3",
+  "24-70mm f/2.8",
+  "70-200mm f/2.8",
+  "16-35mm f/2.8",
+  "50mm f/1.8",
+  "85mm f/1.8",
+  "100mm f/2.8 Macro",
+  "100-400mm f/4.5-5.6",
+  "150-600mm f/5-6.3",
+];
 const COLOR_PRESETS = [
   "Black",
   "White",
@@ -73,7 +87,11 @@ function slugifyPart(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function makeSku(name: string, r: VariantRow): string {
+function isCameraCategory(slug?: string): boolean {
+  return !!slug && slug.toLowerCase().includes("camera");
+}
+
+function makeSku(name: string, r: VariantRow, isCamera: boolean): string {
   const base = slugifyPart(name) || "variant";
   const tail = [r.ram, r.storage, r.color].map(slugifyPart).filter(Boolean).join("-");
   return tail ? `${base}-${tail}` : base;
@@ -83,10 +101,15 @@ function comboKey(r: VariantRow): string {
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-function buildAttributes(r: VariantRow): Record<string, unknown> {
+function buildAttributes(r: VariantRow, isCamera: boolean): Record<string, unknown> {
   const a: Record<string, unknown> = {};
-  if (r.ram.trim()) a.ram = r.ram.trim();
-  if (r.storage.trim()) a.storage = r.storage.trim();
+  if (isCamera) {
+    if (r.ram.trim()) a.model = r.ram.trim();
+    if (r.storage.trim()) a.lens = r.storage.trim();
+  } else {
+    if (r.ram.trim()) a.ram = r.ram.trim();
+    if (r.storage.trim()) a.storage = r.storage.trim();
+  }
   if (r.color.trim()) a.color = r.color.trim();
   return a;
 }
@@ -102,17 +125,24 @@ function calcGstFields(selling: string, gst: string): { gstAmount: string; netBa
   return { gstAmount: gstAmount.toFixed(2), netBase: netBase.toFixed(2) };
 }
 
-function initRows(variants: AdminVariant[]): VariantRow[] {
+function initRows(variants: AdminVariant[], isCamera: boolean): VariantRow[] {
   return variants.map((v) => {
     const base = v.basePrice != null ? String(v.basePrice) : "";
     const price = v.priceOverride != null ? String(v.priceOverride) : "";
     const gst = "18";
     const { gstAmount, netBase } = calcGstFields(price, gst);
+    // Camera products store model/lens; all others store ram/storage.
+    const ramVal = isCamera
+      ? (v.attributes.model != null ? String(v.attributes.model) : "")
+      : (v.attributes.ram != null ? String(v.attributes.ram) : "");
+    const storageVal = isCamera
+      ? (v.attributes.lens != null ? String(v.attributes.lens) : "")
+      : (v.attributes.storage != null ? String(v.attributes.storage) : "");
     return {
       uid: uid(),
       existingId: v.id,
-      ram: v.attributes.ram != null ? String(v.attributes.ram) : "",
-      storage: v.attributes.storage != null ? String(v.attributes.storage) : "",
+      ram: ramVal,
+      storage: storageVal,
       color: v.attributes.color != null ? String(v.attributes.color) : "",
       stock: String(v.stock ?? 0),
       base,
@@ -145,9 +175,10 @@ function initColorImages(variants: AdminVariant[]): Record<string, ColorImages> 
 
 const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
-  { productName: string; initialVariants: AdminVariant[]; disabled: boolean }
->(function ProductVariantsEditor({ productName, initialVariants, disabled }, ref) {
-  const [rows, setRows] = useState<VariantRow[]>(() => initRows(initialVariants));
+  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string }
+>(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug }, ref) {
+  const isCamera = isCameraCategory(categorySlug);
+  const [rows, setRows] = useState<VariantRow[]>(() => initRows(initialVariants, isCamera));
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
     () => initColorImages(initialVariants),
   );
@@ -261,7 +292,9 @@ const ProductVariantsEditor = forwardRef<
         const seen = new Set<string>();
         for (const r of rows) {
           if (!r.ram.trim() && !r.storage.trim() && !r.color.trim()) {
-            return "Each variant needs at least one of RAM, ROM, or Color.";
+            return isCamera
+              ? "Each variant needs at least one of Model No., Lens, or Color."
+              : "Each variant needs at least one of RAM, ROM, or Color.";
           }
           const stockNum = Number(r.stock);
           if (
@@ -292,7 +325,9 @@ const ProductVariantsEditor = forwardRef<
           }
           const key = comboKey(r);
           if (seen.has(key)) {
-            return "Two variants have the same RAM / ROM / Color combination.";
+            return isCamera
+              ? "Two variants have the same Model No. / Lens / Color combination."
+              : "Two variants have the same RAM / ROM / Color combination.";
           }
           seen.add(key);
         }
@@ -323,8 +358,8 @@ const ProductVariantsEditor = forwardRef<
         const keptIds = new Set<string>();
         for (const r of rows) {
           const body = {
-            sku: makeSku(productName, r),
-            attributes: buildAttributes(r),
+            sku: makeSku(productName, r, isCamera),
+            attributes: buildAttributes(r, isCamera),
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
@@ -346,7 +381,7 @@ const ProductVariantsEditor = forwardRef<
         }
       },
     }),
-    [rows, colors, colorImages, productName, initialVariants],
+    [rows, colors, colorImages, productName, initialVariants, isCamera],
   );
 
   return (
@@ -354,24 +389,23 @@ const ProductVariantsEditor = forwardRef<
       <div>
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
-          Add each RAM / ROM / Color combination with its own stock and prices.
-          Enter MRP (original struck price) and Selling Price (GST-inclusive, what the
-          customer pays). GST Amount and Base Price are auto-calculated from the
-          Selling Price. Images are shared per color.
+          {isCamera
+            ? "Add each Model No. / Lens / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."}
         </p>
       </div>
 
       {/* Datalists shared by every row */}
-      <datalist id="variant-ram-presets">
-        {RAM_PRESETS.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-      <datalist id="variant-storage-presets">
-        {STORAGE_PRESETS.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
+      {!isCamera && (
+        <>
+          <datalist id="variant-ram-presets">
+            {RAM_PRESETS.map((o) => <option key={o} value={o} />)}
+          </datalist>
+          <datalist id="variant-storage-presets">
+            {STORAGE_PRESETS.map((o) => <option key={o} value={o} />)}
+          </datalist>
+        </>
+      )}
       <datalist id="variant-color-presets">
         {COLOR_PRESETS.map((o) => (
           <option key={o} value={o} />
@@ -388,26 +422,54 @@ const ProductVariantsEditor = forwardRef<
             key={r.uid}
             className="grid grid-cols-2 sm:grid-cols-[repeat(9,1fr)_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
           >
-            <Field label="RAM">
-              <input
-                value={r.ram}
-                onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
-                list="variant-ram-presets"
-                placeholder="8GB"
-                disabled={disabled}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-              />
-            </Field>
-            <Field label="ROM">
-              <input
-                value={r.storage}
-                onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
-                list="variant-storage-presets"
-                placeholder="128GB"
-                disabled={disabled}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-              />
-            </Field>
+            {isCamera ? (
+              <Field label="Model No.">
+                <input
+                  value={r.ram}
+                  onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                  placeholder="e.g. EOS R50"
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
+              </Field>
+            ) : (
+              <Field label="RAM">
+                <input
+                  value={r.ram}
+                  onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                  list="variant-ram-presets"
+                  placeholder="8GB"
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
+              </Field>
+            )}
+            {isCamera ? (
+              <Field label="Lens">
+                <select
+                  value={r.storage}
+                  onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                >
+                  <option value="">— Select lens —</option>
+                  {LENS_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <Field label="ROM">
+                <input
+                  value={r.storage}
+                  onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
+                  list="variant-storage-presets"
+                  placeholder="128GB"
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
+              </Field>
+            )}
             <Field label="Color">
               <input
                 value={r.color}
