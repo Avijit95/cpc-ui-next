@@ -776,7 +776,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         }
       }
 
-      router.replace("/admin/products");
+      if (mode.kind === "create") {
+        // Redirect to the edit page so the admin can attach coupons immediately.
+        router.replace(`/admin/products/${productId}/edit`);
+      } else {
+        router.replace("/admin/products");
+      }
       router.refresh();
     } catch (err) {
       setErrorMsg(readableError(err));
@@ -846,8 +851,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Main form */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {/* Main form — scrolls with page */}
         <div className="lg:col-span-2 space-y-5">
           {mode.kind === "create" && (
             <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
@@ -1179,8 +1184,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           )}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-5">
+        {/* Sidebar — sticks while left scrolls */}
+        <div className="space-y-5 sticky top-6">
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Organization</h3>
 

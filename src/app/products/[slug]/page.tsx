@@ -915,17 +915,12 @@ useEffect(() => {
 
               {/* Variant selectors (RAM / ROM / Color) — above Quantity */}
               {hasVariants && (
-                <div className="space-y-4 mb-5">
+                <div className="flex flex-wrap gap-x-6 gap-y-3 mb-5">
                   {variantGroups.map((group) => (
-                    <div key={group.key}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-medium text-gray-700">
-                          {group.label}:
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          {selectedAttrs[group.key] ?? "Select"}
-                        </span>
-                      </div>
+                    <div key={group.key} className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700 flex-shrink-0">
+                        {group.label}:
+                      </span>
                       <div className="flex flex-wrap gap-2">
                         {group.values.map((value) => {
                           const active = selectedAttrs[group.key] === value;

@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProductCardExpander, ProductCardSkeleton } from "@/components/ProductCard";
+import { ProductCardExpander, ProductCardSkeleton, detailCache } from "@/components/ProductCard";
 import { catalogApi, isApiError } from "@/lib/api";
 import type {
   BrandFacet,
@@ -14,7 +14,7 @@ import type {
   ListCard,
   ProductListResponse,
 } from "@/lib/api";
-import { SlidersHorizontal, ChevronDown, Star, ArrowLeft } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, ChevronUp, Star, ArrowLeft } from "lucide-react";
 
 type CategoryOption = { slug: string; name: string };
 
@@ -51,6 +51,316 @@ const priceBuckets: { label: string; min: number; max: number }[] = [
   { label: "₹2L+", min: 200000, max: 200000 },
 ];
 
+// ── Phone-specific filter groups ──────────────────────────────────────────────
+type PhoneFilterGroup = { key: string; label: string; options: string[] };
+
+const PHONE_FILTER_GROUPS: PhoneFilterGroup[] = [
+  {
+    key: "ram",
+    label: "RAM",
+    options: ["1 GB and Below", "2 GB", "3 GB", "4 GB", "6 GB", "8 GB and Above"],
+  },
+  {
+    key: "storage",
+    label: "Internal Storage",
+    options: [
+      "256 GB & Above",
+      "128 - 255.9 GB",
+      "64 - 127.9 GB",
+      "32 - 63.9 GB",
+      "16 - 31.9 GB",
+      "8 - 15.9 GB",
+      "4 - 7.9 GB",
+      "2 GB - 3.9 GB",
+      "1 GB - 1.9 GB",
+      "Less than 1 GB",
+    ],
+  },
+  {
+    key: "battery",
+    label: "Battery Capacity",
+    options: [
+      "Less than 1000 mAh",
+      "1000 - 1999 mAh",
+      "2000 - 2999 mAh",
+      "3000 - 3999 mAh",
+      "4000 - 4999 mAh",
+      "5000 - 5999 mAh",
+      "6000 mAh & Above",
+    ],
+  },
+  {
+    key: "screenSize",
+    label: "Screen Size",
+    options: [
+      "Less than 3 inch",
+      "3 - 3.4 inch",
+      "3.5 - 3.9 inch",
+      "4 - 4.4 inch",
+      "4.5 - 4.9 inch",
+      "5 - 5.1 inch",
+      "5.2 - 5.4 inch",
+      "5.5 - 5.6 inch",
+      "5.7 - 5.9 inch",
+      "6 - 6.3 inch",
+      "6.4 inch & Above",
+    ],
+  },
+  {
+    key: "primaryCamera",
+    label: "Rear Camera",
+    options: [
+      "Below 5 MP",
+      "5 - 7.9 MP",
+      "8 - 11.9 MP",
+      "12 - 15.9 MP",
+      "16 - 20.9 MP",
+      "21 - 31.9 MP",
+      "32 - 47.9 MP",
+      "48 - 63.9 MP",
+      "64 MP & Above",
+    ],
+  },
+  {
+    key: "secondaryCamera",
+    label: "Front Camera",
+    options: [
+      "Below 5 MP",
+      "5 - 7.9 MP",
+      "8 - 11.9 MP",
+      "12 - 15.9 MP",
+      "16 - 20.9 MP",
+      "21 MP & Above",
+    ],
+  },
+];
+
+// Parse a "12GB" or "12 GB" attribute string into a number.
+function parseGb(val: unknown): number | null {
+  if (!val) return null;
+  const m = String(val).match(/^(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : null;
+}
+
+function matchRamGb(gb: number, option: string): boolean {
+  if (option === "1 GB and Below") return gb <= 1;
+  if (option === "2 GB") return gb === 2;
+  if (option === "3 GB") return gb === 3;
+  if (option === "4 GB") return gb === 4;
+  if (option === "6 GB") return gb === 6;
+  if (option === "8 GB and Above") return gb >= 8;
+  return false;
+}
+function matchStorageGb(gb: number, option: string): boolean {
+  if (option === "256 GB & Above") return gb >= 256;
+  if (option === "128 - 255.9 GB") return gb >= 128 && gb < 256;
+  if (option === "64 - 127.9 GB") return gb >= 64 && gb < 128;
+  if (option === "32 - 63.9 GB") return gb >= 32 && gb < 64;
+  if (option === "16 - 31.9 GB") return gb >= 16 && gb < 32;
+  if (option === "8 - 15.9 GB") return gb >= 8 && gb < 16;
+  if (option === "4 - 7.9 GB") return gb >= 4 && gb < 8;
+  if (option === "2 GB - 3.9 GB") return gb >= 2 && gb < 4;
+  if (option === "1 GB - 1.9 GB") return gb >= 1 && gb < 2;
+  if (option === "Less than 1 GB") return gb < 1;
+  return false;
+}
+
+// Collect all unique RAM and storage values across a product's cached variants.
+function variantValues(slug: string): { rams: number[]; storages: number[] } {
+  const cached = detailCache.get(slug);
+  if (!cached || cached.variants.length === 0) return { rams: [], storages: [] };
+  const rams: number[] = [];
+  const storages: number[] = [];
+  for (const v of cached.variants) {
+    const r = parseGb(v.attributes["ram"]);
+    if (r !== null && !rams.includes(r)) rams.push(r);
+    const s = parseGb(v.attributes["storage"]);
+    if (s !== null && !storages.includes(s)) storages.push(s);
+  }
+  return { rams, storages };
+}
+
+// Fallback: extract GB values from product name string.
+function nameRamGb(name: string): number | null {
+  const m = name.match(/\((\d+)\s*GB\s*\+/i) ?? name.match(/(\d+)\s*GB\s*RAM/i);
+  return m ? Number(m[1]) : null;
+}
+function nameStorageGb(name: string): number | null {
+  const m = name.match(/\+\s*(\d+)\s*GB\s*\)/i) ?? name.match(/(\d+)\s*GB\s*(?:ROM|Storage|Internal)/i);
+  return m ? Number(m[1]) : null;
+}
+
+// Parse leading numeric value from a spec string, e.g. "5000 mAh" → 5000, "6.7 inch" → 6.7, "200 MP" → 200
+function parseSpec(val: unknown): number | null {
+  if (!val) return null;
+  const m = String(val).match(/^(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : null;
+}
+
+function matchBattery(mah: number, option: string): boolean {
+  if (option === "Less than 1000 mAh") return mah < 1000;
+  if (option === "1000 - 1999 mAh") return mah >= 1000 && mah < 2000;
+  if (option === "2000 - 2999 mAh") return mah >= 2000 && mah < 3000;
+  if (option === "3000 - 3999 mAh") return mah >= 3000 && mah < 4000;
+  if (option === "4000 - 4999 mAh") return mah >= 4000 && mah < 5000;
+  if (option === "5000 - 5999 mAh") return mah >= 5000 && mah < 6000;
+  if (option === "6000 mAh & Above") return mah >= 6000;
+  return false;
+}
+
+function matchScreenSize(inch: number, option: string): boolean {
+  if (option === "Less than 3 inch") return inch < 3;
+  if (option === "3 - 3.4 inch") return inch >= 3 && inch <= 3.4;
+  if (option === "3.5 - 3.9 inch") return inch >= 3.5 && inch <= 3.9;
+  if (option === "4 - 4.4 inch") return inch >= 4 && inch <= 4.4;
+  if (option === "4.5 - 4.9 inch") return inch >= 4.5 && inch <= 4.9;
+  if (option === "5 - 5.1 inch") return inch >= 5 && inch <= 5.1;
+  if (option === "5.2 - 5.4 inch") return inch >= 5.2 && inch <= 5.4;
+  if (option === "5.5 - 5.6 inch") return inch >= 5.5 && inch <= 5.6;
+  if (option === "5.7 - 5.9 inch") return inch >= 5.7 && inch <= 5.9;
+  if (option === "6 - 6.3 inch") return inch >= 6 && inch <= 6.3;
+  if (option === "6.4 inch & Above") return inch >= 6.4;
+  return false;
+}
+
+function matchCamera(mp: number, option: string): boolean {
+  if (option === "Below 5 MP") return mp < 5;
+  if (option === "5 - 7.9 MP") return mp >= 5 && mp < 8;
+  if (option === "8 - 11.9 MP") return mp >= 8 && mp < 12;
+  if (option === "12 - 15.9 MP") return mp >= 12 && mp < 16;
+  if (option === "16 - 20.9 MP") return mp >= 16 && mp < 21;
+  if (option === "21 - 31.9 MP") return mp >= 21 && mp < 32;
+  if (option === "32 - 47.9 MP") return mp >= 32 && mp < 48;
+  if (option === "48 - 63.9 MP") return mp >= 48 && mp < 64;
+  if (option === "64 MP & Above") return mp >= 64;
+  if (option === "21 MP & Above") return mp >= 21; // front camera bucket
+  return false;
+}
+
+function applyPhoneFilters(items: ListCard[], phoneFilters: Record<string, string[]>): ListCard[] {
+  const ramOpts     = phoneFilters["ram"]           ?? [];
+  const storOpts    = phoneFilters["storage"]       ?? [];
+  const batOpts     = phoneFilters["battery"]       ?? [];
+  const screenOpts  = phoneFilters["screenSize"]    ?? [];
+  const rearOpts    = phoneFilters["primaryCamera"] ?? [];
+  const frontOpts   = phoneFilters["secondaryCamera"] ?? [];
+
+  const hasAny = [ramOpts, storOpts, batOpts, screenOpts, rearOpts, frontOpts].some((a) => a.length > 0);
+  if (!hasAny) return items;
+
+  return items.filter((item) => {
+    const cached = detailCache.get(item.slug);
+
+    // ── RAM ──────────────────────────────────────────────────────────────────
+    if (ramOpts.length > 0) {
+      const { rams } = variantValues(item.slug);
+      if (rams.length > 0) {
+        if (!ramOpts.some((opt) => rams.some((gb) => matchRamGb(gb, opt)))) return false;
+      } else {
+        const gb = nameRamGb(item.name);
+        if (gb === null) return false;
+        if (!ramOpts.some((opt) => matchRamGb(gb, opt))) return false;
+      }
+    }
+
+    // ── Storage ───────────────────────────────────────────────────────────────
+    if (storOpts.length > 0) {
+      const { storages } = variantValues(item.slug);
+      if (storages.length > 0) {
+        if (!storOpts.some((opt) => storages.some((gb) => matchStorageGb(gb, opt)))) return false;
+      } else {
+        const gb = nameStorageGb(item.name);
+        if (gb === null) return false;
+        if (!storOpts.some((opt) => matchStorageGb(gb, opt))) return false;
+      }
+    }
+
+    // ── Battery ───────────────────────────────────────────────────────────────
+    if (batOpts.length > 0) {
+      const mah = parseSpec(cached?.specs["Battery"]);
+      if (mah === null) return false;
+      if (!batOpts.some((opt) => matchBattery(mah, opt))) return false;
+    }
+
+    // ── Screen Size ───────────────────────────────────────────────────────────
+    if (screenOpts.length > 0) {
+      const inch = parseSpec(cached?.specs["Display Size"]);
+      if (inch === null) return false;
+      if (!screenOpts.some((opt) => matchScreenSize(inch, opt))) return false;
+    }
+
+    // ── Rear Camera ───────────────────────────────────────────────────────────
+    if (rearOpts.length > 0) {
+      const mp = parseSpec(cached?.specs["Rear Camera"]);
+      if (mp === null) return false;
+      if (!rearOpts.some((opt) => matchCamera(mp, opt))) return false;
+    }
+
+    // ── Front Camera ──────────────────────────────────────────────────────────
+    if (frontOpts.length > 0) {
+      const mp = parseSpec(cached?.specs["Front Camera"]);
+      if (mp === null) return false;
+      if (!frontOpts.some((opt) => matchCamera(mp, opt))) return false;
+    }
+
+    return true;
+  });
+}
+
+// Generic collapsible wrapper used by Price Range, Brand, Rating
+function CollapsibleSection({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2"
+      >
+        {label}
+        {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+// Collapsible checkbox filter section for phone-specific filters
+function FilterSection({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (vals: string[]) => void;
+}) {
+  const toggle = (opt: string) => {
+    onChange(selected.includes(opt) ? selected.filter((v) => v !== opt) : [...selected, opt]);
+  };
+  return (
+    <CollapsibleSection label={label}>
+      <div className="space-y-1.5">
+        {options.map((opt) => (
+          <label key={opt} className="flex items-center gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={selected.includes(opt)}
+              onChange={() => toggle(opt)}
+              className="w-3.5 h-3.5 accent-[#129cd3] cursor-pointer rounded"
+            />
+            <span className="text-xs text-gray-600 group-hover:text-[#129cd3] transition-colors leading-snug">
+              {opt}
+            </span>
+          </label>
+        ))}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
 export default function ProductsPage() {
   return (
     <Suspense fallback={<ProductsPageFallback />}>
@@ -81,6 +391,8 @@ function ProductsPageInner() {
   const [minRating, setMinRating] = useState<number | null>(null);
   const [sortLabel, setSortLabel] = useState<string>("Featured");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Phone-specific filters (shown only when phone category is selected)
+  const [phoneFilters, setPhoneFilters] = useState<Record<string, string[]>>({});
 const [headerHeight, setHeaderHeight] = useState(0);
 
 useEffect(() => {
@@ -131,6 +443,8 @@ useEffect(() => {
     else params.delete("category");
     const qs = params.toString();
     router.replace(qs ? `/products?${qs}` : "/products");
+    // Reset phone-specific filters when changing category
+    setPhoneFilters({});
   };
 
   useEffect(() => {
@@ -168,9 +482,41 @@ useEffect(() => {
     return () => ac.abort();
   }, [selectedCategory, selectedBrand, minPrice, maxPrice, minRating, sortLabel]);
 
-  const items: ListCard[] = data?.items ?? [];
+  // cacheTick increments after detail pre-fetch completes so applyPhoneFilters re-runs.
+  const [cacheTick, setCacheTick] = useState(0);
+
+  const rawItems: ListCard[] = data?.items ?? [];
+  const isPhoneCategory = selectedCategory?.toLowerCase() === "phone";
+  const hasPhoneFilters = Object.values(phoneFilters).some((v) => v.length > 0);
+
+  // When phone filters are active, pre-fetch detail for items not yet cached so
+  // applyPhoneFilters can use real variant attributes instead of name parsing.
+  useEffect(() => {
+    if (!isPhoneCategory || !hasPhoneFilters || rawItems.length === 0) return;
+    const uncached = rawItems.filter((item) => !detailCache.has(item.slug));
+    if (uncached.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      uncached.map((item) =>
+        catalogApi.getProduct(item.slug).then((d) => {
+          detailCache.set(item.slug, { stock: d.stock, variants: d.variants, specs: d.specs ?? {} });
+        }).catch(() => {})
+      )
+    ).then(() => {
+      if (!cancelled) setCacheTick((t) => t + 1);
+    });
+    return () => { cancelled = true; };
+  }, [isPhoneCategory, hasPhoneFilters, rawItems]);
+
+  // cacheTick read to make React re-render after pre-fetch.
+  void cacheTick;
+  const items: ListCard[] = isPhoneCategory ? applyPhoneFilters(rawItems, phoneFilters) : rawItems;
   const total = data?.total ?? 0;
   const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
+
+  const setPhoneFilter = (key: string, values: string[]) => {
+    setPhoneFilters((prev) => ({ ...prev, [key]: values }));
+  };
 
   const filterSidebar = (
     <aside className="w-full space-y-6">
@@ -205,12 +551,8 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* Price Range */}
-      <div>
-        <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2">
-          Price Range
-        </h3>
-
+      {/* Price Range — collapsible */}
+      <CollapsibleSection label="Price Range">
         {/* Predefined quick-pick ranges */}
         <div className="flex flex-wrap gap-1.5 mb-4">
           {priceBuckets.map((b) => {
@@ -282,13 +624,10 @@ useEffect(() => {
               : `₹${maxPrice.toLocaleString("en-IN")}`}
           </span>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      {/* Brands */}
-      <div>
-        <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2">
-          Brand
-        </h3>
+      {/* Brands — collapsible */}
+      <CollapsibleSection label="Brand">
         <div className="space-y-2">
           {brandFacets.length === 0 ? (
             <p className="text-xs text-gray-400">No brands available.</p>
@@ -312,13 +651,10 @@ useEffect(() => {
             ))
           )}
         </div>
-      </div>
+      </CollapsibleSection>
 
-      {/* Rating */}
-      <div>
-        <h3 className="font-semibold text-gray-800 text-sm uppercase tracking-wide mb-3 border-b border-gray-100 pb-2">
-          Rating
-        </h3>
+      {/* Rating — collapsible */}
+      <CollapsibleSection label="Rating">
         <div className="space-y-2">
           {ratingOptions.map((r) => (
             <label
@@ -349,14 +685,26 @@ useEffect(() => {
             </label>
           ))}
         </div>
-      </div>
+      </CollapsibleSection>
+
+      {/* Phone-specific filters — shown only for phone category */}
+      {isPhoneCategory && PHONE_FILTER_GROUPS.map((group) => (
+        <FilterSection
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          selected={phoneFilters[group.key] ?? []}
+          onChange={(vals) => setPhoneFilter(group.key, vals)}
+        />
+      ))}
 
       {/* Clear Filters */}
       {(selectedCategory !== null ||
         selectedBrand !== null ||
         minRating !== null ||
         minPrice !== PRICE_FLOOR ||
-        maxPrice !== PRICE_CEIL) && (
+        maxPrice !== PRICE_CEIL ||
+        hasPhoneFilters) && (
         <button
           onClick={() => {
             selectCategory(null);
@@ -364,6 +712,7 @@ useEffect(() => {
             setMinRating(null);
             setMinPrice(PRICE_FLOOR);
             setMaxPrice(PRICE_CEIL);
+            setPhoneFilters({});
           }}
           className="w-full py-2 border border-[#129cd3] text-[#129cd3] text-sm rounded hover:bg-[#e8f7fc] transition-colors"
         >

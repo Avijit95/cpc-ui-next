@@ -17,8 +17,9 @@ function formatPrice(price: number) {
 }
 
 // Module-level detail cache: avoids duplicate fetches in StrictMode / re-mounts.
-type CachedDetail = { stock: number; variants: Variant[] };
-const detailCache = new Map<string, CachedDetail>();
+// Exported so that the product list page can read variant attributes for filtering.
+export type CachedDetail = { stock: number; variants: Variant[]; specs: Record<string, unknown> };
+export const detailCache = new Map<string, CachedDetail>();
 
 // Build a short human-readable label for a variant chip.
 function variantLabel(v: Variant): string {
@@ -78,7 +79,7 @@ export default function ProductCard({
     }
     catalogApi.getProduct(product.slug)
       .then((d) => {
-        const entry: CachedDetail = { stock: d.stock, variants: d.variants };
+        const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);
         if (stocks[`p:${product.slug}`] === undefined) {
           setStock(`p:${product.slug}`, d.stock);
@@ -348,7 +349,7 @@ export function ProductCardExpander({ product }: { product: ListCard }) {
     }
     catalogApi.getProduct(product.slug)
       .then((d) => {
-        const entry: CachedDetail = { stock: d.stock, variants: d.variants };
+        const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);
         if (stocks[`p:${product.slug}`] === undefined) {
           setStock(`p:${product.slug}`, d.stock);
