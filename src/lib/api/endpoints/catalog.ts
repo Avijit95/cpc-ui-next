@@ -2,6 +2,7 @@ import { request } from "../client";
 import type {
   CatalogSort,
   CategoryNode,
+  CouponPreview,
   ProductDetail,
   ProductListResponse,
   SuggestItem,
@@ -48,5 +49,11 @@ export const catalogApi = {
       query: { q, limit },
       signal,
     });
+  },
+  getProductCoupons(idOrSlug: string, signal?: AbortSignal) {
+    return request<{ customer?: CouponPreview; retail?: CouponPreview }>(
+      `/products/${encodeURIComponent(idOrSlug)}/coupons`,
+      { anonymous: true, signal },
+    );
   },
 };

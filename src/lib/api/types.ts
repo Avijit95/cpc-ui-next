@@ -217,6 +217,7 @@ export type ProductDetail = {
   deal: DealPreview | null;
   variants: Variant[];
   stock: number;
+  coupons?: { customer?: CouponPreview; retail?: CouponPreview };
 };
 
 // ────────────────────────────────────────────────────────────────────────────

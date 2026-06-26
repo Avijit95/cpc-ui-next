@@ -1148,16 +1148,23 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             </p>
           </section>
 
-          {/* ── Specifications (free-form key/value) ── */}
-          <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+          {/* ── Specifications ── */}
+          <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <div>
               <h3 className="font-bold text-gray-800 text-sm">Specifications</h3>
               <p className="text-[12px] text-gray-500 mt-0.5">
-                Key/value details shown on the product page (e.g. Display, Battery,
-                Processor). RAM, ROM and Color are set per variant below.
+                Product details shown on the product page. RAM, ROM and Color are set per variant below.
               </p>
             </div>
-            <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+            {(() => {
+              const catSlug = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
+              const isPhone = catSlug.includes("phone");
+              return isPhone ? (
+                <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+              ) : (
+                <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+              );
+            })()}
           </section>
 
 
@@ -1325,6 +1332,146 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Phone-specific structured spec editor ────────────────────────────────────
+
+const PHONE_SPEC_KEYS = new Set([
+  "Display Size", "Resolution", "Screen Type",
+  "RAM", "ROM",
+  "Height", "Width", "Depth", "Weight",
+  "Battery",
+  "Front Camera", "Rear Camera",
+  "Processor",
+]);
+
+type PhoneSpecGroup = {
+  label: string;
+  icon: string;
+  fields: { key: string; placeholder: string; unit?: string }[];
+};
+
+const PHONE_SPEC_GROUPS: PhoneSpecGroup[] = [
+  {
+    label: "Display",
+    icon: "📱",
+    fields: [
+      { key: "Display Size", placeholder: "e.g. 6.8 inches", unit: "inches" },
+      { key: "Resolution", placeholder: "e.g. 2400 × 1080 px" },
+      { key: "Screen Type", placeholder: "e.g. AMOLED, 120Hz" },
+    ],
+  },
+  {
+    label: "Memory",
+    icon: "💾",
+    fields: [
+      { key: "RAM", placeholder: "e.g. 8 GB", unit: "GB" },
+      { key: "ROM", placeholder: "e.g. 128 GB", unit: "GB" },
+    ],
+  },
+  {
+    label: "Dimensions",
+    icon: "📐",
+    fields: [
+      { key: "Height", placeholder: "e.g. 163.4 mm", unit: "mm" },
+      { key: "Width", placeholder: "e.g. 77.8 mm", unit: "mm" },
+      { key: "Depth", placeholder: "e.g. 8.2 mm", unit: "mm" },
+      { key: "Weight", placeholder: "e.g. 214 g", unit: "g" },
+    ],
+  },
+  {
+    label: "Battery",
+    icon: "🔋",
+    fields: [
+      { key: "Battery", placeholder: "e.g. 5000 mAh, 67W fast charging" },
+    ],
+  },
+  {
+    label: "Camera",
+    icon: "📷",
+    fields: [
+      { key: "Rear Camera", placeholder: "e.g. 50 MP + 8 MP + 2 MP" },
+      { key: "Front Camera", placeholder: "e.g. 32 MP" },
+    ],
+  },
+  {
+    label: "Processor",
+    icon: "⚡",
+    fields: [
+      { key: "Processor", placeholder: "e.g. Snapdragon 8 Gen 3, 3.3 GHz" },
+    ],
+  },
+];
+
+function PhoneSpecsEditor({
+  rows,
+  onChange,
+  disabled,
+}: {
+  rows: SpecRow[];
+  onChange: (rows: SpecRow[]) => void;
+  disabled: boolean;
+}) {
+  const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
+
+  const set = (key: string, value: string) => {
+    const existing = rows.find((r) => r.key === key);
+    if (existing) {
+      onChange(rows.map((r) => (r.id === existing.id ? { ...r, value } : r)));
+    } else {
+      onChange([...rows, { id: uid(), key, value }]);
+    }
+  };
+
+  // Extra free-form rows that aren't phone-specific keys
+  const extraRows = rows.filter((r) => !PHONE_SPEC_KEYS.has(r.key));
+  const setExtraRows = (next: SpecRow[]) => {
+    onChange([...rows.filter((r) => PHONE_SPEC_KEYS.has(r.key)), ...next]);
+  };
+
+  return (
+    <div className="space-y-4">
+      {PHONE_SPEC_GROUPS.map((group) => (
+        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
+          {/* Group header */}
+          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+            <span className="text-base leading-none">{group.icon}</span>
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
+          </div>
+          {/* Fields */}
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {group.fields.map((field) => (
+              <div key={field.key} className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  {field.key}
+                </label>
+                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                  <input
+                    value={get(field.key)}
+                    onChange={(e) => set(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    disabled={disabled}
+                    className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                  {field.unit && (
+                    <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                      {field.unit}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Additional free-form specs */}
+      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+      </div>
     </div>
   );
 }

@@ -33,6 +33,7 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [variantImages, setVariantImages] = useState<Record<string, string>>({});
+  const [mrpMap, setMrpMap] = useState<Record<string, number>>({});
 
   // Mirror cart changes (load, qty, coupons, removal) into the header badge.
   useEffect(() => {
@@ -58,6 +59,7 @@ export default function CartPage() {
     Promise.all(slugs.map((slug) => catalogApi.getProduct(slug).catch(() => null))).then(
       (details) => {
         const newVariantImages: Record<string, string> = {};
+        const newMrpMap: Record<string, number> = {};
         details.forEach((detail, i) => {
           if (!detail) return;
           const slug = slugs[i];
@@ -66,18 +68,23 @@ export default function CartPage() {
             detail.variants.forEach((v) => {
               const effective = Math.max(0, v.stock - (variantCartQty[v.id] ?? 0));
               setStock(`v:${v.id}`, effective);
-              // Capture variant-specific image URL if available.
+              // Capture variant-specific image URL and MRP.
               const imgUrl = v.images[0]?.url;
               if (imgUrl) newVariantImages[v.id] = imgUrl;
+              newMrpMap[`v:${v.id}`] = v.pricing.basePrice;
             });
           } else {
             // Non-variant product: effective stock = API stock − cart qty for this slug.
             const effective = Math.max(0, detail.stock - (productCartQty[slug] ?? 0));
             setStock(`p:${slug}`, effective);
+            newMrpMap[`p:${slug}`] = detail.pricing.basePrice;
           }
         });
         if (Object.keys(newVariantImages).length > 0) {
           setVariantImages((prev) => ({ ...prev, ...newVariantImages }));
+        }
+        if (Object.keys(newMrpMap).length > 0) {
+          setMrpMap((prev) => ({ ...prev, ...newMrpMap }));
         }
       }
     );
@@ -378,12 +385,6 @@ export default function CartPage() {
                           )}
                         </div>
 
-                        {/* Coupon chips */}
-                        <CouponChips
-                          line={line}
-                          busy={busy}
-                          onToggle={toggleCoupon}
-                        />
 
                         {(lineStock === 0 || stockWarning?.available === 0) && (
                           <p className="mt-2 text-xs font-semibold text-red-600 flex items-center gap-1.5">
@@ -402,7 +403,7 @@ export default function CartPage() {
                         <div className="xxs:hidden mt-2 flex items-center justify-between">
                           <span className="text-xs text-gray-400">Total</span>
                           <div className="text-right">
-                            <span className="text-sm font-bold text-gray-800">{formatPrice(line.lineGrandTotal)}</span>
+                            <span className="text-sm font-bold text-gray-800">{formatPrice((line.lineSubtotal / line.qty) * displayQty - line.discount.total)}</span>
                             {line.discount.total > 0 && (
                               <p className="text-[10px] text-green-600">saved {formatPrice(line.discount.total)}</p>
                             )}
@@ -418,7 +419,7 @@ export default function CartPage() {
                       <div className="hidden xxs:flex flex-col flex-shrink-0 text-right">
                         <p className="text-xs text-gray-400 mb-1">Total</p>
                         <p className="text-sm sm:text-base font-bold text-gray-800">
-                          {formatPrice(line.lineGrandTotal)}
+                          {formatPrice((line.lineSubtotal / line.qty) * displayQty - line.discount.total)}
                         </p>
                         {line.discount.total > 0 && (
                           <p className="text-[10px] text-green-600 mt-0.5">
@@ -439,41 +440,49 @@ export default function CartPage() {
                   </h2>
 
                   {(() => {
+                    // MRP = pricing.basePrice per line (fetched from product detail).
+                    // Falls back to unitPrice until details load.
                     const mrpTotal = cart.items.reduce((sum, line) => {
-                      const mrpPerUnit = line.deal ? line.deal.basePrice : line.unitPrice;
-                      return sum + mrpPerUnit * line.qty;
+                      const key = line.variantId ? `v:${line.variantId}` : `p:${line.slug}`;
+                      return sum + (mrpMap[key] ?? line.unitPrice) * line.qty;
                     }, 0);
-                    const mrpDiscount = mrpTotal - cart.subtotal;
+                    const discountOnMrp = mrpTotal - cart.subtotal;
                     const grossAmount = cart.subtotal;
                     const couponDiscount = cart.discountTotal;
-                    const totalSavings = mrpTotal - cart.grandTotal;
+                    // Total Purchase = gross − coupon (excluding GST for display)
+                    const totalPurchase = grossAmount - couponDiscount;
+                    const totalSavings = mrpTotal - totalPurchase;
                     return (
                       <>
                         <div className="space-y-3 mb-4">
+                          {/* MRP */}
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">MRP ({cart.items.length} {cart.items.length === 1 ? "item" : "items"})</span>
                             <span className="font-semibold text-gray-800">{formatPrice(mrpTotal)}</span>
                           </div>
-                          {mrpDiscount > 0 && (
+
+                          {/* Discount on MRP */}
+                          {discountOnMrp > 0 && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Discount on MRP</span>
-                              <span className="font-semibold text-green-600">−{formatPrice(mrpDiscount)}</span>
+                              <span className="text-gray-600">Total Discount on MRP</span>
+                              <span className="font-semibold text-green-600">−{formatPrice(discountOnMrp)}</span>
                             </div>
                           )}
+
+                          {/* Gross Amount */}
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Gross Amount</span>
                             <span className="font-semibold text-gray-800">{formatPrice(grossAmount)}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Coupon Discount</span>
-                            <span className={`font-semibold ${couponDiscount > 0 ? "text-green-600" : "text-gray-400"}`}>
-                              {couponDiscount > 0 ? `−${formatPrice(couponDiscount)}` : "—"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">GST</span>
-                            <span className="font-semibold text-gray-800">{formatPrice(cart.gstTotal)}</span>
-                          </div>
+
+                          {/* Coupon Discount — only show if coupon available or applied */}
+                          {couponDiscount > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Coupon Discount</span>
+                              <span className="font-semibold text-green-600">−{formatPrice(couponDiscount)}</span>
+                            </div>
+                          )}
+
                           {cart.shippingHint && (
                             <div>
                               <div className="flex justify-between text-sm">
@@ -491,19 +500,19 @@ export default function CartPage() {
                           )}
                         </div>
 
-                        <div className="border-t border-gray-100 pt-3 mb-4">
+                        {/* Total Purchase Amount */}
+                        <div className="border-t border-gray-100 pt-3 mb-3">
                           <div className="flex justify-between">
                             <span className="font-bold text-gray-800">Total Purchase Amount</span>
-                            <span className="font-bold text-lg text-[#129cd3]">{formatPrice(cart.grandTotal)}</span>
+                            <span className="font-bold text-lg text-[#129cd3]">{formatPrice(totalPurchase)}</span>
                           </div>
                         </div>
 
+                        {/* Your total savings */}
                         {totalSavings > 0 && (
-                          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4 flex items-center gap-2">
-                            <span className="text-green-600 text-sm">🎉</span>
-                            <span className="text-green-700 text-xs font-semibold">
-                              You save {formatPrice(totalSavings)} on this order!
-                            </span>
+                          <div className="flex justify-between text-sm mb-4 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                            <span className="font-semibold text-green-700">Your total savings</span>
+                            <span className="font-bold text-green-600">{formatPrice(totalSavings)}</span>
                           </div>
                         )}
                       </>

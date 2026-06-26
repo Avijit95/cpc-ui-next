@@ -94,7 +94,19 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
             href: `/products?category=${encodeURIComponent(c.slug.toLowerCase())}`,
             hasDropdown: c.children.length > 0,
           }));
-        setNavLinks([HOME_LINK, ...categoryLinks, DEALS_LINK]);
+        const cameraLensLink: NavLink = {
+          name: "CAMERA LENS",
+          href: "/products?category=camera-lens",
+          hasDropdown: false,
+        };
+        const cameraIdx = categoryLinks.findIndex((l) => l.href.includes("category=camera"));
+        const insertAt = cameraIdx >= 0 ? cameraIdx + 1 : categoryLinks.length;
+        const withLens = [
+          ...categoryLinks.slice(0, insertAt),
+          cameraLensLink,
+          ...categoryLinks.slice(insertAt),
+        ];
+        setNavLinks([HOME_LINK, ...withLens, DEALS_LINK]);
       })
       .catch(() => {
         /* keep HOME + DEALS fallback */

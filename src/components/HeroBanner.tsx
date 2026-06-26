@@ -24,15 +24,18 @@ export default async function HeroBanner() {
     .filter((b) => b.position === HOME_SIDE_SLOT)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const sidebarCategories = categories
+  const apiCategories = categories
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .slice(0, SIDEBAR_CATEGORY_LIMIT)
-    .map((c) => ({
-      slug: c.slug.toLowerCase(),
-      name: c.name,
-      imageUrl: c.imageUrl,
-    }));
+    .map((c) => ({ slug: c.slug.toLowerCase(), name: c.name, imageUrl: c.imageUrl }));
+  const cameraIdx = apiCategories.findIndex((c) => c.slug === "camera");
+  const insertAt = cameraIdx >= 0 ? cameraIdx + 1 : apiCategories.length;
+  const sidebarCategories = [
+    ...apiCategories.slice(0, insertAt),
+    { slug: "camera-lens", name: "Camera Lens", imageUrl: "/Sony Alpha ZV-E10.jpeg" },
+    ...apiCategories.slice(insertAt),
+  ];
 
   return (
     <section className="bg-gray-100">

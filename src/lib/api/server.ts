@@ -51,7 +51,7 @@ const NAV_CATEGORY_LIMIT = 5;
 
 export const serverGetNavLinks = cache(async (): Promise<ServerNavLink[]> => {
   const all = await serverGetCategories();
-  return all
+  const apiLinks = all
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .slice(0, NAV_CATEGORY_LIMIT)
@@ -60,6 +60,13 @@ export const serverGetNavLinks = cache(async (): Promise<ServerNavLink[]> => {
       href: `/products?category=${encodeURIComponent(c.slug.toLowerCase())}`,
       hasDropdown: c.children.length > 0,
     }));
+  const cameraIdx = apiLinks.findIndex((l) => l.href.includes("category=camera"));
+  const insertAt = cameraIdx >= 0 ? cameraIdx + 1 : apiLinks.length;
+  return [
+    ...apiLinks.slice(0, insertAt),
+    { name: "CAMERA LENS", href: "/products?category=camera-lens", hasDropdown: false },
+    ...apiLinks.slice(insertAt),
+  ];
 });
 
 export const serverListProducts = cache(

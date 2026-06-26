@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
+import { adminApi, cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
 import type { ProductDetail, Variant, Review, ReviewListResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
@@ -26,6 +26,14 @@ import {
   ImagePlus,
   X,
   ArrowLeft,
+  Tag,
+  Cpu,
+  Camera,
+  Smartphone,
+  BatteryMedium,
+  HardDrive,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 const MAX_REVIEW_PHOTOS = 5;
@@ -190,6 +198,9 @@ export default function ProductDetailPage() {
   const [notFound, setNotFound] = useState(false);
 
   const [qty, setQty] = useState(1);
+  const [productCoupons, setProductCoupons] = useState<{ customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } } | null>(null);
+  const [customerCouponSelected, setCustomerCouponSelected] = useState(false);
+  const [retailCouponSelected, setRetailCouponSelected] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("Description");
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
@@ -198,7 +209,7 @@ export default function ProductDetailPage() {
   const [buying, setBuying] = useState(false);
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
-  const { setCart: syncHeaderCart } = useCart();
+  const { setCart: syncHeaderCart, items: cartItems } = useCart();
   const { stocks, setStock, adjustStock } = useStock();
   const wishlisted = product ? isWishlisted(product.id) : false;
 
@@ -273,6 +284,82 @@ export default function ProductDetailPage() {
       });
     return () => ac.abort();
   }, [slug, variantParam, stocks, setStock]);
+
+  // Fetch product coupons. Strategy (first success wins):
+  //  1. Admin API — works for admin/staff, any product.
+  //  2. Cart context — if product is already in cart, use its availableCoupons.
+  //  3. Silent add→peek→remove — for authenticated non-admin users; add the
+  //     item momentarily to learn its coupons, then immediately remove it.
+  //     We never sync the add to CartProvider so the badge never flickers.
+  useEffect(() => {
+    if (!product || !status) return;
+    let cancelled = false;
+    let tempCartItemId: string | null = null;
+
+    const applyFromLine = (ac: { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } }) => {
+      if (!cancelled && (ac.customer || ac.retail)) setProductCoupons(ac);
+    };
+
+    // 1. Try admin API first.
+    adminApi
+      .getProduct(product.id)
+      .then((detail) => {
+        if (cancelled) return;
+        const c = detail.coupons;
+        if (c?.customer || c?.retail) {
+          applyFromLine({
+            customer: c.customer ? { id: c.customer.id, name: c.customer.name, value: c.customer.value } : undefined,
+            retail: c.retail ? { id: c.retail.id, name: c.retail.name, value: c.retail.value } : undefined,
+          });
+        }
+      })
+      .catch(() => {
+        // 2. Admin API failed (not admin) — try cart context.
+        if (cancelled) return;
+        const existingLine = cartItems.find((l) => l.slug === product.slug);
+        if (existingLine?.availableCoupons?.customer || existingLine?.availableCoupons?.retail) {
+          applyFromLine(existingLine.availableCoupons as { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } });
+          return;
+        }
+
+        // 3. Product not in cart — silent add→peek→remove (authenticated only).
+        if (status !== "authenticated") return;
+        const variantId = product.variants.length > 0
+          ? (product.variants.find((v) => v.stock > 0) ?? product.variants[0])?.id ?? null
+          : null;
+
+        cartApi
+          .addItem({ productId: product.id, variantId: variantId ?? undefined, qty: 1 })
+          .then((cartView) => {
+            const line = cartView.items.find(
+              (l) => l.slug === product.slug && l.variantId === variantId,
+            );
+            if (!line) return null;
+            tempCartItemId = line.cartItemId;
+            if (!cancelled) applyFromLine(line.availableCoupons as { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } });
+            return cartApi.removeItem(line.cartItemId);
+          })
+          .then((updated) => {
+            tempCartItemId = null;
+            // Sync cart badge back to correct count after removal.
+            if (updated && !cancelled) syncHeaderCart(updated);
+          })
+          .catch(() => { /* OOS or other error — ignore */ });
+      });
+
+    return () => {
+      cancelled = true;
+      // If we added but haven't removed yet, clean up.
+      if (tempCartItemId) {
+        cartApi
+          .removeItem(tempCartItemId)
+          .then((v) => syncHeaderCart(v))
+          .catch(() => {});
+        tempCartItemId = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, status]);
 
   // Fetch reviews when slug resolves (public endpoint, doesn't depend on auth).
   useEffect(() => {
@@ -713,6 +800,91 @@ useEffect(() => {
               )}
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
+              {/* Coupons — interactive checkboxes; applied on Add to Cart / Buy Now */}
+              {(() => {
+                const cartLineCoupons = cartItems.find((l) => l.slug === product.slug)?.availableCoupons ?? null;
+                const coupons = productCoupons ?? cartLineCoupons ?? product.coupons ?? null;
+                if (!coupons?.customer && !coupons?.retail) return null;
+                return (
+                  <div className="mb-5 rounded-xl overflow-hidden border border-green-200 shadow-sm">
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-2 flex items-center gap-2 border-b border-green-200">
+                      <Tag size={14} className="text-green-600" />
+                      <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Available Offers</span>
+                    </div>
+                    {/* Coupon rows */}
+                    <div className="bg-white divide-y divide-gray-100">
+                      {coupons.customer && (
+                        <button
+                          type="button"
+                          onClick={() => setCustomerCouponSelected((v) => !v)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                            customerCouponSelected ? "bg-green-50" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <span className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                            customerCouponSelected ? "bg-green-500 border-green-500" : "border-gray-300"
+                          }`}>
+                            {customerCouponSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+                          </span>
+                          {/* Coupon card */}
+                          <span className="flex-1 min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-bold text-green-600">₹{coupons.customer.value.toLocaleString("en-IN")} OFF</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
+                                customerCouponSelected
+                                  ? "bg-green-100 border-green-300 text-green-700"
+                                  : "bg-gray-100 border-gray-200 text-gray-600"
+                              }`}>
+                                {coupons.customer.name}
+                              </span>
+                            </span>
+                            <span className="text-xs text-gray-400 mt-0.5 block">
+                              {customerCouponSelected ? "✓ Will be applied on Add to Cart" : "Click to apply this coupon"}
+                            </span>
+                          </span>
+                        </button>
+                      )}
+                      {coupons.retail && (
+                        <button
+                          type="button"
+                          onClick={() => setRetailCouponSelected((v) => !v)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                            retailCouponSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <span className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                            retailCouponSelected ? "bg-[#129cd3] border-[#129cd3]" : "border-gray-300"
+                          }`}>
+                            {retailCouponSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-bold text-[#129cd3]">{coupons.retail.value}% OFF</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
+                                retailCouponSelected
+                                  ? "bg-blue-100 border-blue-300 text-blue-700"
+                                  : "bg-gray-100 border-gray-200 text-gray-600"
+                              }`}>
+                                {coupons.retail.name}
+                              </span>
+                              <span className="text-xs text-gray-400">(Verified partners)</span>
+                            </span>
+                            <span className="text-xs text-gray-400 mt-0.5 block">
+                              {retailCouponSelected ? "✓ Will be applied on Add to Cart" : "Click to apply this coupon"}
+                            </span>
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Product Highlights */}
+              <ProductHighlights specs={product.specs} />
+
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${inStock ? "bg-green-500" : "bg-red-500"}`}></span>
@@ -808,13 +980,22 @@ useEffect(() => {
                       setAddState("busy");
                       setAddError(null);
                       try {
-                        syncHeaderCart(
-                          await cartApi.addItem({
-                            productId: product.id,
-                            variantId: selectedVariant?.id,
-                            qty,
-                          }),
+                        let cartView = await cartApi.addItem({
+                          productId: product.id,
+                          variantId: selectedVariant?.id,
+                          qty,
+                        });
+                        // Apply selected coupons to the newly added line.
+                        const newLine = cartView.items.find(
+                          (it) => it.productId === product.id && it.variantId === (selectedVariant?.id ?? null),
                         );
+                        if (newLine && (customerCouponSelected || retailCouponSelected)) {
+                          cartView = await cartApi.updateItem(newLine.cartItemId, {
+                            ...(customerCouponSelected ? { customerCouponApplied: true } : {}),
+                            ...(retailCouponSelected ? { retailCouponApplied: true } : {}),
+                          });
+                        }
+                        syncHeaderCart(cartView);
                         adjustStock(stockKey, -qty);
                         setAddState("added");
                         window.setTimeout(() => setAddState("idle"), 1500);
@@ -860,11 +1041,21 @@ useEffect(() => {
                       setBuying(true);
                       setAddError(null);
                       try {
-                        const cart = await cartApi.addItem({
+                        let cart = await cartApi.addItem({
                           productId: product.id,
                           variantId: selectedVariant?.id,
                           qty,
                         });
+                        // Apply selected coupons to the newly added line.
+                        const addedLine = cart.items.find(
+                          (it) => it.productId === product.id && it.variantId === (selectedVariant?.id ?? null),
+                        );
+                        if (addedLine && (customerCouponSelected || retailCouponSelected)) {
+                          cart = await cartApi.updateItem(addedLine.cartItemId, {
+                            ...(customerCouponSelected ? { customerCouponApplied: true } : {}),
+                            ...(retailCouponSelected ? { retailCouponApplied: true } : {}),
+                          });
+                        }
                         syncHeaderCart(cart);
                         adjustStock(stockKey, -qty);
                         // Check out only this product's line, not the whole cart.
@@ -1269,6 +1460,114 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ── Product Highlights ────────────────────────────────────────────────────────
+
+type HighlightRow = { icon: React.ReactNode; text: string };
+
+function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
+  const s = (key: string) => {
+    const v = specs[key];
+    return v ? String(v).trim() : "";
+  };
+
+  const rows: HighlightRow[] = [];
+
+  // RAM + ROM combined
+  const ram = s("RAM");
+  const rom = s("ROM");
+  if (ram || rom) {
+    rows.push({
+      icon: <Cpu size={20} className="text-[#129cd3]" />,
+      text: [ram && `${ram} RAM`, rom && `${rom} ROM`].filter(Boolean).join(" | "),
+    });
+  }
+
+  // Processor
+  const proc = s("Processor");
+  if (proc) rows.push({ icon: <Cpu size={20} className="text-purple-500" />, text: proc });
+
+  // Rear camera
+  const rear = s("Rear Camera");
+  if (rear) rows.push({ icon: <Camera size={20} className="text-[#129cd3]" />, text: `${rear} Rear Camera` });
+
+  // Front camera
+  const front = s("Front Camera");
+  if (front) rows.push({ icon: <Camera size={20} className="text-gray-500" />, text: `${front} Front Camera` });
+
+  // Display — combine available display fields
+  const parts: string[] = [];
+  if (s("Display Size")) parts.push(s("Display Size"));
+  if (s("Resolution")) parts.push(s("Resolution"));
+  if (s("Screen Type")) parts.push(s("Screen Type"));
+  if (parts.length) rows.push({ icon: <Smartphone size={20} className="text-[#129cd3]" />, text: `${parts.join(" ")} Display` });
+
+  // Battery
+  const bat = s("Battery");
+  if (bat) rows.push({ icon: <BatteryMedium size={20} className="text-green-500" />, text: bat });
+
+  // Weight (from Dimensions)
+  const weight = s("Weight");
+  if (weight) rows.push({ icon: <HardDrive size={20} className="text-gray-400" />, text: `Weight: ${weight}` });
+
+  // Fallback: for non-phone products, show all known specs
+  if (rows.length === 0) {
+    Object.entries(specs).forEach(([key, val]) => {
+      if (val && typeof val !== "object") {
+        rows.push({
+          icon: <ChevronRight size={18} className="text-[#129cd3]" />,
+          text: `${key}: ${String(val)}`,
+        });
+      }
+    });
+  }
+
+  return rows;
+}
+
+function ProductHighlights({ specs }: { specs: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(true);
+  const highlights = buildHighlights(specs);
+
+  if (highlights.length === 0) return null;
+
+  const visible = expanded ? highlights : highlights.slice(0, 3);
+
+  return (
+    <div className="mb-5 border border-gray-200 rounded-xl overflow-hidden">
+      {/* Header */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition-colors"
+      >
+        <span className="text-sm font-bold text-gray-800">Product Highlights</span>
+        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+
+      {/* Rows */}
+      <div className="divide-y divide-gray-100 border-t border-gray-100">
+        {visible.map((row, i) => (
+          <div key={i} className="flex items-start gap-3 px-4 py-3 bg-white">
+            <span className="mt-0.5 flex-shrink-0">{row.icon}</span>
+            <span className="text-sm text-gray-700 leading-snug">{row.text}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Show more / less toggle */}
+      {highlights.length > 3 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full text-center text-xs font-semibold text-[#129cd3] py-2 bg-gray-50 hover:bg-gray-100 border-t border-gray-100 transition-colors"
+        >
+          {expanded ? "Show less" : `Show all ${highlights.length} highlights`}
+        </button>
+      )}
     </div>
   );
 }
