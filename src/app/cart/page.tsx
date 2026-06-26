@@ -403,7 +403,7 @@ export default function CartPage() {
                         <div className="xxs:hidden mt-2 flex items-center justify-between">
                           <span className="text-xs text-gray-400">Total</span>
                           <div className="text-right">
-                            <span className="text-sm font-bold text-gray-800">{formatPrice((line.lineSubtotal / line.qty) * displayQty - line.discount.total)}</span>
+                            <span className="text-sm font-bold text-gray-800">{formatPrice(line.unitPrice * displayQty - line.discount.total)}</span>
                             {line.discount.total > 0 && (
                               <p className="text-[10px] text-green-600">saved {formatPrice(line.discount.total)}</p>
                             )}
@@ -419,7 +419,7 @@ export default function CartPage() {
                       <div className="hidden xxs:flex flex-col flex-shrink-0 text-right">
                         <p className="text-xs text-gray-400 mb-1">Total</p>
                         <p className="text-sm sm:text-base font-bold text-gray-800">
-                          {formatPrice((line.lineSubtotal / line.qty) * displayQty - line.discount.total)}
+                          {formatPrice(line.unitPrice * displayQty - line.discount.total)}
                         </p>
                         {line.discount.total > 0 && (
                           <p className="text-[10px] text-green-600 mt-0.5">
@@ -446,10 +446,15 @@ export default function CartPage() {
                       const key = line.variantId ? `v:${line.variantId}` : `p:${line.slug}`;
                       return sum + (mrpMap[key] ?? line.unitPrice) * line.qty;
                     }, 0);
-                    const discountOnMrp = mrpTotal - cart.subtotal;
-                    const grossAmount = cart.subtotal;
+                    // Gross = sum of selling prices (unitPrice × qty) — the offer price shown per line.
+                    // Do NOT use cart.subtotal which may include backend adjustments beyond coupon.
+                    const grossAmount = cart.items.reduce(
+                      (sum, line) => sum + line.unitPrice * line.qty,
+                      0,
+                    );
+                    const discountOnMrp = mrpTotal - grossAmount;
                     const couponDiscount = cart.discountTotal;
-                    // Total Purchase = gross − coupon (excluding GST for display)
+                    // Total Purchase = gross − coupon
                     const totalPurchase = grossAmount - couponDiscount;
                     const totalSavings = mrpTotal - totalPurchase;
                     return (

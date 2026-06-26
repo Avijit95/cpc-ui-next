@@ -1,7 +1,7 @@
 import { Truck, RotateCcw, CreditCard, Headphones, Gift } from "lucide-react";
 
 const features = [
-  { icon: Truck, title: "FREE DELIVERY", desc: "On orders above ₹999" },
+  { icon: Truck, title: "FREE DELIVERY", desc: "On orders above ₹1,999" },
   { icon: RotateCcw, title: "EASY RETURNS", desc: "30-day return policy" },
   { icon: CreditCard, title: "SECURE PAYMENT", desc: "100% secure checkout" },
   { icon: Gift, title: "GIFT CARDS", desc: "Give the perfect gift" },

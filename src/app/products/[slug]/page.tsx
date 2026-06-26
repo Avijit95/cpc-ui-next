@@ -286,80 +286,91 @@ export default function ProductDetailPage() {
   }, [slug, variantParam, stocks, setStock]);
 
   // Fetch product coupons. Strategy (first success wins):
-  //  1. Admin API — works for admin/staff, any product.
-  //  2. Cart context — if product is already in cart, use its availableCoupons.
-  //  3. Silent add→peek→remove — for authenticated non-admin users; add the
-  //     item momentarily to learn its coupons, then immediately remove it.
-  //     We never sync the add to CartProvider so the badge never flickers.
+  //  1. Public /products/:slug/coupons endpoint — anonymous, works for everyone.
+  //  2. Admin API — works for admin/staff (richer data).
+  //  3. Cart context — if product is already in cart, use its availableCoupons.
+  //  4. Silent add→peek→remove — authenticated non-admin fallback.
   useEffect(() => {
-    if (!product || !status) return;
+    if (!product) return;
     let cancelled = false;
     let tempCartItemId: string | null = null;
 
-    const applyFromLine = (ac: { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } }) => {
+    type CouponMap = { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } };
+
+    const apply = (ac: CouponMap) => {
       if (!cancelled && (ac.customer || ac.retail)) setProductCoupons(ac);
     };
 
-    // 1. Try admin API first.
-    adminApi
-      .getProduct(product.id)
-      .then((detail) => {
+    // 1. Public endpoint — works for all visitors, no auth required.
+    catalogApi
+      .getProductCoupons(product.slug)
+      .then((c) => {
         if (cancelled) return;
-        const c = detail.coupons;
         if (c?.customer || c?.retail) {
-          applyFromLine({
+          apply({
             customer: c.customer ? { id: c.customer.id, name: c.customer.name, value: c.customer.value } : undefined,
             retail: c.retail ? { id: c.retail.id, name: c.retail.name, value: c.retail.value } : undefined,
           });
         }
       })
       .catch(() => {
-        // 2. Admin API failed (not admin) — try cart context.
+        // 2. Public endpoint unavailable — try admin API.
         if (cancelled) return;
-        const existingLine = cartItems.find((l) => l.slug === product.slug);
-        if (existingLine?.availableCoupons?.customer || existingLine?.availableCoupons?.retail) {
-          applyFromLine(existingLine.availableCoupons as { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } });
-          return;
-        }
-
-        // 3. Product not in cart — silent add→peek→remove (authenticated only).
-        if (status !== "authenticated") return;
-        const variantId = product.variants.length > 0
-          ? (product.variants.find((v) => v.stock > 0) ?? product.variants[0])?.id ?? null
-          : null;
-
-        cartApi
-          .addItem({ productId: product.id, variantId: variantId ?? undefined, qty: 1 })
-          .then((cartView) => {
-            const line = cartView.items.find(
-              (l) => l.slug === product.slug && l.variantId === variantId,
-            );
-            if (!line) return null;
-            tempCartItemId = line.cartItemId;
-            if (!cancelled) applyFromLine(line.availableCoupons as { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } });
-            return cartApi.removeItem(line.cartItemId);
+        adminApi
+          .getProduct(product.id)
+          .then((detail) => {
+            if (cancelled) return;
+            const c = detail.coupons;
+            if (c?.customer || c?.retail) {
+              apply({
+                customer: c.customer ? { id: c.customer.id, name: c.customer.name, value: c.customer.value } : undefined,
+                retail: c.retail ? { id: c.retail.id, name: c.retail.name, value: c.retail.value } : undefined,
+              });
+            }
           })
-          .then((updated) => {
-            tempCartItemId = null;
-            // Sync cart badge back to correct count after removal.
-            if (updated && !cancelled) syncHeaderCart(updated);
-          })
-          .catch(() => { /* OOS or other error — ignore */ });
+          .catch(() => {
+            // 3. Admin API failed — try cart context.
+            if (cancelled) return;
+            const existingLine = cartItems.find((l) => l.slug === product.slug);
+            if (existingLine?.availableCoupons?.customer || existingLine?.availableCoupons?.retail) {
+              apply(existingLine.availableCoupons as CouponMap);
+              return;
+            }
+
+            // 4. Silent add→peek→remove (authenticated only).
+            if (status !== "authenticated") return;
+            const variantId = product.variants.length > 0
+              ? (product.variants.find((v) => v.stock > 0) ?? product.variants[0])?.id ?? null
+              : null;
+
+            cartApi
+              .addItem({ productId: product.id, variantId: variantId ?? undefined, qty: 1 })
+              .then((cartView) => {
+                const line = cartView.items.find(
+                  (l) => l.slug === product.slug && l.variantId === variantId,
+                );
+                if (!line) return null;
+                tempCartItemId = line.cartItemId;
+                if (!cancelled) apply(line.availableCoupons as CouponMap);
+                return cartApi.removeItem(line.cartItemId);
+              })
+              .then((updated) => {
+                tempCartItemId = null;
+                if (updated && !cancelled) syncHeaderCart(updated);
+              })
+              .catch(() => { /* OOS or other error — ignore */ });
+          });
       });
 
     return () => {
       cancelled = true;
-      // If we added but haven't removed yet, clean up.
       if (tempCartItemId) {
-        cartApi
-          .removeItem(tempCartItemId)
-          .then((v) => syncHeaderCart(v))
-          .catch(() => {});
+        cartApi.removeItem(tempCartItemId).then((v) => syncHeaderCart(v)).catch(() => {});
         tempCartItemId = null;
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.id, status]);
+  }, [product?.id]);
 
   // Fetch reviews when slug resolves (public endpoint, doesn't depend on auth).
   useEffect(() => {
@@ -1092,7 +1103,7 @@ useEffect(() => {
               {/* Trust badges */}
               <div className="grid grid-cols-3 gap-3 pt-5 border-t border-gray-100">
                 {[
-                  { icon: <Truck size={18} className="text-[#129cd3]" />, label: "Free Delivery", sub: "On orders above ₹999" },
+                  { icon: <Truck size={18} className="text-[#129cd3]" />, label: "Free Delivery", sub: "On orders above ₹1,999" },
                   { icon: <ShieldCheck size={18} className="text-[#129cd3]" />, label: "1 Year Warranty", sub: "Official warranty" },
                   { icon: <RotateCcw size={18} className="text-[#129cd3]" />, label: "Easy Returns", sub: "10-day return policy" },
                 ].map((item, i) => (
@@ -1466,7 +1477,12 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
 
 // ── Product Highlights ────────────────────────────────────────────────────────
 
-type HighlightRow = { icon: React.ReactNode; text: string };
+type HighlightRow = {
+  icon: React.ReactNode;
+  label: string;
+  text: string;
+  accent: string;  // tailwind bg color for icon bubble
+};
 
 function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
   const s = (key: string) => {
@@ -1481,46 +1497,45 @@ function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
   const rom = s("ROM");
   if (ram || rom) {
     rows.push({
-      icon: <Cpu size={20} className="text-[#129cd3]" />,
+      icon: <Cpu size={18} />,
+      label: "Memory",
       text: [ram && `${ram} RAM`, rom && `${rom} ROM`].filter(Boolean).join(" | "),
+      accent: "bg-blue-100 text-blue-600",
     });
   }
 
   // Processor
   const proc = s("Processor");
-  if (proc) rows.push({ icon: <Cpu size={20} className="text-purple-500" />, text: proc });
+  if (proc) rows.push({ icon: <Cpu size={18} />, label: "Processor", text: proc, accent: "bg-purple-100 text-purple-600" });
 
   // Rear camera
   const rear = s("Rear Camera");
-  if (rear) rows.push({ icon: <Camera size={20} className="text-[#129cd3]" />, text: `${rear} Rear Camera` });
+  if (rear) rows.push({ icon: <Camera size={18} />, label: "Rear Camera", text: `${rear} Rear Camera`, accent: "bg-[#e8f7fc] text-[#129cd3]" });
 
   // Front camera
   const front = s("Front Camera");
-  if (front) rows.push({ icon: <Camera size={20} className="text-gray-500" />, text: `${front} Front Camera` });
+  if (front) rows.push({ icon: <Camera size={18} />, label: "Front Camera", text: `${front} Front Camera`, accent: "bg-pink-100 text-pink-500" });
 
   // Display — combine available display fields
   const parts: string[] = [];
   if (s("Display Size")) parts.push(s("Display Size"));
   if (s("Resolution")) parts.push(s("Resolution"));
   if (s("Screen Type")) parts.push(s("Screen Type"));
-  if (parts.length) rows.push({ icon: <Smartphone size={20} className="text-[#129cd3]" />, text: `${parts.join(" ")} Display` });
+  if (parts.length) rows.push({ icon: <Smartphone size={18} />, label: "Display", text: `${parts.join(" · ")} Display`, accent: "bg-cyan-100 text-cyan-600" });
 
   // Battery
   const bat = s("Battery");
-  if (bat) rows.push({ icon: <BatteryMedium size={20} className="text-green-500" />, text: bat });
+  if (bat) rows.push({ icon: <BatteryMedium size={18} />, label: "Battery", text: bat, accent: "bg-green-100 text-green-600" });
 
-  // Weight (from Dimensions)
+  // Weight
   const weight = s("Weight");
-  if (weight) rows.push({ icon: <HardDrive size={20} className="text-gray-400" />, text: `Weight: ${weight}` });
+  if (weight) rows.push({ icon: <HardDrive size={18} />, label: "Weight", text: weight, accent: "bg-gray-100 text-gray-500" });
 
-  // Fallback: for non-phone products, show all known specs
+  // Fallback for non-phone products
   if (rows.length === 0) {
     Object.entries(specs).forEach(([key, val]) => {
       if (val && typeof val !== "object") {
-        rows.push({
-          icon: <ChevronRight size={18} className="text-[#129cd3]" />,
-          text: `${key}: ${String(val)}`,
-        });
+        rows.push({ icon: <ChevronRight size={16} />, label: key, text: String(val), accent: "bg-[#e8f7fc] text-[#129cd3]" });
       }
     });
   }
@@ -1534,38 +1549,57 @@ function ProductHighlights({ specs }: { specs: Record<string, unknown> }) {
 
   if (highlights.length === 0) return null;
 
-  const visible = expanded ? highlights : highlights.slice(0, 3);
+  const visible = expanded ? highlights : highlights.slice(0, 4);
 
   return (
-    <div className="mb-5 border border-gray-200 rounded-xl overflow-hidden">
+    <div className="mb-5 rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
       {/* Header */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-[#129cd3] to-[#0e87b5]"
       >
-        <span className="text-sm font-bold text-gray-800">Product Highlights</span>
-        {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        <div className="flex items-center gap-2">
+          <span className="text-white text-base">⚡</span>
+          <span className="text-sm font-bold text-white tracking-wide">Product Highlights</span>
+        </div>
+        {expanded
+          ? <ChevronUp size={16} className="text-white/80" />
+          : <ChevronDown size={16} className="text-white/80" />}
       </button>
 
-      {/* Rows */}
-      <div className="divide-y divide-gray-100 border-t border-gray-100">
+      {/* Grid of highlight cards */}
+      <div className="bg-gray-50 p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
         {visible.map((row, i) => (
-          <div key={i} className="flex items-start gap-3 px-4 py-3 bg-white">
-            <span className="mt-0.5 flex-shrink-0">{row.icon}</span>
-            <span className="text-sm text-gray-700 leading-snug">{row.text}</span>
+          <div
+            key={i}
+            className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-[#129cd3]/30 transition-all"
+          >
+            {/* Icon bubble */}
+            <span className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${row.accent}`}>
+              {row.icon}
+            </span>
+            {/* Text */}
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider leading-none mb-0.5">
+                {row.label}
+              </p>
+              <p className="text-xs font-semibold text-gray-800 leading-snug line-clamp-2">
+                {row.text}
+              </p>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Show more / less toggle */}
-      {highlights.length > 3 && (
+      {/* Show more / less */}
+      {highlights.length > 4 && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="w-full text-center text-xs font-semibold text-[#129cd3] py-2 bg-gray-50 hover:bg-gray-100 border-t border-gray-100 transition-colors"
+          className="w-full text-center text-xs font-semibold text-[#129cd3] py-2.5 bg-white hover:bg-[#e8f7fc] border-t border-gray-100 transition-colors"
         >
-          {expanded ? "Show less" : `Show all ${highlights.length} highlights`}
+          {expanded ? "▲ Show less" : `▼ Show all ${highlights.length} highlights`}
         </button>
       )}
     </div>
