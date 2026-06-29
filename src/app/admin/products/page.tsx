@@ -16,6 +16,7 @@ import SortByDropdown, {
 import {
   Archive,
   Check,
+  ChevronDown,
   Loader2,
   MoreHorizontal,
   Package,
@@ -187,6 +188,8 @@ export default function AdminProductsPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<AdminCategoryListItem[]>([]);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
 
   const [archiveTarget, setArchiveTarget] =
     useState<AdminProductListItem | null>(null);
@@ -234,6 +237,16 @@ export default function AdminProductsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
+        setAddMenuOpen(false);
+      }
+    };
+    if (addMenuOpen) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [addMenuOpen]);
 
   const [reloadKey, setReloadKey] = useState(0);
   const reload = useCallback(() => {
@@ -494,12 +507,33 @@ export default function AdminProductsPage() {
               filename="products"
               onError={(msg) => pushToast(msg, "error")}
             />
-            <Link
-              href="/admin/products/add"
-              className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-            >
-              <Plus size={14} /> Add product
-            </Link>
+            <div ref={addMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setAddMenuOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              >
+                <Plus size={14} /> Add product <ChevronDown size={13} className={`transition-transform ${addMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+              {addMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 overflow-hidden">
+                  {categories.length === 0 ? (
+                    <span className="block px-4 py-2 text-xs text-gray-400">Loading…</span>
+                  ) : (
+                    categories.map((cat) => (
+                      <Link
+                        key={cat.id}
+                        href={`/admin/products/add?categoryId=${cat.id}`}
+                        onClick={() => setAddMenuOpen(false)}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-[#e8f7fc] hover:text-[#129cd3] transition-colors"
+                      >
+                        {cat.name}
+                      </Link>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         }
       />

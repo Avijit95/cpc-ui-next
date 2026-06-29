@@ -456,8 +456,9 @@ useEffect(() => {
         {
           category: selectedCategory ?? undefined,
           brand: selectedBrand ?? undefined,
-          priceMin: minPrice > PRICE_FLOOR ? minPrice : undefined,
-          priceMax: maxPrice < PRICE_CEIL ? maxPrice : undefined,
+          // NOTE: priceMin/priceMax intentionally omitted — backend filters by variant MRP
+          // (basePrice) instead of selling price (finalPrice), causing incorrect results for
+          // discounted products. We apply both price bounds client-side below.
           minRating: minRating ?? undefined,
           sort: sortValue,
           limit: PAGE_LIMIT,
@@ -486,14 +487,25 @@ useEffect(() => {
   const [cacheTick, setCacheTick] = useState(0);
 
   const rawItems: ListCard[] = data?.items ?? [];
+
+  // Client-side price filter: backend filters by variant MRP (basePrice) not selling price
+  // (finalPrice), so products with MRP outside range but selling price inside range are
+  // incorrectly included/excluded. We filter here using lowestVariantPrice ?? finalPrice.
+  const priceFilteredItems = rawItems.filter((p) => {
+    const price = p.lowestVariantPrice ?? p.finalPrice;
+    if (minPrice > PRICE_FLOOR && price < minPrice) return false;
+    if (maxPrice < PRICE_CEIL && price > maxPrice) return false;
+    return true;
+  });
+
   const isPhoneCategory = selectedCategory?.toLowerCase() === "phone";
   const hasPhoneFilters = Object.values(phoneFilters).some((v) => v.length > 0);
 
   // When phone filters are active, pre-fetch detail for items not yet cached so
   // applyPhoneFilters can use real variant attributes instead of name parsing.
   useEffect(() => {
-    if (!isPhoneCategory || !hasPhoneFilters || rawItems.length === 0) return;
-    const uncached = rawItems.filter((item) => !detailCache.has(item.slug));
+    if (!isPhoneCategory || !hasPhoneFilters || priceFilteredItems.length === 0) return;
+    const uncached = priceFilteredItems.filter((item) => !detailCache.has(item.slug));
     if (uncached.length === 0) return;
     let cancelled = false;
     Promise.all(
@@ -506,11 +518,11 @@ useEffect(() => {
       if (!cancelled) setCacheTick((t) => t + 1);
     });
     return () => { cancelled = true; };
-  }, [isPhoneCategory, hasPhoneFilters, rawItems]);
+  }, [isPhoneCategory, hasPhoneFilters, priceFilteredItems]);
 
   // cacheTick read to make React re-render after pre-fetch.
   void cacheTick;
-  const items: ListCard[] = isPhoneCategory ? applyPhoneFilters(rawItems, phoneFilters) : rawItems;
+  const items: ListCard[] = isPhoneCategory ? applyPhoneFilters(priceFilteredItems, phoneFilters) : priceFilteredItems;
   const total = data?.total ?? 0;
   const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
 

@@ -122,6 +122,10 @@ export default function CouponAttachments({
     const state = slot === "customer" ? customer : retail;
     const setState = slot === "customer" ? setCustomer : setRetail;
 
+    if (!productId) {
+      setState((s) => ({ ...s, error: "Save the product first, then attach coupons." }));
+      return;
+    }
     if (!state.selectedCouponId) {
       setState((s) => ({ ...s, error: "Select a coupon to attach." }));
       return;
@@ -171,6 +175,7 @@ export default function CouponAttachments({
 
   const handleDetach = async (slot: ProductCouponSlot) => {
     const setState = slot === "customer" ? setCustomer : setRetail;
+    if (!productId) return;
     setState((s) => ({ ...s, busy: true, error: null }));
     try {
       await adminApi.detachProductCoupon(productId, slot);
@@ -194,8 +199,7 @@ export default function CouponAttachments({
   };
 
   return (
-    <div className="px-6 pb-6">
-      <div className="max-w-2xl bg-white border border-gray-200 rounded-xl p-6">
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
           <Tag size={16} className="text-[#129cd3]" />
           <h2 className="text-base font-bold text-gray-800">
@@ -245,7 +249,6 @@ export default function CouponAttachments({
             />
           </div>
         )}
-      </div>
     </div>
   );
 }

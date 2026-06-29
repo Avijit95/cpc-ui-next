@@ -31,6 +31,7 @@ import { imageUrlForKey } from "@/lib/image-url";
 import ProductVariantsEditor, {
   type ProductVariantsHandle,
 } from "./ProductVariantsEditor";
+import CouponAttachments from "./CouponAttachments";
 import type {
   AdminCategoryListItem,
   AdminProduct,
@@ -42,7 +43,7 @@ import type {
 } from "@/lib/api";
 
 type Mode =
-  | { kind: "create" }
+  | { kind: "create"; initialCategoryId?: string }
   | { kind: "edit"; productId: string; initial: AdminProductDetail };
 
 type FormState = {
@@ -261,6 +262,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
   const [submitting, setSubmitting] = useState<null | ProductStatus>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Set after first save in create mode — reveals CouponAttachments inline.
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   // ── Image state (existing + pending, one ordered list = display rank) ────
   const [images, setImages] = useState<ProductImageItem[]>(() =>
@@ -296,6 +299,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     initSpecRows(initial?.specs),
   );
   const variantsRef = useRef<ProductVariantsHandle | null>(null);
+  const couponSectionRef = useRef<HTMLDivElement>(null);
 
   // Cleanup object URLs on unmount.
   useEffect(() => {
@@ -320,7 +324,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         if (cancelled) return;
         setCategories(list);
         if (mode.kind === "create" && list.length > 0) {
-          setForm((f) => (f.categoryId ? f : { ...f, categoryId: list[0].id }));
+          const preselect = mode.initialCategoryId ?? list[0].id;
+          setForm((f) => (f.categoryId ? f : { ...f, categoryId: preselect }));
         }
       } catch (err) {
         if (cancelled) return;
@@ -777,12 +782,15 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       }
 
       if (mode.kind === "create") {
-        // Redirect to the edit page so the admin can attach coupons immediately.
-        router.replace(`/admin/products/${productId}/edit`);
+        setCreatedId(productId);
+        // Scroll to coupon section after React re-renders
+        setTimeout(() => {
+          couponSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
       } else {
         router.replace("/admin/products");
+        router.refresh();
       }
-      router.refresh();
     } catch (err) {
       setErrorMsg(readableError(err));
     } finally {
@@ -951,208 +959,6 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             </div>
           </section>
 
-          {/* ── Images ── */}
-          <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-gray-800 text-sm">Product Images</h3>
-                <p className="text-[12px] text-gray-500 mt-0.5">
-                  JPEG, PNG, or WEBP — saved as PNG. Up to 5&nbsp;MB each, max {MAX_IMAGES} images per product.
-                </p>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
-                {/* Background removal toggle */}
-                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <div
-                    onClick={() => setAutoRemoveBg((v) => !v)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${autoRemoveBg ? "bg-[#129cd3]" : "bg-gray-300"
-                      }`}
-                  >
-                    <span
-                      className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${autoRemoveBg ? "translate-x-[18px]" : "translate-x-0.5"
-                        }`}
-                    />
-                  </div>
-                  <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">
-                    Remove background
-                  </span>
-                </label>
-                <span className="text-[11px] text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                  {totalImageCount}/{MAX_IMAGES}
-                </span>
-              </div>
-            </div>
-
-            {imageError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-line">
-                {imageError}
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <label
-                className={`aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors cursor-pointer ${atImageLimit
-                    ? "border-gray-100 text-gray-300 cursor-not-allowed"
-                    : "border-gray-200 text-gray-400 hover:border-[#129cd3] hover:text-[#129cd3]"
-                  }`}
-              >
-                <ImagePlus size={20} />
-                <span className="text-[11px] mt-1.5 font-semibold">
-                  {atImageLimit ? "Limit reached" : "Add images"}
-                </span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={ALLOWED_TYPES.join(",")}
-                  multiple
-                  className="hidden"
-                  disabled={atImageLimit || busy}
-                  onChange={(e) => onPickFiles(e.target.files)}
-                />
-              </label>
-
-              {/* Spinner placeholder for each image currently being processed */}
-              {Array.from({ length: processingCount }).map((_, i) => (
-                <div
-                  key={`processing-${i}`}
-                  className="aspect-square rounded-lg border-2 border-dashed border-[#129cd3]/40 bg-[#e8f7fc]/40 flex flex-col items-center justify-center gap-2"
-                >
-                  <Loader2 size={22} className="animate-spin text-[#129cd3]" />
-                  <span className="text-[10px] text-[#129cd3] font-semibold">Processing…</span>
-                </div>
-              ))}
-
-              {images.map((it, idx) => {
-                const src = it.kind === "existing" ? it.url : it.previewUrl;
-                // Backend can't store an empty image list, so block removing the
-                // last one when editing an existing product.
-                const canRemove = mode.kind === "create" || images.length > 1;
-                return (
-                  <div
-                    key={it.id}
-                    className="aspect-square relative rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group"
-                  >
-                    {src ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={src}
-                        alt={it.kind === "pending" ? it.file.name : `Image ${idx + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[11px] text-gray-400">
-                        saved
-                      </div>
-                    )}
-                    {/* Position badge */}
-                    <span className="absolute top-1.5 left-1.5 min-w-[22px] h-6 px-1.5 rounded-full bg-black/60 text-white text-[11px] font-semibold flex items-center justify-center">
-                      {idx + 1}
-                    </span>
-                    {/* Default badge — always visible on #1, hover-triggered on others */}
-                    {idx === 0 ? (
-                      <span
-                        className="absolute top-1.5 right-1.5 h-6 px-2 rounded-full bg-amber-400 text-white text-[10px] font-bold shadow flex items-center justify-center"
-                        title="Main photo (shown on website)"
-                      >
-                        Default
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setAsMain(it.id)}
-                        disabled={busy}
-                        className="absolute top-1.5 right-1.5 h-6 px-2 rounded-full bg-white/90 text-amber-500 hover:bg-amber-400 hover:text-white text-[10px] font-bold shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
-                        aria-label="Set as default photo"
-                        title="Set as default photo"
-                      >
-                        Default
-                      </button>
-                    )}
-                    {/* Remove button — shown on hover, shifted down to avoid star */}
-                    <button
-                      type="button"
-                      onClick={() => removeImage(it.id)}
-                      disabled={busy || !canRemove}
-                      className="absolute top-9 right-1.5 w-7 h-7 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
-                      aria-label="Remove image"
-                      title={canRemove ? "Remove image" : "At least one image is required"}
-                    >
-                      <X size={14} />
-                    </button>
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 py-1 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => moveImage(it.id, -1)}
-                        disabled={busy || idx === 0}
-                        className="w-6 h-6 rounded-full bg-white/90 text-gray-600 hover:text-[#129cd3] shadow flex items-center justify-center disabled:opacity-30"
-                        aria-label="Move earlier"
-                        title="Move earlier"
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveImage(it.id, 1)}
-                        disabled={busy || idx === images.length - 1}
-                        className="w-6 h-6 rounded-full bg-white/90 text-gray-600 hover:text-[#129cd3] shadow flex items-center justify-center disabled:opacity-30"
-                        aria-label="Move later"
-                        title="Move later"
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {scrapedImages.length > 0 && (
-              <div className="space-y-2 pt-1">
-                <p className="text-[12px] font-semibold text-gray-600">
-                  From URL — tap to include or exclude ({selectedScrapedCount}{" "}
-                  selected)
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {scrapedImages.map((img) => (
-                    <button
-                      type="button"
-                      key={img.url}
-                      onClick={() => toggleScraped(img.url)}
-                      disabled={busy}
-                      title={img.selected ? "Click to exclude" : "Click to include"}
-                      className={`aspect-square relative rounded-lg overflow-hidden bg-gray-50 border transition-all disabled:cursor-not-allowed ${img.selected
-                          ? "border-[#129cd3] ring-2 ring-[#129cd3]/30"
-                          : "border-gray-200 opacity-50 hover:opacity-80"
-                        }`}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={img.url}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                      <span
-                        className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow ${img.selected
-                            ? "bg-[#129cd3] text-white"
-                            : "bg-white/90 text-transparent"
-                          }`}
-                      >
-                        <Check size={13} />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-gray-400">
-                  Selected images are downloaded and re-hosted to S3 when you save.
-                </p>
-              </div>
-            )}
-
-            <p className="text-[11px] text-gray-400">
-              The &ldquo;Default&rdquo; image is shown on the website. Hover any image and click &ldquo;Default&rdquo; to make it the main photo. Use arrows to reorder, ✕ to remove — changes save when you click Save.
-            </p>
-          </section>
-
           {/* ── Specifications ── */}
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <div>
@@ -1182,6 +988,19 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               categorySlug={categories.find((c) => c.id === form.categoryId)?.slug}
             />
           )}
+
+          {/* Coupon attachments — always visible; functional after first save */}
+          <div ref={couponSectionRef}>
+            {!isEdit && createdId && (
+              <div className="mb-3 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700 font-medium">
+                ✓ Product saved! You can now attach coupons below.
+              </div>
+            )}
+            <CouponAttachments
+              productId={isEdit ? mode.productId : (createdId ?? "")}
+              initialCoupons={isEdit ? mode.initial.coupons : {}}
+            />
+          </div>
         </div>
 
         {/* Sidebar — sticks while left scrolls */}

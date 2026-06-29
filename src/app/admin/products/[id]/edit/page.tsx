@@ -4,7 +4,6 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import AdminHeader from "@/components/admin/AdminHeader";
-import CouponAttachments from "@/components/admin/CouponAttachments";
 import ProductForm from "@/components/admin/ProductForm";
 import { adminApi, isApiError } from "@/lib/api";
 import type { AdminProductDetail } from "@/lib/api";
@@ -69,10 +68,7 @@ export default function EditProductPage({
       )}
 
       {!loading && product && (
-        <>
-          <ProductForm mode={{ kind: "edit", productId: id, initial: product }} />
-          <CouponAttachments productId={id} initialCoupons={product.coupons} />
-        </>
+        <ProductForm mode={{ kind: "edit", productId: id, initial: product }} />
       )}
     </>
   );
