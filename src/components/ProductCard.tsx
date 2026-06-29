@@ -329,7 +329,7 @@ export default function ProductCard({
  * Fetches the product detail and renders one card per variant (if the product
  * has variants), or a single card if it does not.
  */
-export function ProductCardExpander({ product }: { product: ListCard }) {
+export function ProductCardExpander({ product, priceSortDir }: { product: ListCard; priceSortDir?: "asc" | "desc" }) {
   const { stocks, setStock } = useStock();
   const [variants, setVariants] = useState<Variant[]>(
     () => detailCache.get(product.slug)?.variants ?? []
@@ -367,9 +367,17 @@ export function ProductCardExpander({ product }: { product: ListCard }) {
     return <ProductCard product={product} />;
   }
 
+  const sortedVariants = priceSortDir
+    ? [...variants].sort((a, b) =>
+        priceSortDir === "asc"
+          ? a.pricing.finalPrice - b.pricing.finalPrice
+          : b.pricing.finalPrice - a.pricing.finalPrice
+      )
+    : variants;
+
   return (
     <>
-      {variants.map((v) => (
+      {sortedVariants.map((v) => (
         <ProductCard key={v.id} product={product} variantOverride={v} />
       ))}
     </>

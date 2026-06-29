@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { ProductCardExpander, ProductCardSkeleton, detailCache } from "@/components/ProductCard";
+import ProductCard, { ProductCardExpander, ProductCardSkeleton, detailCache } from "@/components/ProductCard";
 import { catalogApi, isApiError } from "@/lib/api";
 import type {
   BrandFacet,
@@ -13,6 +13,7 @@ import type {
   CategoryNode,
   ListCard,
   ProductListResponse,
+  Variant,
 } from "@/lib/api";
 import { SlidersHorizontal, ChevronDown, ChevronUp, Star, ArrowLeft } from "lucide-react";
 
@@ -361,6 +362,74 @@ function FilterSection({
   );
 }
 
+/**
+ * Fetches variant details for all products, builds a globally flat list of
+ * {product, variant} pairs, sorts them by finalPrice, then renders individual
+ * ProductCards. Used when price sort is active so the order is truly global.
+ */
+function PriceSortedGrid({ products, dir }: { products: ListCard[]; dir: "asc" | "desc" }) {
+  type FlatItem = { product: ListCard; variant: Variant | null };
+  const [flat, setFlat] = useState<FlatItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      products.map(async (p) => {
+        const cached = detailCache.get(p.slug);
+        if (cached) return { product: p, variants: cached.variants };
+        try {
+          const d = await catalogApi.getProduct(p.slug);
+          detailCache.set(p.slug, { stock: d.stock, variants: d.variants, specs: d.specs ?? {} });
+          return { product: p, variants: d.variants };
+        } catch {
+          return { product: p, variants: [] };
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const items: FlatItem[] = [];
+      for (const { product, variants } of results) {
+        if (variants.length === 0) {
+          items.push({ product, variant: null });
+        } else {
+          for (const v of variants) items.push({ product, variant: v });
+        }
+      }
+      items.sort((a, b) => {
+        const pa = a.variant ? a.variant.pricing.finalPrice : (a.product.lowestVariantPrice ?? a.product.finalPrice);
+        const pb = b.variant ? b.variant.pricing.finalPrice : (b.product.lowestVariantPrice ?? b.product.finalPrice);
+        return dir === "asc" ? pa - pb : pb - pa;
+      });
+      setFlat(items);
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, dir]);
+
+  // While fetching, fall back to product-level sorted cards
+  if (flat.length === 0) {
+    return (
+      <>
+        {products.map((p) => (
+          <ProductCardExpander key={p.id} product={p} priceSortDir={dir} />
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {flat.map(({ product, variant }, i) =>
+        variant ? (
+          <ProductCard key={`${product.id}-${variant.id}`} product={product} variantOverride={variant} />
+        ) : (
+          <ProductCard key={`${product.id}-${i}`} product={product} />
+        )
+      )}
+    </>
+  );
+}
+
 export default function ProductsPage() {
   return (
     <Suspense fallback={<ProductsPageFallback />}>
@@ -522,7 +591,18 @@ useEffect(() => {
 
   // cacheTick read to make React re-render after pre-fetch.
   void cacheTick;
-  const items: ListCard[] = isPhoneCategory ? applyPhoneFilters(priceFilteredItems, phoneFilters) : priceFilteredItems;
+  const sortValue = sortOptions.find((o) => o.label === sortLabel)?.value;
+  const phoneFiltered: ListCard[] = isPhoneCategory ? applyPhoneFilters(priceFilteredItems, phoneFilters) : priceFilteredItems;
+  // Re-sort client-side by effective price (lowestVariantPrice ?? finalPrice) so products
+  // with basePrice=0 (variant-only pricing) appear in the correct position.
+  const items: ListCard[] =
+    sortValue === "price-asc" || sortValue === "price-desc"
+      ? [...phoneFiltered].sort((a, b) => {
+          const pa = a.lowestVariantPrice ?? a.finalPrice;
+          const pb = b.lowestVariantPrice ?? b.finalPrice;
+          return sortValue === "price-asc" ? pa - pb : pb - pa;
+        })
+      : phoneFiltered;
   const total = data?.total ?? 0;
   const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
 
@@ -854,9 +934,13 @@ useEffect(() => {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 xl:grid-cols-5" style={{ gap: "clamp(7px, 1vw, 16px)" }}>
-                  {items.map((product) => (
-                    <ProductCardExpander key={product.id} product={product} />
-                  ))}
+                  {sortValue === "price-asc" || sortValue === "price-desc" ? (
+                    <PriceSortedGrid products={items} dir={sortValue === "price-asc" ? "asc" : "desc"} />
+                  ) : (
+                    items.map((product) => (
+                      <ProductCardExpander key={product.id} product={product} />
+                    ))
+                  )}
                 </div>
               )}
             </div>
