@@ -592,8 +592,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     }
 
     const hasVariants = variantsRef.current?.hasRows() ?? false;
+    const minVariantPrice = hasVariants ? (variantsRef.current?.getMinSellingPrice() ?? 0) : 0;
     const basePriceNum =
-      form.basePrice.trim() === "" && hasVariants ? 0 : Number(form.basePrice);
+      form.basePrice.trim() === "" && hasVariants
+        ? minVariantPrice
+        : Number(form.basePrice);
     if (
       (!hasVariants && form.basePrice.trim() === "") ||
       Number.isNaN(basePriceNum) ||

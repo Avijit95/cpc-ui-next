@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   RotateCcw,
   ChevronRight,
+  ChevronLeft,
   Check,
   Loader2,
   Trash2,
@@ -203,6 +204,8 @@ export default function ProductDetailPage() {
   const [retailCouponSelected, setRetailCouponSelected] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("Description");
   const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [thumbOffset, setThumbOffset] = useState(0);
+  const THUMB_PER_PAGE = 5;
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
   const [addState, setAddState] = useState<AddState>("idle");
   const [addError, setAddError] = useState<string | null>(null);
@@ -725,21 +728,49 @@ useEffect(() => {
                 </button>
               </div>
               {galleryImages.length > 1 && (
-                <div className="flex gap-2 mt-3">
-                  {galleryImages.slice(0, 4).map((img, i) => (
-                    <button
-                      key={img.objectKey}
-                      onClick={() => setActiveImageIdx(i)}
-                      className={`w-16 h-16 bg-gray-50 rounded-lg border-2 overflow-hidden cursor-pointer ${
-                        i === activeImageIdx ? "border-[#129cd3]" : "border-gray-200 hover:border-[#8dd4ee]"
-                      }`}
-                    >
-                      {img.url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={img.url} alt={product.name} className="w-full h-full object-cover" />
-                      )}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2 mt-3">
+                  {/* Prev */}
+                  <button
+                    onClick={() => setThumbOffset((o) => Math.max(0, o - 1))}
+                    disabled={thumbOffset === 0}
+                    className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                    aria-label="Previous images"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+
+                  {/* Visible thumbnails */}
+                  <div className="flex gap-2 flex-1">
+                    {galleryImages.slice(thumbOffset, thumbOffset + THUMB_PER_PAGE).map((img, rel) => {
+                      const i = thumbOffset + rel;
+                      return (
+                        <button
+                          key={img.objectKey}
+                          onClick={() => setActiveImageIdx(i)}
+                          className={`flex-1 h-16 bg-gray-50 rounded-lg border-2 overflow-hidden cursor-pointer transition-all ${
+                            i === activeImageIdx
+                              ? "border-[#129cd3] shadow-sm shadow-[#129cd3]/20"
+                              : "border-gray-200 hover:border-[#8dd4ee]"
+                          }`}
+                        >
+                          {img.url && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={img.url} alt={product.name} className="w-full h-full object-cover" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Next */}
+                  <button
+                    onClick={() => setThumbOffset((o) => Math.min(galleryImages.length - THUMB_PER_PAGE, o + 1))}
+                    disabled={thumbOffset + THUMB_PER_PAGE >= galleryImages.length}
+                    className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                    aria-label="Next images"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
                 </div>
               )}
             </div>

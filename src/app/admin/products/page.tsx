@@ -792,9 +792,15 @@ export default function AdminProductsPage() {
                           {p.brand ?? <span className="text-gray-400">—</span>}
                         </td>
                         <td className="px-3 py-3">
-                          <p className="font-semibold text-gray-800 text-sm whitespace-nowrap">
-                            {formatPrice(p.basePrice)}
-                          </p>
+                          {p.basePrice === 0 && variantCount > 0 ? (
+                            <span className="text-xs font-medium text-[#129cd3] bg-[#e8f7fc] px-2 py-1 rounded whitespace-nowrap">
+                              See variants
+                            </span>
+                          ) : (
+                            <p className="font-semibold text-gray-800 text-sm whitespace-nowrap">
+                              {formatPrice(p.basePrice)}
+                            </p>
+                          )}
                         </td>
                         <td className="px-3 py-3 text-gray-700 text-sm">{p.stock}</td>
                         <td className="hidden xl:table-cell px-3 py-3">

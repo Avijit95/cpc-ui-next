@@ -75,6 +75,8 @@ export type ProductVariantsHandle = {
   commit: (productId: string) => Promise<void>;
   // True when at least one variant row exists.
   hasRows: () => boolean;
+  // Returns the minimum selling price across all variant rows (0 if none set).
+  getMinSellingPrice: () => number;
 };
 
 function uid(): string {
@@ -336,6 +338,10 @@ const ProductVariantsEditor = forwardRef<
         return null;
       },
       hasRows: () => rows.length > 0,
+      getMinSellingPrice: () => {
+        const prices = rows.map((r) => Number(r.price)).filter((n) => !isNaN(n) && n > 0);
+        return prices.length > 0 ? Math.min(...prices) : 0;
+      },
       commit: async (productId: string) => {
         // 1. Resolve each color's images in display order — uploading pending
         //    files in place so the final key list matches the chosen ranking.
