@@ -591,9 +591,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       return { error: "Description must be 10,000 characters or fewer." };
     }
 
-    const basePriceNum = Number(form.basePrice);
+    const hasVariants = variantsRef.current?.hasRows() ?? false;
+    const basePriceNum =
+      form.basePrice.trim() === "" && hasVariants ? 0 : Number(form.basePrice);
     if (
-      form.basePrice.trim() === "" ||
+      (!hasVariants && form.basePrice.trim() === "") ||
       Number.isNaN(basePriceNum) ||
       basePriceNum < 0
     ) {

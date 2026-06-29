@@ -73,6 +73,8 @@ export type ProductVariantsHandle = {
   validate: () => string | null;
   // Uploads per-color images then creates/updates/deletes variants to match the rows.
   commit: (productId: string) => Promise<void>;
+  // True when at least one variant row exists.
+  hasRows: () => boolean;
 };
 
 function uid(): string {
@@ -333,6 +335,7 @@ const ProductVariantsEditor = forwardRef<
         }
         return null;
       },
+      hasRows: () => rows.length > 0,
       commit: async (productId: string) => {
         // 1. Resolve each color's images in display order — uploading pending
         //    files in place so the final key list matches the chosen ranking.

@@ -56,8 +56,8 @@ const PAGE_SIZE = 20;
 
 const STATUS_OPTIONS: { value: "" | ProductStatus; label: string }[] = [
   { value: "", label: "All statuses" },
-  { value: "DRAFT", label: "Draft" },
   { value: "ACTIVE", label: "Active" },
+  { value: "DRAFT", label: "Inactive" },
   { value: "ARCHIVED", label: "Archived" },
 ];
 
