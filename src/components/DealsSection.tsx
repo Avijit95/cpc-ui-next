@@ -105,7 +105,9 @@ export default function DealsSection() {
   const [dealDetails, setDealDetails] = useState<Record<string, ProductDetail>>({});
   const [loaded, setLoaded] = useState(false);
   const [dealIdx, setDealIdx] = useState(0);
+  const [thumbStart, setThumbStart] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const THUMB_VISIBLE = 4;
 
   useEffect(() => {
     let cancelled = false;
@@ -243,89 +245,185 @@ export default function DealsSection() {
               </div>
 
               {/* Details */}
-              <div className="flex-1 min-w-0">
-                <Link
-                  href={`/products/${deal.product.slug}`}
-                  className="block"
-                >
-                  <h3 className="text-sm font-semibold text-gray-800 mb-1.5 line-clamp-1 hover:text-[#129cd3] transition-colors">
+              <div className="flex-1 min-w-0 flex flex-col gap-0">
+
+                {/* Title block */}
+                <Link href={`/products/${deal.product.slug}`} className="block group mb-3">
+                  <h3
+                    className="font-extrabold text-gray-900 group-hover:text-[#129cd3] transition-colors duration-200 tracking-tight"
+                    style={{ fontSize: "24px", lineHeight: "normal" }}
+                  >
                     {deal.product.name}
                   </h3>
                 </Link>
-                <hr className="my-2.5 border-gray-100" />
+
+                {/* Highlights */}
                 {(() => {
                   const detail = dealDetails[deal.product.slug];
+                  if (detail?.specs && Object.keys(detail.specs).length > 0) {
+                    const s = (key: string) => {
+                      const v = detail.specs[key];
+                      return v ? String(v).trim() : "";
+                    };
+                    const highlights: { label: string; text: string; color: string; dot: string }[] = [];
+                    const colors = [
+                      { color: "bg-blue-50 border-blue-100",   dot: "bg-blue-500" },
+                      { color: "bg-purple-50 border-purple-100", dot: "bg-purple-500" },
+                      { color: "bg-[#e8f7fc] border-[#b3e5f7]", dot: "bg-[#129cd3]" },
+                      { color: "bg-green-50 border-green-100", dot: "bg-green-500" },
+                      { color: "bg-orange-50 border-orange-100", dot: "bg-orange-400" },
+                      { color: "bg-pink-50 border-pink-100",   dot: "bg-pink-500" },
+                      { color: "bg-yellow-50 border-yellow-100", dot: "bg-yellow-500" },
+                    ];
+                    const ram = s("RAM"), rom = s("ROM");
+                    if (ram || rom) highlights.push({ label: "Memory", text: [ram && `${ram} RAM`, rom && `${rom} ROM`].filter(Boolean).join(" · "), ...colors[0] });
+                    const proc = s("Processor");
+                    if (proc) highlights.push({ label: "Processor", text: proc, ...colors[1] });
+                    const rear = s("Rear Camera");
+                    if (rear) highlights.push({ label: "Camera", text: `${rear} Rear`, ...colors[2] });
+                    const bat = s("Battery");
+                    if (bat) highlights.push({ label: "Battery", text: bat, ...colors[3] });
+                    const displayParts = [s("Display Size"), s("Screen Type")].filter(Boolean);
+                    if (displayParts.length) highlights.push({ label: "Display", text: displayParts.join(" · "), ...colors[4] });
+                    if (highlights.length === 0) {
+                      Object.entries(detail.specs).forEach(([k, v], idx) => {
+                        if (v && typeof v !== "object")
+                          highlights.push({ label: k, text: String(v), ...colors[idx % colors.length] });
+                      });
+                    }
+                    if (highlights.length > 0) {
+                      return (
+                        <ul className="mb-4 space-y-2">
+                          {highlights.map((h, i) => (
+                            <li
+                              key={i}
+                              className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${h.color}`}
+                            >
+                              <span className={`shrink-0 w-2 h-2 rounded-full ${h.dot}`} />
+                              <span style={{ lineHeight: "normal" }}>
+                                <span className="font-bold text-gray-800" style={{ fontSize: "15px" }}>
+                                  {h.label}:
+                                </span>{" "}
+                                <span className="text-gray-600" style={{ fontSize: "14px" }}>
+                                  {h.text}
+                                </span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    }
+                  }
                   if (detail?.description) {
                     return (
-                      <p className="text-xs text-gray-500 mb-3 line-clamp-4">
+                      <p className="text-sm text-gray-500 mb-4 leading-relaxed line-clamp-4">
                         {detail.description}
                       </p>
                     );
                   }
-                  if (detail?.specs && Object.keys(detail.specs).length > 0) {
-                    return (
-                      <ul className="text-xs text-gray-500 mb-3 space-y-0.5">
-                        {Object.entries(detail.specs).slice(0, 4).map(([k, v]) => (
-                          <li key={k} className="flex gap-1 line-clamp-1">
-                            <span className="font-medium text-gray-600 shrink-0">{k}:</span>
-                            <span className="truncate">{String(v)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    );
-                  }
                   return (
-                    <p className="text-xs text-gray-500 mb-3 line-clamp-3">
+                    <p className="text-sm text-gray-400 mb-4 italic">
                       Limited time offer — grab it before the deal ends.
                     </p>
                   );
                 })()}
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-lg font-bold text-[#129cd3]">
-                    {formatPrice(deal.dealPrice)}
-                  </span>
-                  <span className="text-sm text-gray-400 line-through">
-                    {formatPrice(deal.basePrice)}
-                  </span>
+
+                {/* Price block */}
+                <div className="mt-auto rounded-xl bg-gradient-to-r from-[#e8f7fc] to-white border border-[#b3e5f7] px-4 py-3 flex items-center gap-4">
+                  <div>
+                    <div className="text-[11px] font-semibold text-[#129cd3] uppercase tracking-widest mb-0.5">Deal Price</div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-extrabold text-[#129cd3]" style={{ fontSize: "28px", lineHeight: "normal" }}>
+                        {formatPrice(deal.dealPrice)}
+                      </span>
+                      <span className="text-sm text-gray-400 line-through">
+                        {formatPrice(deal.basePrice)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="ml-auto shrink-0 flex flex-col items-center justify-center w-14 h-14 rounded-full bg-[#129cd3] shadow-md">
+                    <span className="text-white font-extrabold" style={{ fontSize: "15px", lineHeight: 1 }}>
+                      -{deal.percentOff}%
+                    </span>
+                    <span className="text-white/80 font-semibold" style={{ fontSize: "9px", lineHeight: 1.2 }}>
+                      OFF
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Thumbnail Strip */}
-          <div className="mt-3 flex gap-2 overflow-x-auto">
-            {liveDeals.map((d, i) => (
+          {/* Thumbnail Carousel */}
+          {liveDeals.length > 0 && (
+            <div className="mt-3 flex items-center gap-2">
+              {/* Prev */}
               <button
-                key={d.id}
-                onClick={() => setDealIdx(i)}
-                className={`relative flex-shrink-0 w-28 bg-white p-2 transition-colors ${
-                  i === safeIdx
-                    ? "border-2 border-[#129cd3]"
-                    : "border border-gray-200 hover:border-[#8dd4ee]"
-                }`}
+                onClick={() => {
+                  const next = Math.max(0, thumbStart - 1);
+                  setThumbStart(next);
+                  setDealIdx(next);
+                }}
+                disabled={thumbStart === 0}
+                className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                aria-label="Previous thumbnails"
               >
-                <div className="relative w-full h-16">
-                  {d.product.primaryImageUrl ? (
-                    <Image
-                      src={d.product.primaryImageUrl}
-                      alt={d.product.name}
-                      fill
-                      sizes="112px"
-                      className="object-contain"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-100" />
-                  )}
-                  <span className="absolute top-0 right-0 bg-[#129cd3] text-white text-[10px] font-bold w-7 h-7 rounded-full flex items-center justify-center">
-                    -{d.percentOff}%
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-700 truncate mt-1 text-center">
-                  {d.product.name}
-                </p>
+                <ChevronLeft size={14} />
               </button>
-            ))}
-          </div>
+
+              {/* Visible thumbnails */}
+              <div className="flex gap-2 flex-1 overflow-hidden">
+                {liveDeals.slice(thumbStart, thumbStart + THUMB_VISIBLE).map((d, rel) => {
+                  const i = thumbStart + rel;
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => setDealIdx(i)}
+                      className={`relative flex-shrink-0 flex-1 bg-white p-2 rounded-lg transition-all duration-200 ${
+                        i === safeIdx
+                          ? "border-2 border-[#129cd3] shadow-md shadow-[#129cd3]/20"
+                          : "border border-gray-200 hover:border-[#129cd3]/50 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="relative w-full h-16">
+                        {d.product.primaryImageUrl ? (
+                          <Image
+                            src={d.product.primaryImageUrl}
+                            alt={d.product.name}
+                            fill
+                            sizes="112px"
+                            className="object-contain"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-100 rounded" />
+                        )}
+                        <span className="absolute -top-1 -right-1 bg-[#129cd3] text-white text-[9px] font-bold w-6 h-6 rounded-full flex items-center justify-center shadow">
+                          -{d.percentOff}%
+                        </span>
+                      </div>
+                      <p className={`text-[11px] truncate mt-1.5 text-center font-medium ${i === safeIdx ? "text-[#129cd3]" : "text-gray-600"}`}>
+                        {d.product.name}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Next */}
+              <button
+                onClick={() => {
+                  const next = Math.min(liveDeals.length - THUMB_VISIBLE, thumbStart + 1);
+                  setThumbStart(next);
+                  setDealIdx(next);
+                }}
+                disabled={thumbStart + THUMB_VISIBLE >= liveDeals.length}
+                className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                aria-label="Next thumbnails"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Best Sellers */}
