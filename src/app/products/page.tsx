@@ -59,79 +59,55 @@ const PHONE_FILTER_GROUPS: PhoneFilterGroup[] = [
   {
     key: "ram",
     label: "RAM",
-    options: ["1 GB and Below", "2 GB", "3 GB", "4 GB", "6 GB", "8 GB and Above"],
+    options: ["4 GB and Below", "6 GB", "8 GB and Above"],
   },
   {
     key: "storage",
     label: "Internal Storage",
     options: [
-      "256 GB & Above",
-      "128 - 255.9 GB",
-      "64 - 127.9 GB",
-      "32 - 63.9 GB",
-      "16 - 31.9 GB",
-      "8 - 15.9 GB",
-      "4 - 7.9 GB",
-      "2 GB - 3.9 GB",
-      "1 GB - 1.9 GB",
-      "Less than 1 GB",
+      "64 GB and Below",
+      "64 GB - 127.9 GB",
+      "128 GB - 255.9 GB",
+      "256 GB and Above",
     ],
   },
   {
     key: "battery",
     label: "Battery Capacity",
     options: [
-      "Less than 1000 mAh",
-      "1000 - 1999 mAh",
-      "2000 - 2999 mAh",
-      "3000 - 3999 mAh",
-      "4000 - 4999 mAh",
-      "5000 - 5999 mAh",
-      "6000 mAh & Above",
+      "Less than 4000 mAh",
+      "4000 - 6000 mAh",
+      "Above 6000 mAh",
     ],
   },
   {
     key: "screenSize",
     label: "Screen Size",
     options: [
-      "Less than 3 inch",
-      "3 - 3.4 inch",
-      "3.5 - 3.9 inch",
-      "4 - 4.4 inch",
-      "4.5 - 4.9 inch",
-      "5 - 5.1 inch",
-      "5.2 - 5.4 inch",
-      "5.5 - 5.6 inch",
-      "5.7 - 5.9 inch",
-      "6 - 6.3 inch",
-      "6.4 inch & Above",
+      "Below 4.4 inch",
+      "4.5 - 5.6 inch",
+      "5.7 - 6.4 inch",
+      "Above 6.4 inch",
     ],
   },
   {
     key: "primaryCamera",
     label: "Rear Camera",
     options: [
-      "Below 5 MP",
-      "5 - 7.9 MP",
-      "8 - 11.9 MP",
-      "12 - 15.9 MP",
-      "16 - 20.9 MP",
-      "21 - 31.9 MP",
-      "32 - 47.9 MP",
+      "Below 20.9 MP",
+      "21 - 47.9 MP",
       "48 - 63.9 MP",
-      "64 MP & Above",
+      "Above 64 MP",
     ],
   },
   {
     key: "secondaryCamera",
     label: "Front Camera",
     options: [
-      "Below 5 MP",
-      "5 - 7.9 MP",
-      "8 - 11.9 MP",
+      "Below 12 MP",
       "12 - 15.9 MP",
       "16 - 20.9 MP",
-      "21 MP & Above",
+      "21 MP and Above",
     ],
   },
 ];
@@ -144,25 +120,16 @@ function parseGb(val: unknown): number | null {
 }
 
 function matchRamGb(gb: number, option: string): boolean {
-  if (option === "1 GB and Below") return gb <= 1;
-  if (option === "2 GB") return gb === 2;
-  if (option === "3 GB") return gb === 3;
-  if (option === "4 GB") return gb === 4;
+  if (option === "4 GB and Below") return gb <= 4;
   if (option === "6 GB") return gb === 6;
   if (option === "8 GB and Above") return gb >= 8;
   return false;
 }
 function matchStorageGb(gb: number, option: string): boolean {
-  if (option === "256 GB & Above") return gb >= 256;
-  if (option === "128 - 255.9 GB") return gb >= 128 && gb < 256;
-  if (option === "64 - 127.9 GB") return gb >= 64 && gb < 128;
-  if (option === "32 - 63.9 GB") return gb >= 32 && gb < 64;
-  if (option === "16 - 31.9 GB") return gb >= 16 && gb < 32;
-  if (option === "8 - 15.9 GB") return gb >= 8 && gb < 16;
-  if (option === "4 - 7.9 GB") return gb >= 4 && gb < 8;
-  if (option === "2 GB - 3.9 GB") return gb >= 2 && gb < 4;
-  if (option === "1 GB - 1.9 GB") return gb >= 1 && gb < 2;
-  if (option === "Less than 1 GB") return gb < 1;
+  if (option === "64 GB and Below") return gb <= 64;
+  if (option === "64 GB - 127.9 GB") return gb > 64 && gb < 128;
+  if (option === "128 GB - 255.9 GB") return gb >= 128 && gb < 256;
+  if (option === "256 GB and Above") return gb >= 256;
   return false;
 }
 
@@ -199,42 +166,31 @@ function parseSpec(val: unknown): number | null {
 }
 
 function matchBattery(mah: number, option: string): boolean {
-  if (option === "Less than 1000 mAh") return mah < 1000;
-  if (option === "1000 - 1999 mAh") return mah >= 1000 && mah < 2000;
-  if (option === "2000 - 2999 mAh") return mah >= 2000 && mah < 3000;
-  if (option === "3000 - 3999 mAh") return mah >= 3000 && mah < 4000;
-  if (option === "4000 - 4999 mAh") return mah >= 4000 && mah < 5000;
-  if (option === "5000 - 5999 mAh") return mah >= 5000 && mah < 6000;
-  if (option === "6000 mAh & Above") return mah >= 6000;
+  if (option === "Less than 4000 mAh") return mah < 4000;
+  if (option === "4000 - 6000 mAh") return mah >= 4000 && mah <= 6000;
+  if (option === "Above 6000 mAh") return mah > 6000;
   return false;
 }
 
 function matchScreenSize(inch: number, option: string): boolean {
-  if (option === "Less than 3 inch") return inch < 3;
-  if (option === "3 - 3.4 inch") return inch >= 3 && inch <= 3.4;
-  if (option === "3.5 - 3.9 inch") return inch >= 3.5 && inch <= 3.9;
-  if (option === "4 - 4.4 inch") return inch >= 4 && inch <= 4.4;
-  if (option === "4.5 - 4.9 inch") return inch >= 4.5 && inch <= 4.9;
-  if (option === "5 - 5.1 inch") return inch >= 5 && inch <= 5.1;
-  if (option === "5.2 - 5.4 inch") return inch >= 5.2 && inch <= 5.4;
-  if (option === "5.5 - 5.6 inch") return inch >= 5.5 && inch <= 5.6;
-  if (option === "5.7 - 5.9 inch") return inch >= 5.7 && inch <= 5.9;
-  if (option === "6 - 6.3 inch") return inch >= 6 && inch <= 6.3;
-  if (option === "6.4 inch & Above") return inch >= 6.4;
+  if (option === "Below 4.4 inch") return inch < 4.4;
+  if (option === "4.5 - 5.6 inch") return inch >= 4.5 && inch <= 5.6;
+  if (option === "5.7 - 6.4 inch") return inch >= 5.7 && inch <= 6.4;
+  if (option === "Above 6.4 inch") return inch > 6.4;
   return false;
 }
 
 function matchCamera(mp: number, option: string): boolean {
-  if (option === "Below 5 MP") return mp < 5;
-  if (option === "5 - 7.9 MP") return mp >= 5 && mp < 8;
-  if (option === "8 - 11.9 MP") return mp >= 8 && mp < 12;
+  // Rear camera
+  if (option === "Below 20.9 MP") return mp < 21;
+  if (option === "21 - 47.9 MP") return mp >= 21 && mp < 48;
+  if (option === "48 - 63.9 MP") return mp >= 48 && mp < 64;
+  if (option === "Above 64 MP") return mp >= 64;
+  // Front camera
+  if (option === "Below 12 MP") return mp < 12;
   if (option === "12 - 15.9 MP") return mp >= 12 && mp < 16;
   if (option === "16 - 20.9 MP") return mp >= 16 && mp < 21;
-  if (option === "21 - 31.9 MP") return mp >= 21 && mp < 32;
-  if (option === "32 - 47.9 MP") return mp >= 32 && mp < 48;
-  if (option === "48 - 63.9 MP") return mp >= 48 && mp < 64;
-  if (option === "64 MP & Above") return mp >= 64;
-  if (option === "21 MP & Above") return mp >= 21; // front camera bucket
+  if (option === "21 MP and Above") return mp >= 21;
   return false;
 }
 
@@ -278,28 +234,50 @@ function applyPhoneFilters(items: ListCard[], phoneFilters: Record<string, strin
 
     // ── Battery ───────────────────────────────────────────────────────────────
     if (batOpts.length > 0) {
-      const mah = parseSpec(cached?.specs["Battery"]);
+      const mah =
+        parseSpec(cached?.specs["Battery"]) ??
+        parseSpec(cached?.specs["Battery Capacity"]) ??
+        parseSpec(cached?.specs["battery"]);
       if (mah === null) return false;
       if (!batOpts.some((opt) => matchBattery(mah, opt))) return false;
     }
 
     // ── Screen Size ───────────────────────────────────────────────────────────
     if (screenOpts.length > 0) {
-      const inch = parseSpec(cached?.specs["Display Size"]);
+      const raw = cached?.specs["Display Size"];
+      // Extract inch value: prefer explicit "X.X inch" pattern, else fall back to first number
+      let inch: number | null = null;
+      if (raw) {
+        const inchMatch = String(raw).match(/(\d+(?:\.\d+)?)\s*inch/i);
+        if (inchMatch) {
+          inch = Number(inchMatch[1]);
+        } else {
+          // Value stored in cm — convert (e.g. "16.03 cm" → 6.31 inch)
+          const cmMatch = String(raw).match(/(\d+(?:\.\d+)?)\s*cm/i);
+          if (cmMatch) inch = Number(cmMatch[1]) / 2.54;
+          else inch = parseSpec(raw);
+        }
+      }
       if (inch === null) return false;
-      if (!screenOpts.some((opt) => matchScreenSize(inch, opt))) return false;
+      if (!screenOpts.some((opt) => matchScreenSize(inch!, opt))) return false;
     }
 
     // ── Rear Camera ───────────────────────────────────────────────────────────
     if (rearOpts.length > 0) {
-      const mp = parseSpec(cached?.specs["Rear Camera"]);
+      const mp =
+        parseSpec(cached?.specs["Rear Camera"]) ??
+        parseSpec(cached?.specs["Primary Camera"]) ??
+        parseSpec(cached?.specs["Main Camera"]);
       if (mp === null) return false;
       if (!rearOpts.some((opt) => matchCamera(mp, opt))) return false;
     }
 
     // ── Front Camera ──────────────────────────────────────────────────────────
     if (frontOpts.length > 0) {
-      const mp = parseSpec(cached?.specs["Front Camera"]);
+      const mp =
+        parseSpec(cached?.specs["Front Camera"]) ??
+        parseSpec(cached?.specs["Selfie Camera"]) ??
+        parseSpec(cached?.specs["Secondary Camera"]);
       if (mp === null) return false;
       if (!frontOpts.some((opt) => matchCamera(mp, opt))) return false;
     }

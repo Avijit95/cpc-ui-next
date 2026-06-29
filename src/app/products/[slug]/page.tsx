@@ -944,58 +944,85 @@ useEffect(() => {
                 )}
               </div>
 
-              {/* Variant selectors (RAM / ROM / Color) — above Quantity */}
+              {/* Variant selectors + Quantity — all on one line */}
               {hasVariants && (
-                <div className="flex flex-wrap gap-x-6 gap-y-3 mb-5">
-                  {variantGroups.map((group) => (
-                    <div key={group.key} className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-700 flex-shrink-0">
-                        {group.label}:
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        {group.values.map((value) => {
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3 mb-5">
+                  {variantGroups.map((group) => {
+                    const isColor = group.key === "color";
+                    if (isColor) {
+                      return (
+                        <div key={group.key} className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-700 flex-shrink-0">Color:</span>
+                          <div className="flex flex-wrap gap-2">
+                            {group.values.map((value) => {
+                              const active = selectedAttrs[group.key] === value;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  onClick={() => selectVariantValue(group.key, value)}
+                                  className={`text-sm font-semibold px-4 py-2 rounded-lg border transition-colors ${
+                                    active
+                                      ? "bg-[#129cd3] text-white border-[#129cd3]"
+                                      : "bg-white text-gray-700 border-gray-300 hover:border-[#129cd3] hover:text-[#129cd3]"
+                                  }`}
+                                >
+                                  {value}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+                    // RAM / ROM — plain text with " / " separator, selected is bold
+                    return (
+                      <div key={group.key} className="flex items-center gap-1">
+                        {group.values.map((value, idx) => {
                           const active = selectedAttrs[group.key] === value;
                           return (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => selectVariantValue(group.key, value)}
-                              className={`text-sm font-semibold px-4 py-2 rounded-lg border transition-colors ${
-                                active
-                                  ? "bg-[#129cd3] text-white border-[#129cd3]"
-                                  : "bg-white text-gray-700 border-gray-300 hover:border-[#129cd3] hover:text-[#129cd3]"
-                              }`}
-                            >
-                              {value}
-                            </button>
+                            <span key={value} className="flex items-center gap-1">
+                              {idx > 0 && <span className="text-gray-300 select-none">/</span>}
+                              <button
+                                type="button"
+                                onClick={() => selectVariantValue(group.key, value)}
+                                className={`text-sm transition-colors hover:text-[#129cd3] ${
+                                  active ? "font-bold text-gray-900" : "font-normal text-gray-500"
+                                }`}
+                              >
+                                {value}
+                              </button>
+                            </span>
                           );
                         })}
                       </div>
+                    );
+                  })}
+
+                  {/* Quantity inline */}
+                  {inStock && (
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-medium text-gray-700">Quantity:</span>
+                      <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => setQty((q) => Math.max(1, q - 1))}
+                          className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-lg font-medium transition-colors"
+                        >
+                          −
+                        </button>
+                        <span className="w-10 text-center text-sm font-semibold text-gray-800">{qty}</span>
+                        <button
+                          onClick={() => setQty((q) => Math.min(q + 1, liveStock))}
+                          disabled={qty >= liveStock}
+                          className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
-
-              {/* Quantity — hidden when out of stock */}
-              <div className={`flex items-center gap-4 mb-5 ${!inStock ? "hidden" : ""}`}>
-                <span className="text-sm font-medium text-gray-700">Quantity:</span>
-                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-lg font-medium transition-colors"
-                  >
-                    −
-                  </button>
-                  <span className="w-10 text-center text-sm font-semibold text-gray-800">{qty}</span>
-                  <button
-                    onClick={() => setQty((q) => Math.min(q + 1, liveStock))}
-                    disabled={qty >= liveStock}
-                    className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
 
               {/* Action Buttons */}
               {!inStock ? (
