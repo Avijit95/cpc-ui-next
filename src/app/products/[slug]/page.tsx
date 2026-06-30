@@ -707,10 +707,11 @@ useEffect(() => {
             <ArrowLeft size={17} />
           </button>
 
-          {/* Product Section */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 lg:p-8 flex flex-col lg:flex-row gap-8 mb-8">
-            {/* Left: Image */}
-            <div className="lg:w-2/5 flex-shrink-0">
+          {/* Product Section — sticky-left / scrollable-right */}
+          <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
+            {/* Left: Image — sticky */}
+            <div className="lg:w-2/5 flex-shrink-0 lg:sticky lg:top-20 lg:self-start">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="relative bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center aspect-square border border-gray-100">
                 {activeImage?.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -801,10 +802,12 @@ useEffect(() => {
                   </button>
                 </div>
               )}
-            </div>
+              </div>{/* end left image card */}
+            </div>{/* end left sticky column */}
 
-            {/* Right: Details */}
-            <div className="flex-1">
+            {/* Right: Details — scrollable, contains product info + tabs */}
+            <div className="flex-1 min-w-0 space-y-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-6 lg:p-8">
               {/* Category badge */}
               {immediateCategory && (
                 <span className="inline-block bg-[#e8f7fc] text-[#129cd3] text-xs font-semibold px-3 py-1 rounded-full mb-3">
@@ -1270,10 +1273,9 @@ useEffect(() => {
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
+              </div>{/* end product info card */}
 
-          {/* Tabs Section */}
+          {/* Tabs Section — inside right column */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex border-b border-gray-200">
               {tabs.map((tab) => (
@@ -1580,6 +1582,8 @@ useEffect(() => {
                 </div>
               )}
             </div>
+            </div>
+            </div>
           </div>
         </div>
       </main>
@@ -1606,27 +1610,62 @@ function formatSpecValue(value: unknown): string {
   return String(value);
 }
 
+// Flipkart-style spec groups — matched by substring on the normalised (lowercase) key.
+const SPEC_GROUP_DEFS: { label: string; patterns: string[] }[] = [
+  { label: "General", patterns: ["brand", "model", "sim", "warranty", "colour", "color", "form", "launch", "series"] },
+  { label: "Display Features", patterns: ["display", "screen", "resolution", "refresh", "pixel", "brightness", "hdr", "amoled", "oled", "lcd", "nits", "panel"] },
+  { label: "OS & Processor Features", patterns: ["os", "operating", "processor", "chipset", "cpu", "core", "clock", "snapdragon", "mediatek", "exynos", "helio", "dimensity", "bionic", "a1", "a2"] },
+  { label: "Camera Features", patterns: ["camera", "photo", "video", "flash", "aperture", "ois", "zoom", "autofocus", "lens", "megapixel", "mp"] },
+  { label: "Battery & Power Features", patterns: ["battery", "charging", "power", "mah", "watt", "fast charge", "wireless"] },
+  { label: "Memory & Storage", patterns: ["ram", "memory", "storage", "rom", "expandable", "card"] },
+  { label: "Connectivity", patterns: ["bluetooth", "wifi", "wi-fi", "nfc", "usb", "gps", "network", "4g", "5g", "lte", "port", "infrared", "ir"] },
+  { label: "Audio", patterns: ["audio", "speaker", "sound", "microphone", "headphone", "jack", "dolby", "stereo"] },
+  { label: "Sensors", patterns: ["sensor", "fingerprint", "face", "accelero", "gyro", "proximity", "compass", "barometer"] },
+  { label: "Dimensions", patterns: ["height", "width", "thickness", "depth", "weight", "dimension", "size", "build", "material"] },
+];
+
 function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
-  const entries = Object.entries(specs).filter(
-    ([key]) => !HIDDEN_SPEC_KEYS.has(key),
-  );
+  const entries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
   if (entries.length === 0) {
     return <p className="text-sm text-gray-500">No specifications listed.</p>;
   }
+
+  // Assign each entry to its first matching group, or "Other Details"
+  const buckets = new Map<string, [string, unknown][]>(
+    SPEC_GROUP_DEFS.map((g) => [g.label, []])
+  );
+  const other: [string, unknown][] = [];
+
+  for (const entry of entries) {
+    const norm = entry[0].toLowerCase();
+    const matched = SPEC_GROUP_DEFS.find((g) => g.patterns.some((p) => norm.includes(p)));
+    if (matched) {
+      buckets.get(matched.label)!.push(entry);
+    } else {
+      other.push(entry);
+    }
+  }
+
+  const renderedGroups = [
+    ...SPEC_GROUP_DEFS.map((g) => ({ label: g.label, items: buckets.get(g.label)! })).filter((g) => g.items.length > 0),
+    ...(other.length > 0 ? [{ label: "Other Details", items: other }] : []),
+  ];
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <tbody>
-          {entries.map(([key, value], i) => (
-            <tr key={key} className={i % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-              <td className="py-3 px-4 font-semibold text-gray-700 w-48">
-                {humanizeSpecKey(key)}
-              </td>
-              <td className="py-3 px-4 text-gray-600">{formatSpecValue(value)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-8">
+      {renderedGroups.map((group) => (
+        <div key={group.label}>
+          <h3 className="text-sm font-bold text-gray-900 mb-3">{group.label}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2">
+            {group.items.map(([key, value]) => (
+              <div key={key} className="py-3 pr-6 border-b border-gray-100">
+                <p className="text-xs text-gray-400 mb-0.5">{humanizeSpecKey(key)}</p>
+                <p className="text-sm font-medium text-gray-800">{formatSpecValue(value)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
