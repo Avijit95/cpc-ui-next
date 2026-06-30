@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { adminApi, isApiError } from "@/lib/api";
 import type {
+  AdminCategoryListItem,
   AdminOrderListItem,
   DashboardSummary,
   OrderStatus,
 } from "@/lib/api";
 import {
   ArrowUpRight,
+  ChevronDown,
+  Plus,
   ShoppingBag,
   Users,
   IndianRupee,
@@ -60,6 +63,23 @@ export default function AdminDashboard() {
   const [recentOrders, setRecentOrders] = useState<AdminOrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<AdminCategoryListItem[]>([]);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    adminApi.listCategories().then(setCategories).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
+        setAddMenuOpen(false);
+      }
+    };
+    if (addMenuOpen) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [addMenuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,12 +113,33 @@ export default function AdminDashboard() {
         title="Dashboard"
         subtitle="What's happening with your store right now"
         actions={
-          <Link
-            href="/admin/products/add"
-            className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-          >
-            <ArrowUpRight size={14} /> New product
-          </Link>
+          <div ref={addMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setAddMenuOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 bg-[#129cd3] hover:bg-[#0e87b5] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={14} /> Add product <ChevronDown size={13} className={`transition-transform ${addMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+            {addMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 overflow-hidden">
+                {categories.length === 0 ? (
+                  <span className="block px-4 py-2 text-xs text-gray-400">Loading…</span>
+                ) : (
+                  categories.map((cat) => (
+                    <Link
+                      key={cat.id}
+                      href={`/admin/products/add?categoryId=${cat.id}`}
+                      onClick={() => setAddMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-[#e8f7fc] hover:text-[#129cd3] transition-colors"
+                    >
+                      {cat.name}
+                    </Link>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         }
       />
 

@@ -13,6 +13,7 @@ import {
   paymentsApi,
   isApiError,
 } from "@/lib/api";
+import { useStock } from "@/lib/stock/StockProvider";
 import type {
   Address,
   CartView,
@@ -121,6 +122,7 @@ function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { status } = useAuth();
+  const { adjustStock } = useStock();
 
   // Buy Now: `?items=<cartItemId,...>` scopes checkout to those cart lines.
   const cartItemIds = useMemo(() => {
@@ -258,6 +260,23 @@ function CheckoutContent() {
         idempotencyKey,
         ...(cartItemIds ? { cartItemIds } : {}),
       });
+      // Save ordered items so the result page can reduce global stock after payment.
+      if (cart) {
+        const lines = cartItemIds
+          ? cart.items.filter((l) => cartItemIds.includes(l.cartItemId))
+          : cart.items;
+        const orderedItems = lines.map((l) => ({
+          variantId: l.variantId,
+          slug: l.slug,
+          qty: l.qty,
+        }));
+        try {
+          sessionStorage.setItem(
+            `cpc_order_${resp.orderId}`,
+            JSON.stringify(orderedItems),
+          );
+        } catch { /* sessionStorage unavailable — skip */ }
+      }
       // Order created (PENDING_PAYMENT) → start payment and hand off to the
       // Pine Labs hosted page. If initiation fails, send the user to the order
       // detail page where they can retry payment.
@@ -286,7 +305,7 @@ function CheckoutContent() {
     } finally {
       setPlacing(false);
     }
-  }, [selectedAddressId, idempotencyKey, cartItemIds, router]);
+  }, [selectedAddressId, idempotencyKey, cartItemIds, router, cart]);
 
   // What checkout actually displays/orders: the whole cart, or just the
   // Buy-Now lines (with totals + warnings recomputed from those lines).

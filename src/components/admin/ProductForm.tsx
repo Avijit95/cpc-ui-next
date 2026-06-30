@@ -299,6 +299,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     initSpecRows(initial?.specs),
   );
   const variantsRef = useRef<ProductVariantsHandle | null>(null);
+  const [isIPhone, setIsIPhone] = useState(false);
   const couponSectionRef = useRef<HTMLDivElement>(null);
 
   // Cleanup object URLs on unmount.
@@ -974,9 +975,13 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             </div>
             {(() => {
               const catSlug = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
-              const isPhone = catSlug.includes("phone");
+              const catName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
+              const isPhone = catSlug.includes("phone") || catName.includes("phone");
+              const isTv = catSlug.includes("tv") || catName.includes("tv") || catName.includes("television");
               return isPhone ? (
-                <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} isIPhone={isIPhone} onIsIPhoneChange={setIsIPhone} />
+              ) : isTv ? (
+                <TvSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : (
                 <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               );
@@ -991,6 +996,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               initialVariants={isEdit ? mode.initial.variants : []}
               disabled={busy}
               categorySlug={categories.find((c) => c.id === form.categoryId)?.slug}
+              hideRam={isIPhone}
             />
           )}
 
@@ -1238,11 +1244,16 @@ function PhoneSpecsEditor({
   rows,
   onChange,
   disabled,
+  isIPhone,
+  onIsIPhoneChange,
 }: {
   rows: SpecRow[];
   onChange: (rows: SpecRow[]) => void;
   disabled: boolean;
+  isIPhone: boolean;
+  onIsIPhoneChange: (v: boolean) => void;
 }) {
+
   const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
 
   const set = (key: string, value: string) => {
@@ -1263,7 +1274,23 @@ function PhoneSpecsEditor({
   return (
     <div className="space-y-4">
       {PHONE_SPEC_GROUPS.map((group) => (
-        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
+        <div key={group.label}>
+          {group.label === "Memory" && (
+            <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isIPhone}
+                onChange={(e) => onIsIPhoneChange(e.target.checked)}
+                className="w-4 h-4 accent-[#129cd3]"
+                disabled={disabled}
+              />
+              <span className="text-sm text-gray-600 font-medium">
+                Is this an iPhone?{" "}
+                <span className="text-xs text-gray-400">(RAM field will be hidden)</span>
+              </span>
+            </label>
+          )}
+          <div className="border border-gray-100 rounded-xl overflow-hidden">
           {/* Group header */}
           <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
             <span className="text-base leading-none">{group.icon}</span>
@@ -1271,8 +1298,130 @@ function PhoneSpecsEditor({
           </div>
           {/* Fields */}
           <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {group.fields.map((field) => (
+            {group.fields.filter((field) => !(isIPhone && group.label === "Memory" && field.key === "RAM")).map((field) => (
               <div key={field.key} className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  {field.key}
+                </label>
+                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                  <input
+                    value={get(field.key)}
+                    onChange={(e) => set(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    disabled={disabled}
+                    className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                  {field.unit && (
+                    <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                      {field.unit}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          </div>
+        </div>
+      ))}
+
+      {/* Additional free-form specs */}
+      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+      </div>
+    </div>
+  );
+}
+
+// ── TV-specific structured spec editor ───────────────────────────────────────
+
+const TV_SPEC_KEYS = new Set([
+  "Screen Size", "Color", "Model Name", "Display Technology", "Resolution",
+  "Operating System", "Product Dimensions", "Aspect Ratio", "Refresh Rate",
+  "Connectivity Technology", "Special Feature", "Included Components",
+]);
+
+const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
+  {
+    label: "Display",
+    icon: "📺",
+    fields: [
+      { key: "Screen Size", placeholder: "e.g. 43 inches / 108 cm", unit: "inch" },
+      { key: "Display Technology", placeholder: "e.g. LED, QLED, OLED" },
+      { key: "Resolution", placeholder: "e.g. 3840 × 2160 (4K Ultra HD)" },
+      { key: "Aspect Ratio", placeholder: "e.g. 16:9" },
+      { key: "Refresh Rate", placeholder: "e.g. 60 Hz", unit: "Hz" },
+    ],
+  },
+  {
+    label: "General",
+    icon: "📋",
+    fields: [
+      { key: "Model Name", placeholder: "e.g. Crystal 4K Neo" },
+      { key: "Color", placeholder: "e.g. Black, Titan Grey" },
+      { key: "Operating System", placeholder: "e.g. Tizen OS 8.0, Android TV 11" },
+    ],
+  },
+  {
+    label: "Connectivity",
+    icon: "🔌",
+    fields: [
+      { key: "Connectivity Technology", placeholder: "e.g. Wi-Fi, Bluetooth 5.0, HDMI, USB" },
+    ],
+  },
+  {
+    label: "Dimensions",
+    icon: "📐",
+    fields: [
+      { key: "Product Dimensions", placeholder: "e.g. 97.2 × 56.2 × 7.4 cm (without stand)", unit: "cm" },
+    ],
+  },
+  {
+    label: "Features & Contents",
+    icon: "⭐",
+    fields: [
+      { key: "Special Feature", placeholder: "e.g. Dolby Atmos, HDR10+, Voice Remote" },
+      { key: "Included Components", placeholder: "e.g. TV, Remote Control, Power Cable, Stand" },
+    ],
+  },
+];
+
+function TvSpecsEditor({
+  rows,
+  onChange,
+  disabled,
+}: {
+  rows: SpecRow[];
+  onChange: (rows: SpecRow[]) => void;
+  disabled: boolean;
+}) {
+  const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
+
+  const set = (key: string, value: string) => {
+    const existing = rows.find((r) => r.key === key);
+    if (existing) {
+      onChange(rows.map((r) => (r.id === existing.id ? { ...r, value } : r)));
+    } else {
+      onChange([...rows, { id: uid(), key, value }]);
+    }
+  };
+
+  const extraRows = rows.filter((r) => !TV_SPEC_KEYS.has(r.key));
+  const setExtraRows = (next: SpecRow[]) => {
+    onChange([...rows.filter((r) => TV_SPEC_KEYS.has(r.key)), ...next]);
+  };
+
+  return (
+    <div className="space-y-4">
+      {TV_SPEC_GROUPS.map((group) => (
+        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+            <span className="text-base leading-none">{group.icon}</span>
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
+          </div>
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {group.fields.map((field) => (
+              <div key={field.key} className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}>
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
                   {field.key}
                 </label>

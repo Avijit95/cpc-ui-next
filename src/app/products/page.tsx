@@ -112,6 +112,40 @@ const PHONE_FILTER_GROUPS: PhoneFilterGroup[] = [
   },
 ];
 
+// ── TV-specific filter groups ─────────────────────────────────────────────────
+type TvFilterGroup = { key: string; label: string; options: string[] };
+
+const TV_FILTER_GROUPS: TvFilterGroup[] = [
+  {
+    key: "screenSize",
+    label: "Screen Size",
+    options: [
+      "Up to 25.9 in",
+      "26.0 – 34.9 in",
+      "35.0 – 43.9 in",
+      "44.0 – 52.9 in",
+      "53.0 – 61.9 in",
+      "62.0 – 70.9 in",
+      "71.0 in & above",
+    ],
+  },
+  {
+    key: "brand",
+    label: "Brand",
+    options: ["Samsung", "Visio World", "TCL", "LG", "Acer"],
+  },
+  {
+    key: "resolution",
+    label: "Display Resolution",
+    options: ["8K", "4K", "1080p", "720p"],
+  },
+  {
+    key: "connectivity",
+    label: "Connectivity",
+    options: ["HDMI", "Wi-Fi", "USB", "AV", "Bluetooth", "Ethernet", "RF"],
+  },
+];
+
 // Parse a "12GB" or "12 GB" attribute string into a number.
 function parseGb(val: unknown): number | null {
   if (!val) return null;
@@ -286,6 +320,103 @@ function applyPhoneFilters(items: ListCard[], phoneFilters: Record<string, strin
   });
 }
 
+function matchTvScreenSize(inch: number, option: string): boolean {
+  if (option === "Up to 25.9 in") return inch <= 25.9;
+  if (option === "26.0 – 34.9 in") return inch >= 26.0 && inch <= 34.9;
+  if (option === "35.0 – 43.9 in") return inch >= 35.0 && inch <= 43.9;
+  if (option === "44.0 – 52.9 in") return inch >= 44.0 && inch <= 52.9;
+  if (option === "53.0 – 61.9 in") return inch >= 53.0 && inch <= 61.9;
+  if (option === "62.0 – 70.9 in") return inch >= 62.0 && inch <= 70.9;
+  if (option === "71.0 in & above") return inch >= 71.0;
+  return false;
+}
+
+function matchTvResolution(val: string, option: string): boolean {
+  const v = val.toLowerCase();
+  if (option === "8K") return v.includes("8k") || v.includes("7680") || v.includes("8000");
+  if (option === "4K") return v.includes("4k") || v.includes("uhd") || v.includes("3840") || v.includes("2160");
+  if (option === "1080p") return v.includes("1080") || v.includes("full hd") || v.includes("fhd");
+  if (option === "720p") return v.includes("720") || v.includes("hd ready");
+  return false;
+}
+
+function matchTvConnectivity(val: string, option: string): boolean {
+  const v = val.toLowerCase();
+  if (option === "HDMI") return v.includes("hdmi");
+  if (option === "Wi-Fi") return v.includes("wi-fi") || v.includes("wifi") || v.includes("wireless");
+  if (option === "USB") return v.includes("usb");
+  if (option === "AV") return v.includes(" av") || v.startsWith("av") || v.includes("composite");
+  if (option === "Bluetooth") return v.includes("bluetooth");
+  if (option === "Ethernet") return v.includes("ethernet") || v.includes("lan");
+  if (option === "RF") return v.includes(" rf") || v.startsWith("rf") || v.includes("coaxial") || v.includes("antenna");
+  return false;
+}
+
+function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>): ListCard[] {
+  const sizeOpts  = tvFilters["screenSize"]   ?? [];
+  const brandOpts = tvFilters["brand"]        ?? [];
+  const resOpts   = tvFilters["resolution"]   ?? [];
+  const connOpts  = tvFilters["connectivity"] ?? [];
+
+  const hasAny = [sizeOpts, brandOpts, resOpts, connOpts].some((a) => a.length > 0);
+  if (!hasAny) return items;
+
+  return items.filter((item) => {
+    const cached = detailCache.get(item.slug);
+
+    // ── Brand ─────────────────────────────────────────────────────────────────
+    if (brandOpts.length > 0) {
+      if (!brandOpts.some((b) => item.brand?.toLowerCase() === b.toLowerCase())) return false;
+    }
+
+    // ── Screen Size ───────────────────────────────────────────────────────────
+    if (sizeOpts.length > 0) {
+      const raw =
+        cached?.specs["Screen Size"] ??
+        cached?.specs["screen size"] ??
+        cached?.specs["Display Size"];
+      let inch: number | null = null;
+      if (raw) {
+        const inchMatch = String(raw).match(/(\d+(?:\.\d+)?)\s*(?:inch|"|′|')/i);
+        if (inchMatch) inch = Number(inchMatch[1]);
+        else inch = parseSpec(raw);
+      }
+      // Also try variant size attribute
+      if (inch === null && cached?.variants?.length) {
+        for (const v of cached.variants) {
+          const s = parseSpec(v.attributes["size"]);
+          if (s !== null) { inch = s; break; }
+        }
+      }
+      if (inch === null) return false;
+      if (!sizeOpts.some((opt) => matchTvScreenSize(inch!, opt))) return false;
+    }
+
+    // ── Resolution ────────────────────────────────────────────────────────────
+    if (resOpts.length > 0) {
+      const raw =
+        cached?.specs["Resolution"] ??
+        cached?.specs["Display Resolution"] ??
+        cached?.specs["resolution"];
+      if (!raw) return false;
+      if (!resOpts.some((opt) => matchTvResolution(String(raw), opt))) return false;
+    }
+
+    // ── Connectivity ─────────────────────────────────────────────────────────
+    if (connOpts.length > 0) {
+      const raw =
+        cached?.specs["Connectivity Technology"] ??
+        cached?.specs["Connectivity"] ??
+        cached?.specs["connectivity"];
+      if (!raw) return false;
+      const connStr = String(raw);
+      if (!connOpts.some((opt) => matchTvConnectivity(connStr, opt))) return false;
+    }
+
+    return true;
+  });
+}
+
 // Generic collapsible wrapper used by Price Range, Brand, Rating
 function CollapsibleSection({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
@@ -440,6 +571,8 @@ function ProductsPageInner() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Phone-specific filters (shown only when phone category is selected)
   const [phoneFilters, setPhoneFilters] = useState<Record<string, string[]>>({});
+  // TV-specific filters (shown only when TV category is selected)
+  const [tvFilters, setTvFilters] = useState<Record<string, string[]>>({});
 const [headerHeight, setHeaderHeight] = useState(0);
 
 useEffect(() => {
@@ -490,8 +623,9 @@ useEffect(() => {
     else params.delete("category");
     const qs = params.toString();
     router.replace(qs ? `/products?${qs}` : "/products");
-    // Reset phone-specific filters when changing category
+    // Reset category-specific filters when changing category
     setPhoneFilters({});
+    setTvFilters({});
   };
 
   useEffect(() => {
@@ -547,11 +681,16 @@ useEffect(() => {
 
   const isPhoneCategory = selectedCategory?.toLowerCase() === "phone";
   const hasPhoneFilters = Object.values(phoneFilters).some((v) => v.length > 0);
+  const isTvCategory =
+    selectedCategory?.toLowerCase().includes("tv") ||
+    selectedCategory?.toLowerCase().includes("television") ||
+    false;
+  const hasTvFilters = Object.values(tvFilters).some((v) => v.length > 0);
+  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || (isTvCategory && hasTvFilters);
 
-  // When phone filters are active, pre-fetch detail for items not yet cached so
-  // applyPhoneFilters can use real variant attributes instead of name parsing.
+  // When spec filters are active, pre-fetch detail for items not yet cached.
   useEffect(() => {
-    if (!isPhoneCategory || !hasPhoneFilters || priceFilteredItems.length === 0) return;
+    if (!needsDetailFetch || priceFilteredItems.length === 0) return;
     const uncached = priceFilteredItems.filter((item) => !detailCache.has(item.slug));
     if (uncached.length === 0) return;
     let cancelled = false;
@@ -565,27 +704,34 @@ useEffect(() => {
       if (!cancelled) setCacheTick((t) => t + 1);
     });
     return () => { cancelled = true; };
-  }, [isPhoneCategory, hasPhoneFilters, priceFilteredItems]);
+  }, [needsDetailFetch, priceFilteredItems]);
 
   // cacheTick read to make React re-render after pre-fetch.
   void cacheTick;
   const sortValue = sortOptions.find((o) => o.label === sortLabel)?.value;
-  const phoneFiltered: ListCard[] = isPhoneCategory ? applyPhoneFilters(priceFilteredItems, phoneFilters) : priceFilteredItems;
+  const specFiltered: ListCard[] = isPhoneCategory
+    ? applyPhoneFilters(priceFilteredItems, phoneFilters)
+    : isTvCategory
+    ? applyTvFilters(priceFilteredItems, tvFilters)
+    : priceFilteredItems;
   // Re-sort client-side by effective price (lowestVariantPrice ?? finalPrice) so products
   // with basePrice=0 (variant-only pricing) appear in the correct position.
   const items: ListCard[] =
     sortValue === "price-asc" || sortValue === "price-desc"
-      ? [...phoneFiltered].sort((a, b) => {
+      ? [...specFiltered].sort((a, b) => {
           const pa = a.lowestVariantPrice ?? a.finalPrice;
           const pb = b.lowestVariantPrice ?? b.finalPrice;
           return sortValue === "price-asc" ? pa - pb : pb - pa;
         })
-      : phoneFiltered;
+      : specFiltered;
   const total = data?.total ?? 0;
   const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
 
   const setPhoneFilter = (key: string, values: string[]) => {
     setPhoneFilters((prev) => ({ ...prev, [key]: values }));
+  };
+  const setTvFilter = (key: string, values: string[]) => {
+    setTvFilters((prev) => ({ ...prev, [key]: values }));
   };
 
   const filterSidebar = (
@@ -768,13 +914,25 @@ useEffect(() => {
         />
       ))}
 
+      {/* TV-specific filters — shown only for TV category */}
+      {isTvCategory && TV_FILTER_GROUPS.map((group) => (
+        <FilterSection
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          selected={tvFilters[group.key] ?? []}
+          onChange={(vals) => setTvFilter(group.key, vals)}
+        />
+      ))}
+
       {/* Clear Filters */}
       {(selectedCategory !== null ||
         selectedBrand !== null ||
         minRating !== null ||
         minPrice !== PRICE_FLOOR ||
         maxPrice !== PRICE_CEIL ||
-        hasPhoneFilters) && (
+        hasPhoneFilters ||
+        hasTvFilters) && (
         <button
           onClick={() => {
             selectCategory(null);
@@ -783,6 +941,7 @@ useEffect(() => {
             setMinPrice(PRICE_FLOOR);
             setMaxPrice(PRICE_CEIL);
             setPhoneFilters({});
+            setTvFilters({});
           }}
           className="w-full py-2 border border-[#129cd3] text-[#129cd3] text-sm rounded hover:bg-[#e8f7fc] transition-colors"
         >

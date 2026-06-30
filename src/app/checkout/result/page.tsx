@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { paymentsApi } from "@/lib/api";
+import { useStock } from "@/lib/stock/StockProvider";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 
 // How many times to poll status before giving up to a "still processing" state.
@@ -32,6 +33,7 @@ function PaymentResultInner() {
   const [view, setView] = useState<View>("verifying");
   const [retrying, setRetrying] = useState(false);
   const pollsRef = useRef(0);
+  const { adjustStock } = useStock();
 
   // Auth gate — the status endpoint requires the buyer's session.
   useEffect(() => {
@@ -55,6 +57,20 @@ function PaymentResultInner() {
         if (cancelled) return;
         if (status === "SUCCESS") {
           setView("success");
+          // Reduce client-side stock store for each ordered item so product
+          // pages reflect the purchase across the session.
+          try {
+            const raw = sessionStorage.getItem(`cpc_order_${orderId}`);
+            if (raw) {
+              const items: { variantId: string | null; slug: string; qty: number }[] =
+                JSON.parse(raw);
+              for (const item of items) {
+                const key = item.variantId ? `v:${item.variantId}` : `p:${item.slug}`;
+                adjustStock(key, -item.qty);
+              }
+              sessionStorage.removeItem(`cpc_order_${orderId}`);
+            }
+          } catch { /* sessionStorage or JSON issue — skip */ }
           // Brief confirmation, then land on the order detail page.
           timer = setTimeout(() => {
             router.replace(`/account/orders/${encodeURIComponent(orderId)}`);

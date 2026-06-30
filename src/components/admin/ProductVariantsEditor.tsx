@@ -95,6 +95,12 @@ function isCameraCategory(slug?: string): boolean {
   return !!slug && slug.toLowerCase().includes("camera");
 }
 
+function isTvCategory(slug?: string): boolean {
+  return !!slug && (slug.toLowerCase().includes("tv") || slug.toLowerCase().includes("television"));
+}
+
+const TV_SIZE_PRESETS = ["32\"", "43\"", "50\"", "55\"", "65\"", "75\"", "85\""];
+
 function makeSku(name: string, r: VariantRow, isCamera: boolean): string {
   const base = slugifyPart(name) || "variant";
   const tail = [r.ram, r.storage, r.color].map(slugifyPart).filter(Boolean).join("-");
@@ -105,11 +111,14 @@ function comboKey(r: VariantRow): string {
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-function buildAttributes(r: VariantRow, isCamera: boolean): Record<string, unknown> {
+function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean): Record<string, unknown> {
   const a: Record<string, unknown> = {};
   if (isCamera) {
     if (r.ram.trim()) a.model = r.ram.trim();
     if (r.storage.trim()) a.lens = r.storage.trim();
+  } else if (isTV) {
+    if (r.ram.trim()) a.size = r.ram.trim();
+    if (r.storage.trim()) a.model = r.storage.trim();
   } else {
     if (r.ram.trim()) a.ram = r.ram.trim();
     if (r.storage.trim()) a.storage = r.storage.trim();
@@ -129,18 +138,22 @@ function calcGstFields(selling: string, gst: string): { gstAmount: string; netBa
   return { gstAmount: gstAmount.toFixed(2), netBase: netBase.toFixed(2) };
 }
 
-function initRows(variants: AdminVariant[], isCamera: boolean): VariantRow[] {
+function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): VariantRow[] {
   return variants.map((v) => {
     const base = v.basePrice != null ? String(v.basePrice) : "";
     const price = v.priceOverride != null ? String(v.priceOverride) : "";
     const gst = "18";
     const { gstAmount, netBase } = calcGstFields(price, gst);
-    // Camera products store model/lens; all others store ram/storage.
+    // Camera → model/lens; TV → size/model; default → ram/storage.
     const ramVal = isCamera
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
+      : isTV
+      ? (v.attributes.size != null ? String(v.attributes.size) : "")
       : (v.attributes.ram != null ? String(v.attributes.ram) : "");
     const storageVal = isCamera
       ? (v.attributes.lens != null ? String(v.attributes.lens) : "")
+      : isTV
+      ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : (v.attributes.storage != null ? String(v.attributes.storage) : "");
     return {
       uid: uid(),
@@ -179,10 +192,11 @@ function initColorImages(variants: AdminVariant[]): Record<string, ColorImages> 
 
 const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
-  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string }
->(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug }, ref) {
+  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; hideRam?: boolean }
+>(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, hideRam = false }, ref) {
   const isCamera = isCameraCategory(categorySlug);
-  const [rows, setRows] = useState<VariantRow[]>(() => initRows(initialVariants, isCamera));
+  const isTV = isTvCategory(categorySlug);
+  const [rows, setRows] = useState<VariantRow[]>(() => initRows(initialVariants, isCamera, isTV));
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
     () => initColorImages(initialVariants),
   );
@@ -368,7 +382,7 @@ const ProductVariantsEditor = forwardRef<
         for (const r of rows) {
           const body = {
             sku: makeSku(productName, r, isCamera),
-            attributes: buildAttributes(r, isCamera),
+            attributes: buildAttributes(r, isCamera, isTV),
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
@@ -400,6 +414,10 @@ const ProductVariantsEditor = forwardRef<
         <p className="text-[12px] text-gray-500 mt-0.5">
           {isCamera
             ? "Add each Model No. / Lens / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            : isTV
+            ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            : hideRam
+            ? "Add each ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."}
         </p>
       </div>
@@ -407,12 +425,20 @@ const ProductVariantsEditor = forwardRef<
       {/* Datalists shared by every row */}
       {!isCamera && (
         <>
-          <datalist id="variant-ram-presets">
-            {RAM_PRESETS.map((o) => <option key={o} value={o} />)}
-          </datalist>
-          <datalist id="variant-storage-presets">
-            {STORAGE_PRESETS.map((o) => <option key={o} value={o} />)}
-          </datalist>
+          {isTV ? (
+            <datalist id="variant-tv-size-presets">
+              {TV_SIZE_PRESETS.map((o) => <option key={o} value={o} />)}
+            </datalist>
+          ) : !hideRam && (
+            <datalist id="variant-ram-presets">
+              {RAM_PRESETS.map((o) => <option key={o} value={o} />)}
+            </datalist>
+          )}
+          {!isTV && (
+            <datalist id="variant-storage-presets">
+              {STORAGE_PRESETS.map((o) => <option key={o} value={o} />)}
+            </datalist>
+          )}
         </>
       )}
       <datalist id="variant-color-presets">
@@ -429,7 +455,11 @@ const ProductVariantsEditor = forwardRef<
         {rows.map((r) => (
           <div
             key={r.uid}
-            className="grid grid-cols-2 sm:grid-cols-[repeat(9,1fr)_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
+            className={`grid grid-cols-2 gap-2 items-end border border-gray-100 rounded-lg p-2.5 ${
+              isCamera || isTV || !hideRam
+                ? "sm:grid-cols-[repeat(9,1fr)_auto]"
+                : "sm:grid-cols-[repeat(8,1fr)_auto]"
+            }`}
           >
             {isCamera ? (
               <Field label="Model No.">
@@ -441,7 +471,18 @@ const ProductVariantsEditor = forwardRef<
                   className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                 />
               </Field>
-            ) : (
+            ) : isTV ? (
+              <Field label="Size (inch)">
+                <input
+                  value={r.ram}
+                  onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                  list="variant-tv-size-presets"
+                  placeholder='e.g. 43"'
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
+              </Field>
+            ) : !hideRam ? (
               <Field label="RAM">
                 <input
                   value={r.ram}
@@ -452,7 +493,7 @@ const ProductVariantsEditor = forwardRef<
                   className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                 />
               </Field>
-            )}
+            ) : null}
             {isCamera ? (
               <Field label="Lens">
                 <select
@@ -466,6 +507,16 @@ const ProductVariantsEditor = forwardRef<
                     <option key={o} value={o}>{o}</option>
                   ))}
                 </select>
+              </Field>
+            ) : isTV ? (
+              <Field label="Model No.">
+                <input
+                  value={r.storage}
+                  onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
+                  placeholder="e.g. UA43CUE60BKLXL"
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
               </Field>
             ) : (
               <Field label="ROM">

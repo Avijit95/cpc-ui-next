@@ -30,6 +30,7 @@ import { adminApi, isApiError } from "@/lib/api";
 import type {
   AdminCategoryListItem,
   AdminProductListItem,
+  AdminProductVariantOption,
   ProductStatus,
 } from "@/lib/api";
 import {
@@ -202,6 +203,25 @@ export default function AdminProductsPage() {
     Record<string, "status" | "bestSeller" | "featured" | undefined>
   >({});
 
+  // Variant expand panel
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [variantsCache, setVariantsCache] = useState<Record<string, AdminProductVariantOption[]>>({});
+  const [variantsLoading, setVariantsLoading] = useState<Record<string, boolean>>({});
+
+  const toggleVariants = async (productId: string, count: number) => {
+    if (count === 0) return;
+    if (expandedId === productId) { setExpandedId(null); return; }
+    setExpandedId(productId);
+    // Always re-fetch on expand to get fresh stock data
+    setVariantsLoading((p) => ({ ...p, [productId]: true }));
+    try {
+      const list = await adminApi.listVariants(productId);
+      setVariantsCache((p) => ({ ...p, [productId]: list }));
+    } catch { /* non-fatal */ } finally {
+      setVariantsLoading((p) => ({ ...p, [productId]: false }));
+    }
+  };
+
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
   const pushToast = useCallback((message: string, kind: Toast["kind"]) => {
@@ -237,6 +257,7 @@ export default function AdminProductsPage() {
       cancelled = true;
     };
   }, []);
+
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -769,7 +790,8 @@ export default function AdminProductsPage() {
                       categoryNameById.get(p.categoryId) ?? "—";
                     const variantCount = p._count?.variants ?? 0;
                     return (
-                      <tr key={p.id} className="hover:bg-gray-50">
+                      <>
+                      <tr key={p.id} className={`hover:bg-gray-50 ${p.status === "ARCHIVED" ? "opacity-50" : ""}`}>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
                             <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center flex-shrink-0">
@@ -792,21 +814,40 @@ export default function AdminProductsPage() {
                           {p.brand ?? <span className="text-gray-400">—</span>}
                         </td>
                         <td className="px-3 py-3">
-                          {p.basePrice === 0 && variantCount > 0 ? (
-                            <span className="text-xs font-medium text-[#129cd3] bg-[#e8f7fc] px-2 py-1 rounded whitespace-nowrap">
+                          {variantCount > 0 ? (
+                            <button
+                              onClick={() => toggleVariants(p.id, variantCount)}
+                              className="text-xs font-medium text-[#129cd3] bg-[#e8f7fc] px-2 py-1 rounded whitespace-nowrap hover:bg-[#d0eef8] transition-colors"
+                            >
                               See variants
-                            </span>
+                            </button>
                           ) : (
                             <p className="font-semibold text-gray-800 text-sm whitespace-nowrap">
                               {formatPrice(p.basePrice)}
                             </p>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-gray-700 text-sm">{p.stock}</td>
+                        <td className="px-3 py-3 text-gray-700 text-sm">
+                          {variantCount > 0 ? (
+                            <span className="text-gray-400">—</span>
+                          ) : (
+                            p.stock
+                          )}
+                        </td>
                         <td className="hidden xl:table-cell px-3 py-3">
-                          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-gray-50 text-gray-600 border-gray-200">
-                            {variantCount}
-                          </span>
+                          {variantCount > 0 ? (
+                            <button
+                              onClick={() => toggleVariants(p.id, variantCount)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-gray-50 text-[#129cd3] border-[#129cd3]/40 hover:bg-[#e8f7fc] transition-colors"
+                            >
+                              {variantCount}
+                              <ChevronDown size={11} className={`transition-transform ${expandedId === p.id ? "rotate-180" : ""}`} />
+                            </button>
+                          ) : (
+                            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-gray-50 text-gray-400 border-gray-200">
+                              0
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-3">
                           {p.status === "ARCHIVED" ? (
@@ -880,6 +921,59 @@ export default function AdminProductsPage() {
                           </div>
                         </td>
                       </tr>
+                      {expandedId === p.id && (
+                        <tr key={`${p.id}-variants`} className="bg-[#f8fbfd]">
+                          <td colSpan={12} className="px-4 pb-3 pt-0">
+                            {variantsLoading[p.id] ? (
+                              <div className="flex items-center gap-2 py-3 text-sm text-gray-400">
+                                <Loader2 size={14} className="animate-spin" /> Loading variants…
+                              </div>
+                            ) : (() => {
+                              const vlist = variantsCache[p.id] ?? [];
+                              if (vlist.length === 0) return <p className="py-2 text-xs text-gray-400">No variant data.</p>;
+                              // Group by color
+                              const byColor: Record<string, AdminProductVariantOption[]> = {};
+                              for (const v of vlist) {
+                                const color = v.attributes.color != null ? String(v.attributes.color) : "—";
+                                (byColor[color] ??= []).push(v);
+                              }
+                              return (
+                                <div className="space-y-2 pt-2">
+                                  {Object.entries(byColor).map(([color, variants]) => (
+                                    <div key={color}>
+                                      <div className="flex items-center gap-2 mb-1.5">
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Color:</span>
+                                        <span className="text-xs font-semibold text-white bg-gray-600 px-2 py-0.5 rounded-full">{color}</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {variants.map((v) => {
+                                          const ram = v.attributes.ram != null ? String(v.attributes.ram) : null;
+                                          const rom = v.attributes.storage != null ? String(v.attributes.storage) : null;
+                                          const size = v.attributes.size != null ? String(v.attributes.size) : null;
+                                          const model = v.attributes.model != null ? String(v.attributes.model) : null;
+                                          const lens = v.attributes.lens != null ? String(v.attributes.lens) : null;
+                                          const label = [ram && `RAM: ${ram}`, rom && `ROM: ${rom}`, size && `Size: ${size}`, model && `Model: ${model}`, lens && `Lens: ${lens}`].filter(Boolean).join(" / ") || v.sku;
+                                          const price = v.priceOverride ?? v.basePrice;
+                                          return (
+                                            <div key={v.id} className="flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs min-w-[130px]">
+                                              <span className="font-semibold text-gray-700">{label}</span>
+                                              <div className="flex items-center justify-between gap-3 mt-1">
+                                                <span className="text-gray-500">Stock: <span className={`font-semibold ${v.stock === 0 ? "text-red-500" : v.stock < 5 ? "text-orange-500" : "text-gray-800"}`}>{v.stock}</span></span>
+                                                <span className="text-[#129cd3] font-semibold">{price != null ? `₹${Number(price).toLocaleString("en-IN")}` : "—"}</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      )}
+                      </>
                     );
                   })
                 )}
