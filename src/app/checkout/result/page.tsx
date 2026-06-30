@@ -33,7 +33,7 @@ function PaymentResultInner() {
   const [view, setView] = useState<View>("verifying");
   const [retrying, setRetrying] = useState(false);
   const pollsRef = useRef(0);
-  const { adjustStock } = useStock();
+  const { recordPurchase } = useStock();
 
   // Auth gate — the status endpoint requires the buyer's session.
   useEffect(() => {
@@ -57,8 +57,9 @@ function PaymentResultInner() {
         if (cancelled) return;
         if (status === "SUCCESS") {
           setView("success");
-          // Reduce client-side stock store for each ordered item so product
-          // pages reflect the purchase across the session.
+          // Persist confirmed stock reductions so every page reflects this
+          // purchase even after a hard refresh. recordPurchase is idempotent
+          // on orderId+key, so polling re-entry never double-counts.
           try {
             const raw = sessionStorage.getItem(`cpc_order_${orderId}`);
             if (raw) {
@@ -66,7 +67,7 @@ function PaymentResultInner() {
                 JSON.parse(raw);
               for (const item of items) {
                 const key = item.variantId ? `v:${item.variantId}` : `p:${item.slug}`;
-                adjustStock(key, -item.qty);
+                recordPurchase(key, item.qty, orderId);
               }
               sessionStorage.removeItem(`cpc_order_${orderId}`);
             }

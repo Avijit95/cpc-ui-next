@@ -13,7 +13,6 @@ import {
   paymentsApi,
   isApiError,
 } from "@/lib/api";
-import { useStock } from "@/lib/stock/StockProvider";
 import type {
   Address,
   CartView,
@@ -122,7 +121,6 @@ function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { status } = useAuth();
-  const { adjustStock } = useStock();
 
   // Buy Now: `?items=<cartItemId,...>` scopes checkout to those cart lines.
   const cartItemIds = useMemo(() => {

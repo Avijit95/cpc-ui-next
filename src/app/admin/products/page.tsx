@@ -38,6 +38,7 @@ import {
   UpdatedDateTimeCell,
 } from "@/components/admin/list/DateTimeCell";
 import { useUrlState } from "@/lib/use-url-state";
+import { useStock } from "@/lib/stock/StockProvider";
 
 const SORT_OPTIONS: readonly SortOption[] = [
   { label: "Newest first", sortBy: "createdAt", sortOrder: "desc" },
@@ -207,6 +208,7 @@ export default function AdminProductsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [variantsCache, setVariantsCache] = useState<Record<string, AdminProductVariantOption[]>>({});
   const [variantsLoading, setVariantsLoading] = useState<Record<string, boolean>>({});
+  const { stocks, setStock } = useStock();
 
   const toggleVariants = async (productId: string, count: number) => {
     if (count === 0) return;
@@ -217,6 +219,8 @@ export default function AdminProductsPage() {
     try {
       const list = await adminApi.listVariants(productId);
       setVariantsCache((p) => ({ ...p, [productId]: list }));
+      // Seed the stock store so purchase records are applied to displayed stock
+      list.forEach((v) => setStock(`v:${v.id}`, v.stock));
     } catch { /* non-fatal */ } finally {
       setVariantsLoading((p) => ({ ...p, [productId]: false }));
     }
@@ -958,7 +962,18 @@ export default function AdminProductsPage() {
                                             <div key={v.id} className="flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs min-w-[130px]">
                                               <span className="font-semibold text-gray-700">{label}</span>
                                               <div className="flex items-center justify-between gap-3 mt-1">
-                                                <span className="text-gray-500">Stock: <span className={`font-semibold ${v.stock === 0 ? "text-red-500" : v.stock < 5 ? "text-orange-500" : "text-gray-800"}`}>{v.stock}</span></span>
+                                                {(() => {
+                                                  const effectiveStock = stocks[`v:${v.id}`] ?? v.stock;
+                                                  const color = effectiveStock === 0 ? "text-red-500" : effectiveStock < 5 ? "text-orange-500" : "text-gray-800";
+                                                  return (
+                                                    <span className="text-gray-500">
+                                                      Stock: <span className={`font-semibold ${color}`}>{effectiveStock}</span>
+                                                      {effectiveStock < v.stock && (
+                                                        <span className="ml-1 text-gray-400 text-[10px]">(API: {v.stock})</span>
+                                                      )}
+                                                    </span>
+                                                  );
+                                                })()}
                                                 <span className="text-[#129cd3] font-semibold">{price != null ? `₹${Number(price).toLocaleString("en-IN")}` : "—"}</span>
                                               </div>
                                             </div>
