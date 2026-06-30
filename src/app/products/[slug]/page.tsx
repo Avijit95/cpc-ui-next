@@ -654,6 +654,34 @@ useEffect(() => {
     : (selectedVariant ? selectedVariant.stock : product.stock);
   const inStock = liveStock > 0;
 
+  // Flipkart-style variant selector derived values.
+  // Collect ALL color-like keys across all variants (handles "color", "Color", "colour" etc.
+  // even when different variants use different casings).
+  const allAttrKeys = [...new Set(product.variants.flatMap((v) => Object.keys(v.attributes)))];
+  const colorAttrKeys = allAttrKeys.filter((k) => /^colou?r$/i.test(k));
+  // All unique color values from every color-like key
+  const colorValues = [
+    ...new Set(
+      product.variants.flatMap((v) =>
+        colorAttrKeys.map((k) => String(v.attributes[k] ?? "")).filter(Boolean)
+      )
+    ),
+  ];
+  // The currently selected color, looked up across all color keys
+  const selectedColor = colorAttrKeys.map((k) => selectedAttrs[k]).find(Boolean) ?? null;
+  const nonColorGroups = variantGroups.filter((g) => !/^colou?r$/i.test(g.key));
+  // Filter to variants whose color (under any color key) matches the selection
+  const colorFilteredVariants =
+    colorAttrKeys.length > 0 && selectedColor
+      ? product.variants.filter((v) =>
+          colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === selectedColor)
+        )
+      : product.variants;
+  const selectedVariantLabel = nonColorGroups
+    .map((g) => selectedAttrs[g.key])
+    .filter(Boolean)
+    .join(" + ");
+
   return (
     <>
       <Header />
@@ -944,62 +972,137 @@ useEffect(() => {
                 )}
               </div>
 
-              {/* Variant selectors + Quantity — all on one line */}
+{/* Flipkart-style variant selectors */}
               {hasVariants && (
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-3 mb-5">
-                  {variantGroups.map((group) => {
-                    const isColor = group.key === "color";
-                    if (isColor) {
-                      return (
-                        <div key={group.key} className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-700 flex-shrink-0">Color:</span>
-                          <div className="flex flex-wrap gap-2">
-                            {group.values.map((value) => {
-                              const active = selectedAttrs[group.key] === value;
-                              return (
-                                <button
-                                  key={value}
-                                  type="button"
-                                  onClick={() => selectVariantValue(group.key, value)}
-                                  className={`text-sm font-semibold px-4 py-2 rounded-lg border transition-colors ${
-                                    active
-                                      ? "bg-[#129cd3] text-white border-[#129cd3]"
-                                      : "bg-white text-gray-700 border-gray-300 hover:border-[#129cd3] hover:text-[#129cd3]"
-                                  }`}
-                                >
-                                  {value}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    }
-                    // RAM / ROM — plain text with " / " separator, selected is bold
-                    return (
-                      <div key={group.key} className="flex items-center gap-1">
-                        {group.values.map((value, idx) => {
-                          const active = selectedAttrs[group.key] === value;
+                <div className="mb-5">
+                  {/* Color — image thumbnails with name label */}
+                  {colorValues.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex flex-wrap gap-4">
+                        {colorValues.map((color) => {
+                          // Find a variant with this color under any color key
+                          const colorVariant = product.variants.find((v) =>
+                            colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color)
+                          );
+                          const imgUrl =
+                            colorVariant?.images?.[0]?.url ??
+                            productImages[0]?.url ??
+                            null;
+                          const active = selectedColor === color;
                           return (
-                            <span key={value} className="flex items-center gap-1">
-                              {idx > 0 && <span className="text-gray-300 select-none">/</span>}
-                              <button
-                                type="button"
-                                onClick={() => selectVariantValue(group.key, value)}
-                                className={`text-sm transition-colors hover:text-[#129cd3] ${
-                                  active ? "font-bold text-gray-900" : "font-normal text-gray-500"
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => {
+                                // Find the variant for this color and snap to it
+                                const target =
+                                  product.variants.find((v) =>
+                                    colorAttrKeys.some(
+                                      (k) => String(v.attributes[k] ?? "") === color
+                                    ) && v.stock > 0
+                                  ) ??
+                                  product.variants.find((v) =>
+                                    colorAttrKeys.some(
+                                      (k) => String(v.attributes[k] ?? "") === color
+                                    )
+                                  );
+                                if (target) {
+                                  setSelectedAttrs(attrsOf(target));
+                                  setActiveImageIdx(0);
+                                }
+                              }}
+                              className="flex flex-col items-center gap-1 group focus:outline-none"
+                            >
+                              <span
+                                className={`rounded-lg border-2 transition-colors overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50 ${
+                                  active
+                                    ? "border-[#129cd3] shadow-sm"
+                                    : "border-gray-300 group-hover:border-gray-500"
+                                }`}
+                                style={{ width: 64, height: 64 }}
+                              >
+                                {imgUrl ? (
+                                  <img src={imgUrl} alt={color} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-xs text-gray-400 p-1 text-center leading-tight">
+                                    {color}
+                                  </span>
+                                )}
+                              </span>
+                              <span
+                                className={`text-xs text-center leading-tight max-w-[72px] truncate transition-colors ${
+                                  active
+                                    ? "font-semibold text-[#129cd3]"
+                                    : "font-medium text-gray-600 group-hover:text-gray-800"
                                 }`}
                               >
-                                {value}
-                              </button>
-                            </span>
+                                {color}
+                              </span>
+                            </button>
                           );
                         })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  )}
 
-                  {/* Quantity inline */}
+                  {/* Non-color variant cards with pricing */}
+                  {nonColorGroups.length > 0 && (
+                    <div className="mb-4">
+                      {selectedVariantLabel && (
+                        <p className="text-sm font-bold text-gray-800 mb-3">
+                          Variant: <span className="font-semibold">{selectedVariantLabel}</span>
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-3">
+                        {colorFilteredVariants.map((v) => {
+                          const label = nonColorGroups
+                            .map((g) => attrValue(v, g.key))
+                            .filter(Boolean)
+                            .join(" + ");
+                          if (!label) return null;
+                          const isActive = nonColorGroups.every(
+                            (g) => selectedAttrs[g.key] === attrValue(v, g.key)
+                          );
+                          const vBase = v.deal ? v.deal.basePrice : v.pricing.basePrice;
+                          const vFinal = v.deal ? v.deal.dealPrice : v.pricing.finalPrice;
+                          const vDiscount =
+                            vBase > vFinal
+                              ? Math.round(((vBase - vFinal) / vBase) * 100)
+                              : 0;
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => { setSelectedAttrs(attrsOf(v)); setActiveImageIdx(0); }}
+                              className={`flex flex-col items-start text-left px-3 py-2 rounded-lg border-2 transition-colors min-w-[110px] ${
+                                isActive
+                                  ? "border-[#129cd3] bg-blue-50"
+                                  : "border-gray-200 bg-white hover:border-gray-400"
+                              }`}
+                            >
+                              <span className="text-sm font-semibold text-gray-800 mb-0.5">{label}</span>
+                              {vDiscount > 0 && (
+                                <span className="text-xs text-green-600 font-medium">
+                                  ↓{vDiscount}%{" "}
+                                  <span className="line-through text-gray-400">{formatPrice(vBase)}</span>
+                                </span>
+                              )}
+                              <span className="text-sm font-bold text-gray-900">{formatPrice(vFinal)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Color-only product: show selected color label */}
+                  {colorValues.length > 0 && nonColorGroups.length === 0 && selectedColor && (
+                    <p className="text-sm font-bold text-gray-800 mb-3">
+                      Color: <span className="font-semibold">{selectedColor}</span>
+                    </p>
+                  )}
+
+                  {/* Quantity */}
                   {inStock && (
                     <div className="flex items-center gap-4">
                       <span className="text-sm font-medium text-gray-700">Quantity:</span>
