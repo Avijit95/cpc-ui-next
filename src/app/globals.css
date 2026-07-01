@@ -27,6 +27,10 @@ body {
   box-sizing: border-box;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 .line-clamp-1 {
   overflow: hidden;
   display: -webkit-box;
