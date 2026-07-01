@@ -111,6 +111,11 @@ function comboKey(r: VariantRow): string {
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
+// For TVs images are grouped by size (ram field); for all others by color.
+function imageGroupKey(r: VariantRow, isTV: boolean): string {
+  return isTV ? r.ram.trim() : r.color.trim();
+}
+
 function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean): Record<string, unknown> {
   const a: Record<string, unknown> = {};
   if (isCamera) {
@@ -171,15 +176,18 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): V
   });
 }
 
-// Variants of the same color share one image set — take the first non-empty.
-function initColorImages(variants: AdminVariant[]): Record<string, ColorImages> {
+// Variants sharing the same group key share one image set — take the first non-empty.
+// TV: grouped by size; all others: grouped by color.
+function initColorImages(variants: AdminVariant[], isTV: boolean): Record<string, ColorImages> {
   const map: Record<string, ColorImages> = {};
   for (const v of variants) {
-    const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
-    if (!color) continue;
-    if (!map[color]) map[color] = { items: [] };
-    if (map[color].items.length === 0 && v.imagesObjectKeys.length > 0) {
-      map[color].items = v.imagesObjectKeys.map((key) => ({
+    const groupKey = isTV
+      ? (v.attributes.size != null ? String(v.attributes.size).trim() : "")
+      : (v.attributes.color != null ? String(v.attributes.color).trim() : "");
+    if (!groupKey) continue;
+    if (!map[groupKey]) map[groupKey] = { items: [] };
+    if (map[groupKey].items.length === 0 && v.imagesObjectKeys.length > 0) {
+      map[groupKey].items = v.imagesObjectKeys.map((key) => ({
         id: uid(),
         kind: "existing" as const,
         key,
@@ -198,18 +206,18 @@ const ProductVariantsEditor = forwardRef<
   const isTV = isTvCategory(categorySlug);
   const [rows, setRows] = useState<VariantRow[]>(() => initRows(initialVariants, isCamera, isTV));
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
-    () => initColorImages(initialVariants),
+    () => initColorImages(initialVariants, isTV),
   );
 
-  // Distinct colors actually used by the rows — drives the image uploaders.
+  // Distinct image group keys (size for TV, color otherwise) — drives the image uploaders.
   const colors = useMemo(() => {
     const out: string[] = [];
     for (const r of rows) {
-      const c = r.color.trim();
+      const c = imageGroupKey(r, isTV);
       if (c && !out.includes(c)) out.push(c);
     }
     return out;
-  }, [rows]);
+  }, [rows, isTV]);
 
   // Revoke blob previews on unmount.
   useEffect(() => {
@@ -312,6 +320,8 @@ const ProductVariantsEditor = forwardRef<
           if (!r.ram.trim() && !r.storage.trim() && !r.color.trim()) {
             return isCamera
               ? "Each variant needs at least one of Model No., Lens, or Color."
+              : isTV
+              ? "Each variant needs at least one of Size, Model No., or Color."
               : "Each variant needs at least one of RAM, ROM, or Color.";
           }
           const stockNum = Number(r.stock);
@@ -345,6 +355,8 @@ const ProductVariantsEditor = forwardRef<
           if (seen.has(key)) {
             return isCamera
               ? "Two variants have the same Model No. / Lens / Color combination."
+              : isTV
+              ? "Two variants have the same Size / Model No. / Color combination."
               : "Two variants have the same RAM / ROM / Color combination.";
           }
           seen.add(key);
@@ -386,7 +398,7 @@ const ProductVariantsEditor = forwardRef<
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
-            imagesObjectKeys: finalKeys[r.color.trim()] ?? [],
+            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV)] ?? [],
           };
           if (r.existingId && initialVariants.some((v) => v.id === r.existingId)) {
             keptIds.add(r.existingId);
@@ -415,7 +427,7 @@ const ProductVariantsEditor = forwardRef<
           {isCamera
             ? "Add each Model No. / Lens / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : isTV
-            ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
             : hideRam
             ? "Add each ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."}
@@ -635,10 +647,10 @@ const ProductVariantsEditor = forwardRef<
         </button>
       </div>
 
-      {/* Per-color images */}
+      {/* Per-group images (size for TV, color otherwise) */}
       {colors.length > 0 && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-700">Images by color</p>
+          <p className="text-xs font-semibold text-gray-700">{isTV ? "Images by size" : "Images by color"}</p>
           {colors.map((color) => {
             const ci = colorImages[color] ?? { items: [] };
             const count = ci.items.length;
