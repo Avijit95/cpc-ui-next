@@ -1792,8 +1792,8 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
       {renderedGroups.map((group) => (
         <div key={group.label}>
           {/* Group heading */}
-          <div className="px-1 py-3">
-            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">{group.label}</h3>
+          <div className="px-4 py-2.5 bg-gradient-to-r from-[#129cd3]/10 via-[#129cd3]/5 to-transparent border-l-4 border-[#129cd3]">
+            <h3 className="text-xs font-extrabold text-[#0a6d93] uppercase tracking-widest">{group.label}</h3>
           </div>
           {/* Spec rows */}
           <div className="divide-y divide-gray-100 mb-2">
