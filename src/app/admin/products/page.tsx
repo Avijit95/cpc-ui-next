@@ -578,7 +578,7 @@ export default function AdminProductsPage() {
               tint: "bg-emerald-50 text-emerald-600",
             },
             {
-              label: "Draft (page)",
+              label: "Inactive (page)",
               value: stats.draft,
               tint: "bg-amber-50 text-amber-600",
             },
@@ -795,7 +795,7 @@ export default function AdminProductsPage() {
                     const variantCount = p._count?.variants ?? 0;
                     return (
                       <>
-                      <tr key={p.id} className={`hover:bg-gray-50 ${p.status === "ARCHIVED" ? "opacity-50" : ""}`}>
+                      <tr key={p.id} className={`hover:bg-gray-50 ${p.status === "ARCHIVED" ? "bg-red-50/60" : ""}`}>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
                             <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center flex-shrink-0">
