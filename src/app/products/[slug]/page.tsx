@@ -40,6 +40,10 @@ import {
   Ruler,
   Zap,
   Hash,
+  Info,
+  Volume2,
+  Activity,
+  LayoutGrid,
 } from "lucide-react";
 
 const MAX_REVIEW_PHOTOS = 5;
@@ -1701,13 +1705,39 @@ const SPEC_GROUP_DEFS: { label: string; patterns: string[] }[] = [
   { label: "Dimensions", patterns: ["height", "width", "thickness", "depth", "weight", "dimension", "size", "build", "material"] },
 ];
 
+type SpecGroupMeta = {
+  icon: React.ReactNode;
+  iconBg: string;   // icon bubble colours
+  headerBg: string; // header strip background
+  accentBorder: string; // left-border colour on the card
+};
+
+const SPEC_GROUP_META: Record<string, SpecGroupMeta> = {
+  "General":               { icon: <Info size={14} />,      iconBg: "bg-slate-200 text-slate-600",   headerBg: "bg-slate-50",   accentBorder: "border-l-slate-400" },
+  "Display Features":      { icon: <Monitor size={14} />,   iconBg: "bg-blue-100 text-blue-600",     headerBg: "bg-blue-50",    accentBorder: "border-l-blue-400" },
+  "OS & Processor Features":{ icon: <Cpu size={14} />,      iconBg: "bg-purple-100 text-purple-600", headerBg: "bg-purple-50",  accentBorder: "border-l-purple-400" },
+  "Camera Features":       { icon: <Camera size={14} />,    iconBg: "bg-pink-100 text-pink-600",     headerBg: "bg-pink-50",    accentBorder: "border-l-pink-400" },
+  "Battery & Power Features":{ icon: <Zap size={14} />,     iconBg: "bg-orange-100 text-orange-600", headerBg: "bg-orange-50",  accentBorder: "border-l-orange-400" },
+  "Memory & Storage":      { icon: <HardDrive size={14} />, iconBg: "bg-emerald-100 text-emerald-600",headerBg: "bg-emerald-50",accentBorder: "border-l-emerald-400" },
+  "Connectivity":          { icon: <Wifi size={14} />,      iconBg: "bg-cyan-100 text-cyan-600",     headerBg: "bg-cyan-50",    accentBorder: "border-l-cyan-400" },
+  "Audio":                 { icon: <Volume2 size={14} />,   iconBg: "bg-yellow-100 text-yellow-600", headerBg: "bg-yellow-50",  accentBorder: "border-l-yellow-400" },
+  "Sensors":               { icon: <Activity size={14} />,  iconBg: "bg-teal-100 text-teal-600",     headerBg: "bg-teal-50",    accentBorder: "border-l-teal-400" },
+  "Dimensions":            { icon: <Ruler size={14} />,     iconBg: "bg-rose-100 text-rose-600",     headerBg: "bg-rose-50",    accentBorder: "border-l-rose-400" },
+  "Other Details":         { icon: <LayoutGrid size={14} />,iconBg: "bg-gray-100 text-gray-600",     headerBg: "bg-gray-50",    accentBorder: "border-l-gray-400" },
+};
+
+function chunkPairs<T>(arr: T[]): [T, T | undefined][] {
+  const out: [T, T | undefined][] = [];
+  for (let i = 0; i < arr.length; i += 2) out.push([arr[i], arr[i + 1]]);
+  return out;
+}
+
 function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
   const entries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
   if (entries.length === 0) {
     return <p className="text-sm text-gray-500">No specifications listed.</p>;
   }
 
-  // Assign each entry to its first matching group, or "Other Details"
   const buckets = new Map<string, [string, unknown][]>(
     SPEC_GROUP_DEFS.map((g) => [g.label, []])
   );
@@ -1716,11 +1746,8 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
   for (const entry of entries) {
     const norm = entry[0].toLowerCase();
     const matched = SPEC_GROUP_DEFS.find((g) => g.patterns.some((p) => norm.includes(p)));
-    if (matched) {
-      buckets.get(matched.label)!.push(entry);
-    } else {
-      other.push(entry);
-    }
+    if (matched) buckets.get(matched.label)!.push(entry);
+    else other.push(entry);
   }
 
   const renderedGroups = [
@@ -1729,20 +1756,56 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
   ];
 
   return (
-    <div className="space-y-8">
-      {renderedGroups.map((group) => (
-        <div key={group.label}>
-          <h3 className="text-sm font-bold text-gray-900 mb-3">{group.label}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2">
-            {group.items.map(([key, value]) => (
-              <div key={key} className="py-3 pr-6 border-b border-gray-100">
-                <p className="text-xs text-gray-400 mb-0.5">{humanizeSpecKey(key)}</p>
-                <p className="text-sm font-medium text-gray-800">{formatSpecValue(value)}</p>
-              </div>
-            ))}
+    <div className="space-y-4">
+      {renderedGroups.map((group) => {
+        const meta = SPEC_GROUP_META[group.label] ?? SPEC_GROUP_META["Other Details"];
+        const pairs = chunkPairs(group.items);
+        return (
+          <div
+            key={group.label}
+            className={`rounded-xl border border-gray-200 overflow-hidden shadow-sm border-l-4 ${meta.accentBorder}`}
+          >
+            {/* Group header */}
+            <div className={`flex items-center gap-2.5 px-4 py-2.5 ${meta.headerBg} border-b border-gray-200`}>
+              <span className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${meta.iconBg}`}>
+                {meta.icon}
+              </span>
+              <h3 className="text-sm font-bold text-gray-800 tracking-wide">{group.label}</h3>
+            </div>
+
+            {/* Spec rows — two per row on sm+ */}
+            <div className="divide-y divide-gray-100">
+              {pairs.map(([a, b], rowIdx) => (
+                <div
+                  key={rowIdx}
+                  className={`grid grid-cols-1 sm:grid-cols-2 ${rowIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}
+                >
+                  <div className="px-4 py-3 sm:border-r border-gray-100">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+                      {humanizeSpecKey(a[0])}
+                    </p>
+                    <p className="text-sm font-medium text-gray-800 leading-snug">
+                      {formatSpecValue(a[1])}
+                    </p>
+                  </div>
+                  {b ? (
+                    <div className="px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+                        {humanizeSpecKey(b[0])}
+                      </p>
+                      <p className="text-sm font-medium text-gray-800 leading-snug">
+                        {formatSpecValue(b[1])}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="hidden sm:block" />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
