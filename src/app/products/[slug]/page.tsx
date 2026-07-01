@@ -303,11 +303,9 @@ export default function ProductDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, variantParam]);
 
-  // Fetch product coupons. Strategy (first success wins):
-  //  1. Public /products/:slug/coupons endpoint — anonymous, works for everyone.
-  //  2. Admin API — works for admin/staff (richer data).
-  //  3. Cart context — if product is already in cart, use its availableCoupons.
-  //  4. Silent add→peek→remove — authenticated non-admin fallback.
+  // Seed coupons from the product detail response (availableCoupons field).
+  // If the product already has coupons embedded, use them immediately.
+  // Otherwise try a silent add→peek→remove for authenticated users.
   useEffect(() => {
     if (!product) return;
     let cancelled = false;
@@ -319,66 +317,42 @@ export default function ProductDetailPage() {
       if (!cancelled && (ac.customer || ac.retail)) setProductCoupons(ac);
     };
 
-    // 1. Public endpoint — works for all visitors, no auth required.
-    catalogApi
-      .getProductCoupons(product.slug)
-      .then((c) => {
-        if (cancelled) return;
-        if (c?.customer || c?.retail) {
-          apply({
-            customer: c.customer ? { id: c.customer.id, name: c.customer.name, value: c.customer.value } : undefined,
-            retail: c.retail ? { id: c.retail.id, name: c.retail.name, value: c.retail.value } : undefined,
-          });
-        }
+    // 1. Use coupons already embedded in the product detail response.
+    const embedded = product.availableCoupons;
+    if (embedded?.customer || embedded?.retail) {
+      apply(embedded as CouponMap);
+      return;
+    }
+
+    // 2. Check if product is already in the cart — use its availableCoupons.
+    const existingLine = cartItems.find((l) => l.slug === product.slug);
+    if (existingLine?.availableCoupons?.customer || existingLine?.availableCoupons?.retail) {
+      apply(existingLine.availableCoupons as CouponMap);
+      return;
+    }
+
+    // 3. Silent add→peek→remove (authenticated only).
+    if (status !== "authenticated") return;
+    const variantId = product.variants.length > 0
+      ? (product.variants.find((v) => v.stock > 0) ?? product.variants[0])?.id ?? null
+      : null;
+
+    cartApi
+      .addItem({ productId: product.id, variantId: variantId ?? undefined, qty: 1 })
+      .then((cartView) => {
+        const line = cartView.items.find(
+          (l) => l.slug === product.slug && l.variantId === variantId,
+        );
+        if (!line) return null;
+        tempCartItemId = line.cartItemId;
+        if (!cancelled) apply(line.availableCoupons as CouponMap);
+        return cartApi.removeItem(line.cartItemId);
       })
-      .catch(() => {
-        // 2. Public endpoint unavailable — try admin API.
-        if (cancelled) return;
-        adminApi
-          .getProduct(product.id)
-          .then((detail) => {
-            if (cancelled) return;
-            const c = detail.coupons;
-            if (c?.customer || c?.retail) {
-              apply({
-                customer: c.customer ? { id: c.customer.id, name: c.customer.name, value: c.customer.value } : undefined,
-                retail: c.retail ? { id: c.retail.id, name: c.retail.name, value: c.retail.value } : undefined,
-              });
-            }
-          })
-          .catch(() => {
-            // 3. Admin API failed — try cart context.
-            if (cancelled) return;
-            const existingLine = cartItems.find((l) => l.slug === product.slug);
-            if (existingLine?.availableCoupons?.customer || existingLine?.availableCoupons?.retail) {
-              apply(existingLine.availableCoupons as CouponMap);
-              return;
-            }
-
-            // 4. Silent add→peek→remove (authenticated only).
-            if (status !== "authenticated") return;
-            const variantId = product.variants.length > 0
-              ? (product.variants.find((v) => v.stock > 0) ?? product.variants[0])?.id ?? null
-              : null;
-
-            cartApi
-              .addItem({ productId: product.id, variantId: variantId ?? undefined, qty: 1 })
-              .then((cartView) => {
-                const line = cartView.items.find(
-                  (l) => l.slug === product.slug && l.variantId === variantId,
-                );
-                if (!line) return null;
-                tempCartItemId = line.cartItemId;
-                if (!cancelled) apply(line.availableCoupons as CouponMap);
-                return cartApi.removeItem(line.cartItemId);
-              })
-              .then((updated) => {
-                tempCartItemId = null;
-                if (updated && !cancelled) syncHeaderCart(updated);
-              })
-              .catch(() => { /* OOS or other error — ignore */ });
-          });
-      });
+      .then((updated) => {
+        tempCartItemId = null;
+        if (updated && !cancelled) syncHeaderCart(updated);
+      })
+      .catch(() => { /* OOS or other error — ignore */ });
 
     return () => {
       cancelled = true;
@@ -899,7 +873,7 @@ useEffect(() => {
               {/* Coupons — interactive checkboxes; applied on Add to Cart / Buy Now */}
               {(() => {
                 const cartLineCoupons = cartItems.find((l) => l.slug === product.slug)?.availableCoupons ?? null;
-                const coupons = productCoupons ?? cartLineCoupons ?? product.coupons ?? null;
+                const coupons = productCoupons ?? cartLineCoupons ?? product.availableCoupons ?? null;
                 if (!coupons?.customer && !coupons?.retail) return null;
                 return (
                   <div className="mb-5 rounded-xl overflow-hidden border border-green-200 shadow-sm">
