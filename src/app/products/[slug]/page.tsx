@@ -1737,7 +1737,7 @@ const SPEC_GROUP_DEFS: { label: string; patterns: string[] }[] = [
   { label: "General", patterns: ["brand", "model", "sim", "warranty", "colour", "color", "form", "launch", "series"] },
   { label: "Display Features", patterns: ["display", "screen", "resolution", "refresh", "pixel", "brightness", "hdr", "amoled", "oled", "lcd", "nits", "panel"] },
   { label: "OS & Processor Features", patterns: ["os", "operating", "processor", "chipset", "cpu", "core", "clock", "snapdragon", "mediatek", "exynos", "helio", "dimensity", "bionic", "a1", "a2"] },
-  { label: "Camera Features", patterns: ["camera", "photo", "video", "flash", "aperture", "ois", "zoom", "autofocus", "lens", "megapixel", "mp"] },
+  { label: "Camera Features", patterns: ["camera", "photo", "video", "flash", "aperture", "ois", "zoom", "autofocus", "lens", "megapixel"] },
   { label: "Battery & Power Features", patterns: ["battery", "charging", "power", "mah", "watt", "fast charge", "wireless"] },
   { label: "Memory & Storage", patterns: ["ram", "memory", "storage", "rom", "expandable", "card"] },
   { label: "Connectivity", patterns: ["bluetooth", "wifi", "wi-fi", "nfc", "usb", "gps", "network", "4g", "5g", "lte", "port", "infrared", "ir"] },
