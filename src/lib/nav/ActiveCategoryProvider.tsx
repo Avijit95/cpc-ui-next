@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState } from "react";
 
+export { placeCameraLensAfterCamera } from "./categoryUtils";
+
 type Ctx = {
   activeCategory: string | null;
   setActiveCategory: (slug: string | null) => void;

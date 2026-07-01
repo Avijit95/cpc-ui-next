@@ -50,25 +50,6 @@ export default function CategorySlider({ items }: { items: Category[] }) {
           ref={scrollRef}
           className="category-slider flex gap-4 overflow-x-auto scroll-smooth"
         >
-          {/* Static Camera Lens card — replace /camera-lens.jpg with your own image */}
-          <Link
-            href="/products?category=camera-lens"
-            className="group flex-shrink-0 w-[calc(50%-8px)] sm:w-[calc(33.333%-11px)] lg:w-[calc(16.667%-14px)] flex flex-col items-center gap-2 hover:opacity-90 transition-opacity"
-          >
-            <div className="relative w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded max-[1023px]:max-h-[260px] max-[639px]:max-h-[230px]">
-              <Image
-                src="/Sony Alpha ZV-E10.jpeg"
-                alt="Camera Lens"
-                fill
-                sizes="(min-width: 1024px) 16vw, (min-width: 640px) 33vw, 50vw"
-                className="object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            </div>
-            <p className="text-xs font-semibold text-gray-700 group-hover:text-[#129cd3] transition-colors text-center">
-              Camera Lens
-            </p>
-          </Link>
-
           {items.map((cat) => (
             <Link
               key={cat.id}

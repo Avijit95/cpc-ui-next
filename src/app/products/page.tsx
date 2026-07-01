@@ -16,6 +16,7 @@ import type {
   Variant,
 } from "@/lib/api";
 import { SlidersHorizontal, ChevronDown, ChevronUp, Star, ArrowLeft } from "lucide-react";
+import { reorderCategories } from "@/lib/nav/categoryUtils";
 
 type CategoryOption = { slug: string; name: string };
 
@@ -656,9 +657,7 @@ useEffect(() => {
       .then((all: CategoryNode[]) => {
         if (ac.signal.aborted) return;
         setCategoryOptions(
-          all
-            .slice()
-            .sort((a, b) => a.sortOrder - b.sortOrder)
+          reorderCategories(all.slice().sort((a, b) => a.sortOrder - b.sortOrder))
             .map((c) => ({ slug: c.slug.toLowerCase(), name: c.name })),
         );
       })

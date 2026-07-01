@@ -1758,7 +1758,7 @@ const SPEC_GROUP_DEFS: { label: string; patterns: string[] }[] = [
   { label: "Camera Features", patterns: ["camera", "photo", "video", "flash", "aperture", "ois", "zoom", "autofocus", "lens", "megapixel"] },
   { label: "Battery & Power Features", patterns: ["battery", "charging", "power", "mah", "watt", "fast charge", "wireless"] },
   { label: "Memory & Storage", patterns: ["ram", "memory", "storage", "rom", "expandable", "card"] },
-  { label: "Connectivity", patterns: ["bluetooth", "wifi", "wi-fi", "nfc", "usb", "gps", "network", "4g", "5g", "lte", "port", "infrared", "ir"] },
+  { label: "Connectivity", patterns: ["connectivity", "bluetooth", "wifi", "wi-fi", "nfc", "usb", "hdmi", "ethernet", "gps", "network", "4g", "5g", "lte", "port", "infrared", "ir"] },
   { label: "Audio", patterns: ["audio", "speaker", "sound", "microphone", "headphone", "jack", "dolby", "stereo"] },
   { label: "Sensors", patterns: ["sensor", "fingerprint", "face", "accelero", "gyro", "proximity", "compass", "barometer"] },
   { label: "Dimensions", patterns: ["height", "width", "thickness", "depth", "weight", "dimension", "size", "build", "material"] },
