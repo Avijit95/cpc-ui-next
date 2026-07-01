@@ -1302,7 +1302,6 @@ useEffect(() => {
                                 <span className="inline-flex items-center gap-1.5 bg-white border border-dashed border-green-400 rounded-lg px-3 py-1.5">
                                   <span className="text-[11px] font-black tracking-widest text-green-700 uppercase">{c.name}</span>
                                 </span>
-                                <span className="text-xs font-bold text-green-600 whitespace-nowrap">{c.label}</span>
                                 {c.isSelected && (
                                   <span className="flex items-center gap-0.5 text-[10px] font-semibold text-green-600">
                                     <Check size={11} strokeWidth={3} /> Applied
