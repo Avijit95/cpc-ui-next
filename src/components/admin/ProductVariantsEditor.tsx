@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { ChevronLeft, ChevronRight, ImagePlus, Plus, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImagePlus, Plus, Star, Trash2, X } from "lucide-react";
 import { adminApi } from "@/lib/api";
 import { imageUrlForKey } from "@/lib/image-url";
 import type { AdminVariant, ProductImageContentType } from "@/lib/api";
@@ -61,12 +61,13 @@ type VariantRow = {
   netBase: string;   // auto-calc: selling − gstAmount (base price excl. GST), read-only display
 };
 
-// A color's images are one ordered list — order is the display rank (#1 first).
+// A color's images are one ordered list.
+// defaultId marks the featured image shown first in the storefront.
 // Existing items carry the saved S3 key; pending items carry a local File.
 type ColorImageItem =
   | { id: string; kind: "existing"; key: string; url: string | null }
   | { id: string; kind: "pending"; file: File; previewUrl: string };
-type ColorImages = { items: ColorImageItem[] };
+type ColorImages = { items: ColorImageItem[]; defaultId: string | null };
 
 export type ProductVariantsHandle = {
   // Returns an error message, or null when the rows are valid.
@@ -185,14 +186,16 @@ function initColorImages(variants: AdminVariant[], isTV: boolean): Record<string
       ? (v.attributes.size != null ? String(v.attributes.size).trim() : "")
       : (v.attributes.color != null ? String(v.attributes.color).trim() : "");
     if (!groupKey) continue;
-    if (!map[groupKey]) map[groupKey] = { items: [] };
+    if (!map[groupKey]) map[groupKey] = { items: [], defaultId: null };
     if (map[groupKey].items.length === 0 && v.imagesObjectKeys.length > 0) {
-      map[groupKey].items = v.imagesObjectKeys.map((key) => ({
+      const items = v.imagesObjectKeys.map((key) => ({
         id: uid(),
         kind: "existing" as const,
         key,
         url: imageUrlForKey(key),
       }));
+      // First key saved in DB is the default (storefront featured image).
+      map[groupKey] = { items, defaultId: items[0]?.id ?? null };
     }
   }
   return map;
@@ -271,8 +274,11 @@ const ProductVariantsEditor = forwardRef<
     }
     if (accepted.length === 0) return;
     setColorImages((prev) => {
-      const cur = prev[color] ?? { items: [] };
-      return { ...prev, [color]: { items: [...cur.items, ...accepted] } };
+      const cur = prev[color] ?? { items: [], defaultId: null };
+      const merged = [...cur.items, ...accepted];
+      // Auto-set default to first image ever added.
+      const defaultId = cur.defaultId ?? merged[0]?.id ?? null;
+      return { ...prev, [color]: { items: merged, defaultId } };
     });
   };
 
@@ -282,10 +288,17 @@ const ProductVariantsEditor = forwardRef<
       if (!cur) return prev;
       const removed = cur.items.find((it) => it.id === id);
       if (removed?.kind === "pending") URL.revokeObjectURL(removed.previewUrl);
-      return {
-        ...prev,
-        [color]: { items: cur.items.filter((it) => it.id !== id) },
-      };
+      const items = cur.items.filter((it) => it.id !== id);
+      // If the removed image was the default, promote the new first image.
+      const defaultId = cur.defaultId === id ? (items[0]?.id ?? null) : cur.defaultId;
+      return { ...prev, [color]: { items, defaultId } };
+    });
+
+  const setDefaultImage = (color: string, id: string) =>
+    setColorImages((prev) => {
+      const cur = prev[color];
+      if (!cur) return prev;
+      return { ...prev, [color]: { ...cur, defaultId: id } };
     });
 
   // Move an image one slot earlier (dir -1) or later (dir +1) — its rank.
@@ -298,7 +311,7 @@ const ProductVariantsEditor = forwardRef<
       if (idx < 0 || next < 0 || next >= cur.items.length) return prev;
       const items = [...cur.items];
       [items[idx], items[next]] = [items[next], items[idx]];
-      return { ...prev, [color]: { items } };
+      return { ...prev, [color]: { ...cur, items } };
     });
 
   const clearColor = (color: string) =>
@@ -308,7 +321,7 @@ const ProductVariantsEditor = forwardRef<
       for (const it of cur.items) {
         if (it.kind === "pending") URL.revokeObjectURL(it.previewUrl);
       }
-      return { ...prev, [color]: { items: [] } };
+      return { ...prev, [color]: { items: [], defaultId: null } };
     });
 
   useImperativeHandle(
@@ -369,24 +382,30 @@ const ProductVariantsEditor = forwardRef<
         return prices.length > 0 ? Math.min(...prices) : 0;
       },
       commit: async (productId: string) => {
-        // 1. Resolve each color's images in display order — uploading pending
-        //    files in place so the final key list matches the chosen ranking.
+        // 1. Resolve each group's images — uploading pending files, then
+        //    reorder so the chosen default image comes first.
         const finalKeys: Record<string, string[]> = {};
         for (const color of colors) {
-          const ci = colorImages[color] ?? { items: [] };
-          const keys: string[] = [];
+          const ci = colorImages[color] ?? { items: [], defaultId: null };
+          const resolved: { id: string; key: string }[] = [];
           for (const it of ci.items) {
             if (it.kind === "existing") {
-              keys.push(it.key);
+              resolved.push({ id: it.id, key: it.key });
             } else {
               const { objectKey } = await adminApi.uploadProductImage(
                 productId,
                 it.file,
               );
-              keys.push(objectKey);
+              resolved.push({ id: it.id, key: objectKey });
             }
           }
-          finalKeys[color] = keys;
+          // Put the default image first; keep all others in display order.
+          const defaultIdx = resolved.findIndex((r) => r.id === ci.defaultId);
+          if (defaultIdx > 0) {
+            const [def] = resolved.splice(defaultIdx, 1);
+            resolved.unshift(def);
+          }
+          finalKeys[color] = resolved.map((r) => r.key);
         }
 
         // 2. Create or update each row.
@@ -652,7 +671,7 @@ const ProductVariantsEditor = forwardRef<
         <div className="space-y-4 pt-2 border-t border-gray-100">
           <p className="text-xs font-semibold text-gray-700">{isTV ? "Images by size" : "Images by color"}</p>
           {colors.map((color) => {
-            const ci = colorImages[color] ?? { items: [] };
+            const ci = colorImages[color] ?? { items: [], defaultId: null };
             const count = ci.items.length;
             return (
               <div key={color}>
@@ -660,7 +679,7 @@ const ProductVariantsEditor = forwardRef<
                   <p className="text-[11px] font-semibold text-gray-600">{color}</p>
                   {count > 0 && (
                     <span className="text-[11px] text-gray-400">
-                      {count} image{count === 1 ? "" : "s"} · #1 shows first ·{" "}
+                      {count} image{count === 1 ? "" : "s"} · ★ to set default ·{" "}
                       <button
                         type="button"
                         onClick={() => clearColor(color)}
@@ -696,10 +715,15 @@ const ProductVariantsEditor = forwardRef<
                   </label>
                   {ci.items.map((it, idx) => {
                     const src = it.kind === "existing" ? it.url : it.previewUrl;
+                    const isDefault = ci.defaultId === it.id;
                     return (
                       <div
                         key={it.id}
-                        className="aspect-square relative rounded-lg overflow-hidden bg-gray-50 border border-gray-100 group"
+                        className={`aspect-square relative rounded-lg overflow-hidden bg-gray-50 group ${
+                          isDefault
+                            ? "border-2 border-[#129cd3]"
+                            : "border border-gray-100"
+                        }`}
                       >
                         {src ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -713,20 +737,43 @@ const ProductVariantsEditor = forwardRef<
                             saved
                           </div>
                         )}
+                        {/* Position badge */}
                         <span className="absolute top-1 left-1 min-w-[20px] h-5 px-1 rounded-full bg-black/60 text-white text-[10px] font-semibold flex items-center justify-center">
                           {idx + 1}
                         </span>
+                        {/* Default badge */}
+                        {isDefault && (
+                          <span className="absolute bottom-1 left-1 px-1.5 h-4 rounded-full bg-[#129cd3] text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                            Default
+                          </span>
+                        )}
+                        {/* Set default star button */}
+                        <button
+                          type="button"
+                          onClick={() => setDefaultImage(color, it.id)}
+                          disabled={disabled || isDefault}
+                          className={`absolute top-1 right-1 w-6 h-6 rounded-full shadow flex items-center justify-center transition-opacity ${
+                            isDefault
+                              ? "bg-[#129cd3] text-white opacity-100"
+                              : "bg-white/90 text-gray-400 hover:text-yellow-400 opacity-0 group-hover:opacity-100"
+                          }`}
+                          aria-label="Set as default image"
+                          title={isDefault ? "Default image" : "Set as default"}
+                        >
+                          <Star size={11} fill={isDefault ? "currentColor" : "none"} />
+                        </button>
+                        {/* Remove button */}
                         <button
                           type="button"
                           onClick={() => removeImage(color, it.id)}
                           disabled={disabled}
-                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-8 right-1 w-6 h-6 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                           aria-label="Remove image"
                           title="Remove image"
                         >
                           <X size={12} />
                         </button>
-                        <div className="absolute bottom-1 inset-x-1 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute bottom-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
                             onClick={() => moveImage(color, it.id, -1)}
