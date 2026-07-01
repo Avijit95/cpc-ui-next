@@ -989,16 +989,23 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           </section>
 
 
-          {showVariants && (
-            <ProductVariantsEditor
-              ref={variantsRef}
-              productName={form.name}
-              initialVariants={isEdit ? mode.initial.variants : []}
-              disabled={busy}
-              categorySlug={categories.find((c) => c.id === form.categoryId)?.slug}
-              hideRam={isIPhone}
-            />
-          )}
+          {showVariants && (() => {
+            const catSlug = categories.find((c) => c.id === form.categoryId)?.slug;
+            // Key includes catSlug so the editor remounts once categories load,
+            // ensuring isTV/isCamera are correct when initRows/initColorImages run.
+            const editorKey = `${isEdit ? mode.productId : "new"}-${catSlug ?? ""}`;
+            return (
+              <ProductVariantsEditor
+                key={editorKey}
+                ref={variantsRef}
+                productName={form.name}
+                initialVariants={isEdit ? mode.initial.variants : []}
+                disabled={busy}
+                categorySlug={catSlug}
+                hideRam={isIPhone}
+              />
+            );
+          })()}
 
           {/* Coupon attachments — always visible; functional after first save */}
           <div ref={couponSectionRef}>
@@ -1339,6 +1346,8 @@ const TV_SPEC_KEYS = new Set([
   "Screen Size", "Color", "Model Name", "Display Technology", "Resolution",
   "Operating System", "Product Dimensions", "Aspect Ratio", "Refresh Rate",
   "Connectivity Technology", "Special Feature", "Included Components",
+  "Launch Year", "Country of Origin",
+  "Power Consumption", "Line Voltage",
 ]);
 
 const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
@@ -1357,9 +1366,9 @@ const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
     label: "General",
     icon: "📋",
     fields: [
-      { key: "Model Name", placeholder: "e.g. Crystal 4K Neo" },
-      { key: "Color", placeholder: "e.g. Black, Titan Grey" },
       { key: "Operating System", placeholder: "e.g. Tizen OS 8.0, Android TV 11" },
+      { key: "Launch Year", placeholder: "e.g. 2024" },
+      { key: "Country of Origin", placeholder: "e.g. India" },
     ],
   },
   {
@@ -1382,6 +1391,14 @@ const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
     fields: [
       { key: "Special Feature", placeholder: "e.g. Dolby Atmos, HDR10+, Voice Remote" },
       { key: "Included Components", placeholder: "e.g. TV, Remote Control, Power Cable, Stand" },
+    ],
+  },
+  {
+    label: "Power",
+    icon: "⚡",
+    fields: [
+      { key: "Power Consumption", placeholder: "e.g. 289.08 Watts", unit: "Watts" },
+      { key: "Line Voltage", placeholder: "e.g. 100-240 VAC 50-60 Hz" },
     ],
   },
 ];
@@ -1482,14 +1499,14 @@ const add = () => onChange([...rows, { id: uid(), key: "", value: "" }]);
           <input
             value={r.key}
             onChange={(e) => update(r.id, { key: e.target.value })}
-            placeholder="e.g. Display"
+            placeholder=""
             disabled={disabled}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3]"
           />
           <input
             value={r.value}
             onChange={(e) => update(r.id, { value: e.target.value })}
-            placeholder="e.g. 6.8-inch AMOLED, 120Hz"
+            placeholder=""
             disabled={disabled}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3]"
           />
