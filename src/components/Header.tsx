@@ -15,6 +15,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useActiveCategory } from "@/lib/nav/ActiveCategoryProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
@@ -44,11 +45,19 @@ const CATEGORY_SLOTS = 5;
 function NavBar({ navLinks }: { navLinks: NavLink[] }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { activeCategory } = useActiveCategory();
 
   const isNavActive = (href: string) => {
     try {
       const url = new URL(href, "http://x");
-      if (url.pathname !== pathname) return false;
+      if (url.pathname !== pathname) {
+        // On a product detail page (/products/[slug]), match via activeCategory context
+        if (pathname.startsWith("/products/") && activeCategory) {
+          const linkCategory = url.searchParams.get("category");
+          return linkCategory === activeCategory;
+        }
+        return false;
+      }
       const linkCategory = url.searchParams.get("category");
       if (linkCategory) return searchParams.get("category") === linkCategory;
       return !searchParams.get("category");

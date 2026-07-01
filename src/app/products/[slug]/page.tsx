@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
 import { useStock } from "@/lib/stock/StockProvider";
+import { useActiveCategory } from "@/lib/nav/ActiveCategoryProvider";
 import {
   Star,
   Heart,
@@ -228,6 +229,7 @@ export default function ProductDetailPage() {
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
   const { setCart: syncHeaderCart, items: cartItems } = useCart();
   const { stocks, setStock, adjustStock } = useStock();
+  const { setActiveCategory } = useActiveCategory();
   const wishlisted = product ? isWishlisted(product.id) : false;
 
   // Reviews state.
@@ -266,6 +268,9 @@ export default function ProductDetailPage() {
       .then((p) => {
         if (ac.signal.aborted) return;
         setProduct(p);
+        // Set active nav category from breadcrumbs (highlights the correct menu item)
+        const catCrumb = p.breadcrumbs.find((b) => b.slug && b.slug !== "products");
+        setActiveCategory(catCrumb?.slug ?? null);
         // Seed global stock store. If the store already has a lower value from a
         // cart-add adjustment, keep it — the API doesn't deduct cart reservations.
         // Only update if not yet tracked, or if the API reports even less stock.
@@ -299,7 +304,7 @@ export default function ProductDetailPage() {
       .finally(() => {
         if (!ac.signal.aborted) setLoading(false);
       });
-    return () => ac.abort();
+    return () => { ac.abort(); setActiveCategory(null); };
   // stocks/setStock intentionally omitted — they are used only to seed initial
   // values and must not re-trigger the fetch (which resets selectedAttrs).
   // eslint-disable-next-line react-hooks/exhaustive-deps
