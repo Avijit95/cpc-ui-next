@@ -1346,7 +1346,7 @@ const TV_SPEC_KEYS = new Set([
   "Screen Size", "Color", "Model Name", "Display Technology", "Resolution",
   "Operating System", "Product Dimensions", "Aspect Ratio", "Refresh Rate",
   "Connectivity Technology", "Special Feature", "Included Components",
-  "Launch Year", "Country of Origin",
+  "Country of Origin", "Launch Year",
   "Power Consumption", "Line Voltage",
 ]);
 
@@ -1367,7 +1367,6 @@ const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
     icon: "📋",
     fields: [
       { key: "Operating System", placeholder: "e.g. Tizen OS 8.0, Android TV 11" },
-      { key: "Launch Year", placeholder: "e.g. 2024" },
       { key: "Country of Origin", placeholder: "e.g. India" },
     ],
   },

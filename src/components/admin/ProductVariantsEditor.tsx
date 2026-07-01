@@ -53,6 +53,7 @@ type VariantRow = {
   ram: string;
   storage: string;   // ROM
   color: string;
+  launchYear: string; // TV only
   stock: string;
   base: string;      // MRP (struck price); blank = no separate MRP
   price: string;     // selling price (GST-inclusive); blank = use product base price
@@ -125,6 +126,7 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean): Recor
   } else if (isTV) {
     if (r.ram.trim()) a.size = r.ram.trim();
     if (r.storage.trim()) a.model = r.storage.trim();
+    if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
   } else {
     if (r.ram.trim()) a.ram = r.ram.trim();
     if (r.storage.trim()) a.storage = r.storage.trim();
@@ -167,6 +169,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): V
       ram: ramVal,
       storage: storageVal,
       color: v.attributes.color != null ? String(v.attributes.color) : "",
+      launchYear: isTV && v.attributes.launchYear != null ? String(v.attributes.launchYear) : "",
       stock: String(v.stock ?? 0),
       base,
       price,
@@ -247,6 +250,7 @@ const ProductVariantsEditor = forwardRef<
         ram: "",
         storage: "",
         color: "",
+        launchYear: "",
         stock: "0",
         base: "",
         price: "",
@@ -487,7 +491,9 @@ const ProductVariantsEditor = forwardRef<
           <div
             key={r.uid}
             className={`grid grid-cols-2 gap-2 items-end border border-gray-100 rounded-lg p-2.5 ${
-              isCamera || isTV || !hideRam
+              isTV
+                ? "sm:grid-cols-[repeat(10,1fr)_auto]"
+                : isCamera || !hideRam
                 ? "sm:grid-cols-[repeat(9,1fr)_auto]"
                 : "sm:grid-cols-[repeat(8,1fr)_auto]"
             }`}
@@ -549,7 +555,23 @@ const ProductVariantsEditor = forwardRef<
                   className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                 />
               </Field>
-            ) : (
+            ) : null}
+            {isTV && (
+              <Field label="Launch Year">
+                <select
+                  value={r.launchYear}
+                  onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                >
+                  <option value="">— Year —</option>
+                  {Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i).map((y) => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {!isTV && (
               <Field label="ROM">
                 <input
                   value={r.storage}

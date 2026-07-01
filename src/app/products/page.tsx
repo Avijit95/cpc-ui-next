@@ -42,14 +42,13 @@ const PRICE_STEP = 1000;
 
 // Quick-pick ranges; the last bucket reaches PRICE_CEIL and so is open-ended.
 const priceBuckets: { label: string; min: number; max: number }[] = [
-  { label: "₹0 – ₹1K", min: 0, max: 1000 },
-  { label: "₹1K – ₹5K", min: 1000, max: 5000 },
-  { label: "₹5K – ₹10K", min: 5000, max: 10000 },
-  { label: "₹10K – ₹20K", min: 10000, max: 20000 },
-  { label: "₹20K – ₹50K", min: 20000, max: 50000 },
-  { label: "₹50K – ₹1L", min: 50000, max: 100000 },
-  { label: "₹1L – ₹2L", min: 100000, max: 200000 },
-  { label: "₹2L+", min: 200000, max: 200000 },
+  { label: "Below ₹10K", min: 0, max: 10000 },
+  { label: "₹11K – ₹24.9K", min: 11000, max: 24900 },
+  { label: "₹25K – ₹49.9K", min: 25000, max: 49900 },
+  { label: "₹50K – ₹79.9K", min: 50000, max: 79900 },
+  { label: "₹80K – ₹1.349L", min: 80000, max: 134900 },
+  { label: "₹1.35L – ₹2L", min: 135000, max: 200000 },
+  { label: "Above ₹2L", min: 200000, max: 200000 },
 ];
 
 // ── Phone-specific filter groups ──────────────────────────────────────────────
@@ -128,11 +127,6 @@ const TV_FILTER_GROUPS: TvFilterGroup[] = [
       "62.0 – 70.9 in",
       "71.0 in & above",
     ],
-  },
-  {
-    key: "brand",
-    label: "Brand",
-    options: ["Samsung", "Visio World", "TCL", "LG", "Acer"],
   },
   {
     key: "resolution",
@@ -352,44 +346,52 @@ function matchTvConnectivity(val: string, option: string): boolean {
   return false;
 }
 
-function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>): ListCard[] {
-  const sizeOpts  = tvFilters["screenSize"]   ?? [];
-  const brandOpts = tvFilters["brand"]        ?? [];
-  const resOpts   = tvFilters["resolution"]   ?? [];
-  const connOpts  = tvFilters["connectivity"] ?? [];
+function extractTvInches(cached: ReturnType<typeof detailCache.get>): number | null {
+  // 1. Try spec — handles "43 inch", '43"', "108 cm (43 inch)", etc.
+  const raw =
+    cached?.specs["Screen Size"] ??
+    cached?.specs["screen size"] ??
+    cached?.specs["Display Size"];
+  if (raw) {
+    const s = String(raw);
+    // Prefer explicit inch mention
+    const inchMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:inch|in\b|"|″|′)/i);
+    if (inchMatch) return Number(inchMatch[1]);
+    // cm value → convert
+    const cmMatch = s.match(/(\d+(?:\.\d+)?)\s*cm/i);
+    if (cmMatch) return Math.round(Number(cmMatch[1]) / 2.54);
+    const leading = parseSpec(raw);
+    if (leading !== null) return leading;
+  }
+  // 2. Fallback — variant attributes.size ("43", '43"', "43 inch")
+  if (cached?.variants?.length) {
+    for (const v of cached.variants) {
+      const sv = v.attributes["size"];
+      if (!sv) continue;
+      const s = String(sv);
+      const m = s.match(/^(\d+(?:\.\d+)?)/);
+      if (m) return Number(m[1]);
+    }
+  }
+  return null;
+}
 
-  const hasAny = [sizeOpts, brandOpts, resOpts, connOpts].some((a) => a.length > 0);
+function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>): ListCard[] {
+  const sizeOpts = tvFilters["screenSize"]   ?? [];
+  const resOpts  = tvFilters["resolution"]   ?? [];
+  const connOpts = tvFilters["connectivity"] ?? [];
+
+  const hasAny = [sizeOpts, resOpts, connOpts].some((a) => a.length > 0);
   if (!hasAny) return items;
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
 
-    // ── Brand ─────────────────────────────────────────────────────────────────
-    if (brandOpts.length > 0) {
-      if (!brandOpts.some((b) => item.brand?.toLowerCase() === b.toLowerCase())) return false;
-    }
-
     // ── Screen Size ───────────────────────────────────────────────────────────
     if (sizeOpts.length > 0) {
-      const raw =
-        cached?.specs["Screen Size"] ??
-        cached?.specs["screen size"] ??
-        cached?.specs["Display Size"];
-      let inch: number | null = null;
-      if (raw) {
-        const inchMatch = String(raw).match(/(\d+(?:\.\d+)?)\s*(?:inch|"|′|')/i);
-        if (inchMatch) inch = Number(inchMatch[1]);
-        else inch = parseSpec(raw);
-      }
-      // Also try variant size attribute
-      if (inch === null && cached?.variants?.length) {
-        for (const v of cached.variants) {
-          const s = parseSpec(v.attributes["size"]);
-          if (s !== null) { inch = s; break; }
-        }
-      }
+      const inch = extractTvInches(cached);
       if (inch === null) return false;
-      if (!sizeOpts.some((opt) => matchTvScreenSize(inch!, opt))) return false;
+      if (!sizeOpts.some((opt) => matchTvScreenSize(inch, opt))) return false;
     }
 
     // ── Resolution ────────────────────────────────────────────────────────────
@@ -409,8 +411,7 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
         cached?.specs["Connectivity"] ??
         cached?.specs["connectivity"];
       if (!raw) return false;
-      const connStr = String(raw);
-      if (!connOpts.some((opt) => matchTvConnectivity(connStr, opt))) return false;
+      if (!connOpts.some((opt) => matchTvConnectivity(String(raw), opt))) return false;
     }
 
     return true;
@@ -686,7 +687,9 @@ useEffect(() => {
     selectedCategory?.toLowerCase().includes("television") ||
     false;
   const hasTvFilters = Object.values(tvFilters).some((v) => v.length > 0);
-  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || (isTvCategory && hasTvFilters);
+  // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
+  // Pre-fetch detail for TVs as soon as the category is selected (small catalogue, needed for size/res/conn filters).
+  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory;
 
   // When spec filters are active, pre-fetch detail for items not yet cached.
   useEffect(() => {

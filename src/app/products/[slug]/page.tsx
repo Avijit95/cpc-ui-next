@@ -35,6 +35,11 @@ import {
   HardDrive,
   ChevronDown,
   ChevronUp,
+  Monitor,
+  Wifi,
+  Ruler,
+  Zap,
+  Hash,
 } from "lucide-react";
 
 const MAX_REVIEW_PHOTOS = 5;
@@ -110,11 +115,14 @@ type AddState = "idle" | "busy" | "added" | "error";
 
 // ── Variant selection helpers ─────────────────────────────────────────────
 // Attribute keys match the admin variant editor (ROM is stored as `storage`).
-const VARIANT_ATTR_ORDER = ["ram", "storage", "color"];
+const VARIANT_ATTR_ORDER = ["size", "launchYear", "model", "ram", "storage", "color"];
 const VARIANT_ATTR_LABELS: Record<string, string> = {
   ram: "RAM",
   storage: "ROM",
   color: "Color",
+  size: "Display Size",
+  model: "Model No.",
+  launchYear: "Launch Year",
 };
 
 type VariantGroup = { key: string; label: string; values: string[] };
@@ -286,7 +294,10 @@ export default function ProductDetailPage() {
         if (!ac.signal.aborted) setLoading(false);
       });
     return () => ac.abort();
-  }, [slug, variantParam, stocks, setStock]);
+  // stocks/setStock intentionally omitted — they are used only to seed initial
+  // values and must not re-trigger the fetch (which resets selectedAttrs).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, variantParam]);
 
   // Fetch product coupons. Strategy (first success wins):
   //  1. Public /products/:slug/coupons endpoint — anonymous, works for everyone.
@@ -638,6 +649,9 @@ useEffect(() => {
     ? Math.round(((displayBase - displayFinal) / displayBase) * 100)
     : 0;
   const immediateCategory = product.breadcrumbs[product.breadcrumbs.length - 1];
+  const isTvProduct = product.breadcrumbs.some(
+    (b) => b.slug?.toLowerCase().includes("tv") || b.name?.toLowerCase().includes("tv") || b.name?.toLowerCase().includes("television")
+  );
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
   const galleryImages =
     selectedVariant && selectedVariant.images.length > 0
@@ -669,7 +683,12 @@ useEffect(() => {
   ];
   // The currently selected color, looked up across all color keys
   const selectedColor = colorAttrKeys.map((k) => selectedAttrs[k]).find(Boolean) ?? null;
-  const nonColorGroups = variantGroups.filter((g) => !/^colou?r$/i.test(g.key));
+  const nonColorGroups = variantGroups.filter((g) => {
+    if (/^colou?r$/i.test(g.key)) return false;
+    // For TV: hide model (shown in highlights), keep size and launchYear
+    if (isTvProduct && g.key === "model") return false;
+    return true;
+  });
   // Filter to variants whose color (under any color key) matches the selection
   const colorFilteredVariants =
     colorAttrKeys.length > 0 && selectedColor
@@ -956,7 +975,7 @@ useEffect(() => {
               })()}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} selectedVariant={selectedVariant} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1048,53 +1067,108 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {/* Non-color variant cards with pricing */}
+                  {/* Non-color variant selectors */}
                   {nonColorGroups.length > 0 && (
-                    <div className="mb-4">
-                      {selectedVariantLabel && (
-                        <p className="text-sm font-bold text-gray-800 mb-3">
-                          Variant: <span className="font-semibold">{selectedVariantLabel}</span>
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-3">
-                        {colorFilteredVariants.map((v) => {
-                          const label = nonColorGroups
-                            .map((g) => attrValue(v, g.key))
-                            .filter(Boolean)
-                            .join(" + ");
-                          if (!label) return null;
-                          const isActive = nonColorGroups.every(
-                            (g) => selectedAttrs[g.key] === attrValue(v, g.key)
-                          );
-                          const vBase = v.deal ? v.deal.basePrice : v.pricing.basePrice;
-                          const vFinal = v.deal ? v.deal.dealPrice : v.pricing.finalPrice;
-                          const vDiscount =
-                            vBase > vFinal
-                              ? Math.round(((vBase - vFinal) / vBase) * 100)
-                              : 0;
+                    <div className="mb-4 space-y-4">
+                      {isTvProduct ? (
+                        /* TV: per-attribute pill rows (size, model, etc.) */
+                        nonColorGroups.map((g) => {
+                          const selectedVal = selectedAttrs[g.key] ?? "";
                           return (
-                            <button
-                              key={v.id}
-                              type="button"
-                              onClick={() => { setSelectedAttrs(attrsOf(v)); setActiveImageIdx(0); }}
-                              className={`flex flex-col items-start text-left px-3 py-2 rounded-lg border-2 transition-colors min-w-[110px] ${
-                                isActive
-                                  ? "border-[#129cd3] bg-blue-50"
-                                  : "border-gray-200 bg-white hover:border-gray-400"
-                              }`}
-                            >
-                              <span className="text-sm font-semibold text-gray-800 mb-0.5">{label}</span>
-                              {vDiscount > 0 && (
-                                <span className="text-xs text-green-600 font-medium">
-                                  ↓{vDiscount}%{" "}
-                                  <span className="line-through text-gray-400">{formatPrice(vBase)}</span>
-                                </span>
-                              )}
-                              <span className="text-sm font-bold text-gray-900">{formatPrice(vFinal)}</span>
-                            </button>
+                            <div key={g.key}>
+                              <p className="text-sm font-bold text-gray-800 mb-2">
+                                {g.label}:{" "}
+                                <span className="font-semibold">{selectedVal}</span>
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {g.values.map((val) => {
+                                  const isActive = selectedVal === val;
+                                  // Find the variant that would be selected
+                                  const pillVariant =
+                                    findVariant(product.variants, { ...selectedAttrs, [g.key]: val }, variantGroups) ??
+                                    colorFilteredVariants.find((v) => attrValue(v, g.key) === val);
+                                  const pillStockKey = pillVariant ? `v:${pillVariant.id}` : null;
+                                  const pillStock = pillStockKey
+                                    ? (stocks[pillStockKey] ?? pillVariant?.stock ?? 0)
+                                    : 0;
+                                  const outOfStock = pillStock === 0;
+                                  return (
+                                    <div key={val} className="flex flex-col items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={outOfStock}
+                                        onClick={() => selectVariantValue(g.key, val)}
+                                        className={`px-4 py-2 rounded-lg border-2 text-sm font-semibold transition-colors ${
+                                          isActive
+                                            ? "border-[#129cd3] bg-blue-50 text-[#129cd3]"
+                                            : outOfStock
+                                            ? "border-gray-100 text-gray-300 cursor-not-allowed line-through"
+                                            : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
+                                        }`}
+                                      >
+                                        {val}
+                                      </button>
+                                      {!outOfStock && pillStock <= 9 && (
+                                        <span className={`text-[10px] font-semibold ${pillStock <= 4 ? "text-red-500" : "text-orange-500"}`}>
+                                          {pillStock <= 4 ? `${pillStock} left` : "Few left"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           );
-                        })}
-                      </div>
+                        })
+                      ) : (
+                        /* Non-TV: combined variant cards with pricing */
+                        <>
+                          {selectedVariantLabel && (
+                            <p className="text-sm font-bold text-gray-800 mb-3">
+                              Variant: <span className="font-semibold">{selectedVariantLabel}</span>
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-3">
+                            {colorFilteredVariants.map((v) => {
+                              const label = nonColorGroups
+                                .map((g) => attrValue(v, g.key))
+                                .filter(Boolean)
+                                .join(" + ");
+                              if (!label) return null;
+                              const isActive = nonColorGroups.every(
+                                (g) => selectedAttrs[g.key] === attrValue(v, g.key)
+                              );
+                              const vBase = v.deal ? v.deal.basePrice : v.pricing.basePrice;
+                              const vFinal = v.deal ? v.deal.dealPrice : v.pricing.finalPrice;
+                              const vDiscount =
+                                vBase > vFinal
+                                  ? Math.round(((vBase - vFinal) / vBase) * 100)
+                                  : 0;
+                              return (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  onClick={() => { setSelectedAttrs(attrsOf(v)); setActiveImageIdx(0); }}
+                                  className={`flex flex-col items-start text-left px-3 py-2 rounded-lg border-2 transition-colors min-w-[110px] ${
+                                    isActive
+                                      ? "border-[#129cd3] bg-blue-50"
+                                      : "border-gray-200 bg-white hover:border-gray-400"
+                                  }`}
+                                >
+                                  <span className="text-sm font-semibold text-gray-800 mb-0.5">{label}</span>
+                                  {vDiscount > 0 && (
+                                    <span className="text-xs text-green-600 font-medium">
+                                      ↓{vDiscount}%{" "}
+                                      <span className="line-through text-gray-400">{formatPrice(vBase)}</span>
+                                    </span>
+                                  )}
+                                  <span className="text-sm font-bold text-gray-900">{formatPrice(vFinal)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -1738,9 +1812,42 @@ function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
   return rows;
 }
 
-function ProductHighlights({ specs }: { specs: Record<string, unknown> }) {
+function buildTvHighlights(specs: Record<string, unknown>, selectedVariant?: Variant): HighlightRow[] {
+  const s = (key: string) => {
+    const v = specs[key];
+    return v ? String(v).trim() : "";
+  };
+  const rows: HighlightRow[] = [];
+
+  const displayTech = s("Display Technology");
+  if (displayTech) rows.push({ icon: <Monitor size={18} />, label: "Display Technology", text: displayTech, accent: "bg-cyan-100 text-cyan-600" });
+
+  const resolution = s("Resolution");
+  if (resolution) rows.push({ icon: <Smartphone size={18} />, label: "Resolution", text: resolution, accent: "bg-blue-100 text-blue-600" });
+
+  const refreshRate = s("Refresh Rate");
+  if (refreshRate) rows.push({ icon: <Zap size={18} />, label: "Refresh Rate", text: refreshRate, accent: "bg-yellow-100 text-yellow-600" });
+
+  const connectivity = s("Connectivity Technology");
+  if (connectivity) rows.push({ icon: <Wifi size={18} />, label: "Connectivity", text: connectivity, accent: "bg-purple-100 text-purple-600" });
+
+  const dimensions = s("Product Dimensions");
+  if (dimensions) rows.push({ icon: <Ruler size={18} />, label: "Dimensions", text: dimensions, accent: "bg-gray-100 text-gray-500" });
+
+  const power = s("Power Consumption");
+  if (power) rows.push({ icon: <Zap size={18} />, label: "Power Consumption", text: power, accent: "bg-orange-100 text-orange-500" });
+
+  const modelNo = selectedVariant?.attributes?.model
+    ? String(selectedVariant.attributes.model)
+    : "";
+  if (modelNo) rows.push({ icon: <Hash size={18} />, label: "Model No.", text: modelNo, accent: "bg-[#e8f7fc] text-[#129cd3]" });
+
+  return rows;
+}
+
+function ProductHighlights({ specs, isTv, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; selectedVariant?: Variant }) {
   const [expanded, setExpanded] = useState(true);
-  const highlights = buildHighlights(specs);
+  const highlights = isTv ? buildTvHighlights(specs, selectedVariant) : buildHighlights(specs);
 
   if (highlights.length === 0) return null;
 
