@@ -1750,7 +1750,7 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {renderedGroups.map((group) => {
         const meta = SPEC_GROUP_META[group.label] ?? SPEC_GROUP_META["Other Details"];
         return (
