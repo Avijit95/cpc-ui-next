@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
@@ -41,10 +41,6 @@ import {
   Ruler,
   Zap,
   Hash,
-  Info,
-  Volume2,
-  Activity,
-  LayoutGrid,
 } from "lucide-react";
 
 const MAX_REVIEW_PHOTOS = 5;
@@ -1746,27 +1742,6 @@ const SPEC_GROUP_DEFS: { label: string; patterns: string[] }[] = [
   { label: "Dimensions", patterns: ["height", "width", "thickness", "depth", "weight", "dimension", "size", "build", "material"] },
 ];
 
-type SpecGroupMeta = {
-  icon: React.ReactNode;
-  iconBg: string;   // icon bubble colours
-  headerBg: string; // header strip background
-  accentBorder: string; // left-border colour on the card
-};
-
-const SPEC_GROUP_META: Record<string, SpecGroupMeta> = {
-  "General":                 { icon: <Info size={16} />,      iconBg: "bg-slate-200 text-slate-700",    headerBg: "bg-gradient-to-r from-slate-100 to-slate-50",   accentBorder: "border-l-slate-500" },
-  "Display Features":        { icon: <Monitor size={16} />,   iconBg: "bg-blue-100 text-blue-700",      headerBg: "bg-gradient-to-r from-blue-100 to-blue-50",     accentBorder: "border-l-blue-500" },
-  "OS & Processor Features": { icon: <Cpu size={16} />,       iconBg: "bg-purple-100 text-purple-700",  headerBg: "bg-gradient-to-r from-purple-100 to-purple-50", accentBorder: "border-l-purple-500" },
-  "Camera Features":         { icon: <Camera size={16} />,    iconBg: "bg-pink-100 text-pink-700",      headerBg: "bg-gradient-to-r from-pink-100 to-pink-50",     accentBorder: "border-l-pink-500" },
-  "Battery & Power Features":{ icon: <Zap size={16} />,       iconBg: "bg-orange-100 text-orange-700",  headerBg: "bg-gradient-to-r from-orange-100 to-orange-50", accentBorder: "border-l-orange-500" },
-  "Memory & Storage":        { icon: <HardDrive size={16} />, iconBg: "bg-emerald-100 text-emerald-700",headerBg: "bg-gradient-to-r from-emerald-100 to-emerald-50",accentBorder: "border-l-emerald-500" },
-  "Connectivity":            { icon: <Wifi size={16} />,      iconBg: "bg-cyan-100 text-cyan-700",      headerBg: "bg-gradient-to-r from-cyan-100 to-cyan-50",     accentBorder: "border-l-cyan-500" },
-  "Audio":                   { icon: <Volume2 size={16} />,   iconBg: "bg-yellow-100 text-yellow-700",  headerBg: "bg-gradient-to-r from-yellow-100 to-yellow-50", accentBorder: "border-l-yellow-500" },
-  "Sensors":                 { icon: <Activity size={16} />,  iconBg: "bg-teal-100 text-teal-700",      headerBg: "bg-gradient-to-r from-teal-100 to-teal-50",     accentBorder: "border-l-teal-500" },
-  "Dimensions":              { icon: <Ruler size={16} />,     iconBg: "bg-rose-100 text-rose-700",      headerBg: "bg-gradient-to-r from-rose-100 to-rose-50",     accentBorder: "border-l-rose-500" },
-  "Other Details":           { icon: <LayoutGrid size={16} />,iconBg: "bg-gray-100 text-gray-700",      headerBg: "bg-gradient-to-r from-gray-100 to-gray-50",     accentBorder: "border-l-gray-500" },
-};
-
 function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
   const entries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
   if (entries.length === 0) {
@@ -1790,42 +1765,57 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
     ...(other.length > 0 ? [{ label: "Other Details", items: other }] : []),
   ];
 
-  return (
-    <div className="space-y-2">
-      {renderedGroups.map((group) => {
-        const meta = SPEC_GROUP_META[group.label] ?? SPEC_GROUP_META["Other Details"];
-        return (
-          <div
-            key={group.label}
-            className={`rounded-2xl border border-gray-200 overflow-hidden shadow-md border-l-[5px] ${meta.accentBorder}`}
-          >
-            {/* Group header */}
-            <div className={`flex items-center gap-3 px-5 py-3.5 ${meta.headerBg} border-b border-gray-200`}>
-              <span className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${meta.iconBg}`}>
-                {meta.icon}
-              </span>
-              <h3 className="text-sm font-extrabold text-gray-800 tracking-wide">{group.label}</h3>
-              <span className="ml-auto text-[10px] font-bold text-gray-400 bg-white rounded-full px-2 py-0.5 border border-gray-200 shadow-sm">
-                {group.items.length}
-              </span>
-            </div>
+  return <SpecAccordion groups={renderedGroups} />;
+}
 
-            {/* Spec rows — one per row, label left · value right */}
-            <div className="divide-y divide-gray-100">
-              {group.items.map(([key, value], idx) => (
-                <div
-                  key={key}
-                  className={`flex items-start gap-4 px-5 py-3.5 transition-colors hover:bg-[#f0faff] ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
-                    {humanizeSpecKey(key)}
-                  </span>
-                  <span className="text-sm font-semibold text-gray-800 flex-1 leading-snug">
-                    {formatSpecValue(value)}
-                  </span>
-                </div>
-              ))}
-            </div>
+function SpecAccordion({ groups }: { groups: { label: string; items: [string, unknown][] }[] }) {
+  const [openGroups, setOpenGroups] = React.useState<Set<string>>(() => new Set());
+
+  const toggle = (label: string) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-200 shadow-sm">
+      {groups.map((group) => {
+        const isOpen = openGroups.has(group.label);
+        return (
+          <div key={group.label}>
+            {/* Accordion header */}
+            <button
+              type="button"
+              onClick={() => toggle(group.label)}
+              className="w-full flex items-center justify-between px-5 py-4 bg-[#f7f8f8] hover:bg-[#eef0f0] transition-colors text-left"
+            >
+              <span className="text-[15px] font-bold text-gray-900">{group.label}</span>
+              <ChevronDown
+                size={18}
+                className={`text-gray-500 flex-shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {/* Expanded spec rows */}
+            {isOpen && (
+              <div className="divide-y divide-gray-100 bg-white">
+                {group.items.map(([key, value], idx) => (
+                  <div
+                    key={key}
+                    className={`flex items-start gap-6 px-5 py-3.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
+                      {humanizeSpecKey(key)}
+                    </span>
+                    <span className="text-sm font-medium text-gray-800 flex-1 leading-snug">
+                      {formatSpecValue(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
