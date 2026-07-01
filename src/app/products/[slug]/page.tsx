@@ -1787,60 +1787,32 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
     ...(other.length > 0 ? [{ label: "Other Details", items: other }] : []),
   ];
 
-  return <SpecAccordion groups={renderedGroups} />;
-}
-
-function SpecAccordion({ groups }: { groups: { label: string; items: [string, unknown][] }[] }) {
-  const [openGroups, setOpenGroups] = React.useState<Set<string>>(() => new Set());
-
-  const toggle = (label: string) =>
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-200 shadow-sm">
-      {groups.map((group) => {
-        const isOpen = openGroups.has(group.label);
-        return (
-          <div key={group.label}>
-            {/* Accordion header */}
-            <button
-              type="button"
-              onClick={() => toggle(group.label)}
-              className="w-full flex items-center justify-between px-5 py-4 bg-[#f7f8f8] hover:bg-[#eef0f0] transition-colors text-left"
-            >
-              <span className="text-[15px] font-bold text-gray-900">{group.label}</span>
-              <ChevronDown
-                size={18}
-                className={`text-gray-500 flex-shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {/* Expanded spec rows */}
-            {isOpen && (
-              <div className="divide-y divide-gray-100 bg-white">
-                {group.items.map(([key, value], idx) => (
-                  <div
-                    key={key}
-                    className={`flex items-start gap-6 px-5 py-3.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
-                  >
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
-                      {humanizeSpecKey(key)}
-                    </span>
-                    <span className="text-sm font-medium text-gray-800 flex-1 leading-snug">
-                      {formatSpecValue(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+    <div className="divide-y divide-gray-200">
+      {renderedGroups.map((group) => (
+        <div key={group.label}>
+          {/* Group heading */}
+          <div className="px-1 py-3">
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">{group.label}</h3>
           </div>
-        );
-      })}
+          {/* Spec rows */}
+          <div className="divide-y divide-gray-100 mb-2">
+            {group.items.map(([key, value], idx) => (
+              <div
+                key={key}
+                className={`flex items-start gap-6 px-2 py-3 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
+                  {humanizeSpecKey(key)}
+                </span>
+                <span className="text-sm font-medium text-gray-800 flex-1 leading-snug">
+                  {formatSpecValue(value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
