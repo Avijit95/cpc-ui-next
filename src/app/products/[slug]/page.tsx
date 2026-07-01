@@ -214,6 +214,8 @@ export default function ProductDetailPage() {
   const [productCoupons, setProductCoupons] = useState<{ customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } } | null>(null);
   const [customerCouponSelected, setCustomerCouponSelected] = useState(false);
   const [retailCouponSelected, setRetailCouponSelected] = useState(false);
+  const [couponPanelOpen, setCouponPanelOpen] = useState(false);
+  const [viewOfferKey, setViewOfferKey] = useState<"customer" | "retail" | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("Description");
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [thumbOffset, setThumbOffset] = useState(0);
@@ -870,88 +872,6 @@ useEffect(() => {
               )}
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
-              {/* Coupons — interactive checkboxes; applied on Add to Cart / Buy Now */}
-              {(() => {
-                const cartLineCoupons = cartItems.find((l) => l.slug === product.slug)?.availableCoupons ?? null;
-                const coupons = productCoupons ?? cartLineCoupons ?? product.availableCoupons ?? null;
-                if (!coupons?.customer && !coupons?.retail) return null;
-                return (
-                  <div className="mb-5 rounded-xl overflow-hidden border border-green-200 shadow-sm">
-                    {/* Header */}
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-2 flex items-center gap-2 border-b border-green-200">
-                      <Tag size={14} className="text-green-600" />
-                      <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Available Offers</span>
-                    </div>
-                    {/* Coupon rows */}
-                    <div className="bg-white divide-y divide-gray-100">
-                      {coupons.customer && (
-                        <button
-                          type="button"
-                          onClick={() => setCustomerCouponSelected((v) => !v)}
-                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                            customerCouponSelected ? "bg-green-50" : "hover:bg-gray-50"
-                          }`}
-                        >
-                          {/* Checkbox */}
-                          <span className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                            customerCouponSelected ? "bg-green-500 border-green-500" : "border-gray-300"
-                          }`}>
-                            {customerCouponSelected && <Check size={12} className="text-white" strokeWidth={3} />}
-                          </span>
-                          {/* Coupon card */}
-                          <span className="flex-1 min-w-0">
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-bold text-green-600">₹{coupons.customer.value.toLocaleString("en-IN")} OFF</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
-                                customerCouponSelected
-                                  ? "bg-green-100 border-green-300 text-green-700"
-                                  : "bg-gray-100 border-gray-200 text-gray-600"
-                              }`}>
-                                {coupons.customer.name}
-                              </span>
-                            </span>
-                            <span className="text-xs text-gray-400 mt-0.5 block">
-                              {customerCouponSelected ? "✓ Will be applied on Add to Cart" : "Click to apply this coupon"}
-                            </span>
-                          </span>
-                        </button>
-                      )}
-                      {coupons.retail && (
-                        <button
-                          type="button"
-                          onClick={() => setRetailCouponSelected((v) => !v)}
-                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                            retailCouponSelected ? "bg-blue-50" : "hover:bg-gray-50"
-                          }`}
-                        >
-                          <span className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                            retailCouponSelected ? "bg-[#129cd3] border-[#129cd3]" : "border-gray-300"
-                          }`}>
-                            {retailCouponSelected && <Check size={12} className="text-white" strokeWidth={3} />}
-                          </span>
-                          <span className="flex-1 min-w-0">
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-bold text-[#129cd3]">{coupons.retail.value}% OFF</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
-                                retailCouponSelected
-                                  ? "bg-blue-100 border-blue-300 text-blue-700"
-                                  : "bg-gray-100 border-gray-200 text-gray-600"
-                              }`}>
-                                {coupons.retail.name}
-                              </span>
-                              <span className="text-xs text-gray-400">(Verified partners)</span>
-                            </span>
-                            <span className="text-xs text-gray-400 mt-0.5 block">
-                              {retailCouponSelected ? "✓ Will be applied on Add to Cart" : "Click to apply this coupon"}
-                            </span>
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-
               {/* Product Highlights */}
               <ProductHighlights specs={product.specs} isTv={isTvProduct} selectedVariant={selectedVariant} />
 
@@ -1313,6 +1233,139 @@ useEffect(() => {
               {addError && (
                 <p className="text-xs text-red-600 -mt-4 mb-4">{addError}</p>
               )}
+
+              {/* Coupon Section */}
+              {(() => {
+                const cartLineCoupons = cartItems.find((l) => l.slug === product.slug)?.availableCoupons ?? null;
+                const coupons = productCoupons ?? cartLineCoupons ?? product.availableCoupons ?? null;
+                if (!coupons?.customer && !coupons?.retail) return null;
+
+                const couponList: { key: "customer" | "retail"; name: string; label: string; isSelected: boolean; setSelected: () => void }[] = [];
+                if (coupons.customer) couponList.push({
+                  key: "customer",
+                  name: coupons.customer.name,
+                  label: `₹${coupons.customer.value.toLocaleString("en-IN")} OFF`,
+                  isSelected: customerCouponSelected,
+                  setSelected: () => setCustomerCouponSelected((v) => !v),
+                });
+                if (coupons.retail) couponList.push({
+                  key: "retail",
+                  name: coupons.retail.name,
+                  label: `${coupons.retail.value}% OFF`,
+                  isSelected: retailCouponSelected,
+                  setSelected: () => setRetailCouponSelected((v) => !v),
+                });
+
+                const selectedCount = [customerCouponSelected, retailCouponSelected].filter(Boolean).length;
+
+                return (
+                  <div className="mb-6 rounded-xl border border-dashed border-green-400 overflow-hidden bg-green-50/40">
+                    {/* Header row: Available Coupons | dropdown toggle */}
+                    <button
+                      type="button"
+                      onClick={() => { setCouponPanelOpen((v) => !v); setViewOfferKey(null); }}
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-green-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Tag size={15} className="text-green-600 flex-shrink-0" />
+                        <span className="text-sm font-bold text-gray-800">Available Coupons</span>
+                        <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full border border-green-200">
+                          {couponList.length}
+                        </span>
+                        {selectedCount > 0 && (
+                          <span className="text-xs bg-green-500 text-white font-semibold px-2 py-0.5 rounded-full">
+                            {selectedCount} applied
+                          </span>
+                        )}
+                      </div>
+                      <ChevronDown
+                        size={16}
+                        className={`text-gray-500 transition-transform duration-200 ${couponPanelOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+
+                    {/* Dropdown panel */}
+                    {couponPanelOpen && (
+                      <div className="border-t border-green-200 divide-y divide-green-100 bg-white">
+                        {couponList.map((c) => (
+                          <div key={c.key}>
+                            {/* Coupon row */}
+                            <div className="flex items-center justify-between px-4 py-3 gap-3">
+                              {/* Left: name + discount badge */}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="inline-flex items-center gap-1.5 bg-white border border-dashed border-green-400 rounded-lg px-3 py-1.5">
+                                  <span className="text-[11px] font-black tracking-widest text-green-700 uppercase">{c.name}</span>
+                                </span>
+                                <span className="text-xs font-bold text-green-600 whitespace-nowrap">{c.label}</span>
+                                {c.isSelected && (
+                                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-green-600">
+                                    <Check size={11} strokeWidth={3} /> Applied
+                                  </span>
+                                )}
+                              </div>
+                              {/* Right: View Offer */}
+                              <button
+                                type="button"
+                                onClick={() => setViewOfferKey((k) => k === c.key ? null : c.key)}
+                                className="flex-shrink-0 text-xs font-semibold text-[#129cd3] hover:text-[#0e87b5] underline underline-offset-2 whitespace-nowrap flex items-center gap-1 transition-colors"
+                              >
+                                View Offer
+                                <ChevronDown size={12} className={`transition-transform duration-150 ${viewOfferKey === c.key ? "rotate-180" : ""}`} />
+                              </button>
+                            </div>
+
+                            {/* Offer detail panel */}
+                            {viewOfferKey === c.key && (
+                              <div className="mx-4 mb-3 rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 overflow-hidden shadow-sm">
+                                {/* Offer header */}
+                                <div className="flex items-center justify-between px-4 py-2.5 bg-green-600 text-white">
+                                  <div className="flex items-center gap-2">
+                                    <Tag size={13} />
+                                    <span className="text-xs font-black uppercase tracking-widest">{c.name}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewOfferKey(null)}
+                                    className="text-white/80 hover:text-white transition-colors"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                                {/* Offer body */}
+                                <div className="px-4 py-3">
+                                  <p className="text-2xl font-black text-green-700 mb-1">{c.label}</p>
+                                  <p className="text-xs text-gray-600 mb-3">
+                                    {c.key === "customer"
+                                      ? `Flat ${c.label} discount on this product. Applied automatically on checkout.`
+                                      : `${c.label} off for verified retail partners. Applied automatically on checkout.`}
+                                  </p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex items-center gap-2 bg-white border border-dashed border-green-400 rounded-lg px-3 py-2 flex-1">
+                                      <span className="text-sm font-black text-green-700 tracking-widest">{c.name}</span>
+                                      <span className="ml-auto text-[10px] text-gray-400 font-medium">Coupon Code</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => { c.setSelected(); setViewOfferKey(null); setCouponPanelOpen(false); }}
+                                      className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg transition-colors ${
+                                        c.isSelected
+                                          ? "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                                          : "bg-green-600 text-white hover:bg-green-700"
+                                      }`}
+                                    >
+                                      {c.isSelected ? (<><X size={11} /> Remove</>) : (<><Check size={11} /> Apply Coupon</>)}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Trust badges */}
               <div className="grid grid-cols-3 gap-3 pt-5 border-t border-gray-100">
