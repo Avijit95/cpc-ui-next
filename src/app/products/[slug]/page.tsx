@@ -109,8 +109,6 @@ function DealCountdown({ endsAt }: { endsAt: string }) {
   );
 }
 
-const tabs = ["Description", "Specifications", "Reviews"] as const;
-type TabType = (typeof tabs)[number];
 
 type AddState = "idle" | "busy" | "added" | "error";
 
@@ -213,7 +211,8 @@ export default function ProductDetailPage() {
   const [retailCouponSelected, setRetailCouponSelected] = useState(false);
   const [couponPanelOpen, setCouponPanelOpen] = useState(false);
   const [viewOfferKey, setViewOfferKey] = useState<"customer" | "retail" | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>("Description");
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const toggleSection = (name: string) => setOpenSections((p) => ({ ...p, [name]: !p[name] }));
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [thumbOffset, setThumbOffset] = useState(0);
   const THUMB_PER_PAGE = 5;
@@ -825,7 +824,7 @@ useEffect(() => {
               {/* Rating (live from reviewsResp.aggregate) */}
               <button
                 type="button"
-                onClick={() => setActiveTab("Reviews")}
+                onClick={() => setOpenSections((p) => ({ ...p, Reviews: true }))}
                 className="flex items-center gap-2 mb-4 group"
               >
                 <div className="flex">
@@ -1393,36 +1392,57 @@ useEffect(() => {
               </div>
               </div>{/* end product info card */}
 
-          {/* Tabs Section — inside right column */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex border-b border-gray-200">
-              {tabs.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-4 text-sm font-semibold transition-colors ${
-                    activeTab === tab
-                      ? "text-[#129cd3] border-b-2 border-[#129cd3]"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
+          {/* Accordion Section — Description / Specifications / Reviews */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200 shadow-sm">
 
-            <div className="p-6">
-              {activeTab === "Description" && (
-                <div className="prose max-w-none text-gray-600 text-sm leading-relaxed whitespace-pre-line">
+            {/* Description */}
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("Description")}
+                className="w-full flex items-center justify-between px-5 py-4 bg-[#f7f8f8] hover:bg-[#eef0f0] transition-colors text-left"
+              >
+                <span className="text-[15px] font-bold text-gray-900">Description</span>
+                <ChevronDown size={18} className={`text-gray-500 flex-shrink-0 transition-transform duration-200 ${openSections["Description"] ? "rotate-180" : ""}`} />
+              </button>
+              {openSections["Description"] && (
+                <div className="px-5 py-5 prose max-w-none text-gray-600 text-sm leading-relaxed whitespace-pre-line border-t border-gray-100">
                   {product.description || "No description available."}
                 </div>
               )}
+            </div>
 
-              {activeTab === "Specifications" && (
-                <SpecsTable specs={product.specs} />
+            {/* Specifications */}
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("Specifications")}
+                className="w-full flex items-center justify-between px-5 py-4 bg-[#f7f8f8] hover:bg-[#eef0f0] transition-colors text-left"
+              >
+                <span className="text-[15px] font-bold text-gray-900">Specifications</span>
+                <ChevronDown size={18} className={`text-gray-500 flex-shrink-0 transition-transform duration-200 ${openSections["Specifications"] ? "rotate-180" : ""}`} />
+              </button>
+              {openSections["Specifications"] && (
+                <div className="px-5 py-5 border-t border-gray-100">
+                  <SpecsTable specs={product.specs} />
+                </div>
               )}
+            </div>
 
-              {activeTab === "Reviews" && (
+            {/* Reviews */}
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("Reviews")}
+                className="w-full flex items-center justify-between px-5 py-4 bg-[#f7f8f8] hover:bg-[#eef0f0] transition-colors text-left"
+              >
+                <span className="text-[15px] font-bold text-gray-900">
+                  Reviews{reviewsResp?.aggregate.count ? ` (${reviewsResp.aggregate.count})` : ""}
+                </span>
+                <ChevronDown size={18} className={`text-gray-500 flex-shrink-0 transition-transform duration-200 ${openSections["Reviews"] ? "rotate-180" : ""}`} />
+              </button>
+              {openSections["Reviews"] && (
+              <div className="px-5 py-5 border-t border-gray-100">
                 <div className="space-y-5">
                   {/* Aggregate */}
                   <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
@@ -1698,12 +1718,14 @@ useEffect(() => {
                     ))
                   )}
                 </div>
+              </div>
               )}
             </div>
-            </div>
-            </div>
-          </div>
-        </div>
+
+          </div>{/* accordion container */}
+        </div>{/* right column flex-1 */}
+      </div>{/* flex row */}
+      </div>{/* max-w-7xl */}
       </main>
       <Footer />
     </>
