@@ -346,33 +346,72 @@ function matchTvConnectivity(val: string, option: string): boolean {
   return false;
 }
 
-function extractTvInches(cached: ReturnType<typeof detailCache.get>): number | null {
-  // 1. Try spec — handles "43 inch", '43"', "108 cm (43 inch)", etc.
-  const raw =
-    cached?.specs["Screen Size"] ??
-    cached?.specs["screen size"] ??
-    cached?.specs["Display Size"];
-  if (raw) {
-    const s = String(raw);
-    // Prefer explicit inch mention
-    const inchMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:inch|in\b|"|″|′)/i);
+function extractTvInches(cached: ReturnType<typeof detailCache.get>, productName?: string): number | null {
+  // Helper: try to parse inches out of a raw string value
+  const parseInchStr = (s: string): number | null => {
+    const inchMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:inch(?:es)?|in\b|"|″|′)/i);
     if (inchMatch) return Number(inchMatch[1]);
-    // cm value → convert
     const cmMatch = s.match(/(\d+(?:\.\d+)?)\s*cm/i);
     if (cmMatch) return Math.round(Number(cmMatch[1]) / 2.54);
+    return null;
+  };
+
+  // 1. Check well-known spec keys first
+  const knownKeys = [
+    "Screen Size", "screen size", "Display Size", "display size",
+    "Screen size", "Diagonal Screen Size", "screenSize", "TV Size",
+    "Screen", "display", "Display",
+  ];
+  for (const key of knownKeys) {
+    const raw = cached?.specs[key];
+    if (!raw) continue;
+    const s = String(raw);
+    const result = parseInchStr(s);
+    if (result !== null) return result;
+    // Last try: leading number (common when value is just "43")
     const leading = parseSpec(raw);
-    if (leading !== null) return leading;
+    if (leading !== null && leading >= 20 && leading <= 120) return leading;
   }
-  // 2. Fallback — variant attributes.size ("43", '43"', "43 inch")
-  if (cached?.variants?.length) {
-    for (const v of cached.variants) {
-      const sv = v.attributes["size"];
-      if (!sv) continue;
-      const s = String(sv);
-      const m = s.match(/^(\d+(?:\.\d+)?)/);
-      if (m) return Number(m[1]);
+
+  // 2. Scan ALL spec values for anything that looks like an inch/cm TV size
+  if (cached?.specs) {
+    for (const val of Object.values(cached.specs)) {
+      if (!val) continue;
+      const result = parseInchStr(String(val));
+      if (result !== null && result >= 20 && result <= 120) return result;
     }
   }
+
+  // 3. Variant attributes — check size-related keys, then scan all attributes
+  if (cached?.variants?.length) {
+    for (const v of cached.variants) {
+      const sizeKeys = ["size", "screen_size", "screenSize", "Screen Size", "display_size"];
+      for (const key of sizeKeys) {
+        const sv = v.attributes[key];
+        if (!sv) continue;
+        const s = String(sv);
+        const result = parseInchStr(s);
+        if (result !== null) return result;
+        const m = s.match(/^(\d+(?:\.\d+)?)/);
+        if (m && Number(m[1]) >= 20 && Number(m[1]) <= 120) return Number(m[1]);
+      }
+      // Scan all variant attributes
+      for (const val of Object.values(v.attributes)) {
+        if (!val) continue;
+        const result = parseInchStr(String(val));
+        if (result !== null && result >= 20 && result <= 120) return result;
+      }
+    }
+  }
+
+  // 4. Product name fallback — e.g. "Samsung 43 Inch TV", 'TCL 55" TV'
+  if (productName) {
+    const result = parseInchStr(productName);
+    if (result !== null) return result;
+    const cmMatch = productName.match(/(\d+(?:\.\d+)?)\s*cm/i);
+    if (cmMatch) return Math.round(Number(cmMatch[1]) / 2.54);
+  }
+
   return null;
 }
 
@@ -389,9 +428,24 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
 
     // ── Screen Size ───────────────────────────────────────────────────────────
     if (sizeOpts.length > 0) {
-      const inch = extractTvInches(cached);
-      if (inch === null) return false;
-      if (!sizeOpts.some((opt) => matchTvScreenSize(inch, opt))) return false;
+      const variants = cached?.variants ?? [];
+      if (variants.length > 0) {
+        // Product has size variants — include if ANY variant size matches a selected option
+        const hasMatch = variants.some((v) => {
+          const sv = v.attributes["size"];
+          if (!sv) return false;
+          const m = String(sv).match(/^(\d+(?:\.\d+)?)/);
+          if (!m) return false;
+          const vInch = Number(m[1]);
+          return vInch >= 20 && vInch <= 120 && sizeOpts.some((opt) => matchTvScreenSize(vInch, opt));
+        });
+        if (!hasMatch) return false;
+      } else {
+        // No variants — fall back to spec / name
+        const inch = extractTvInches(cached, item.name);
+        if (inch === null) return false;
+        if (!sizeOpts.some((opt) => matchTvScreenSize(inch, opt))) return false;
+      }
     }
 
     // ── Resolution ────────────────────────────────────────────────────────────
@@ -670,11 +724,25 @@ useEffect(() => {
 
   const rawItems: ListCard[] = data?.items ?? [];
 
-  // Client-side price filter: backend filters by variant MRP (basePrice) not selling price
-  // (finalPrice), so products with MRP outside range but selling price inside range are
-  // incorrectly included/excluded. We filter here using lowestVariantPrice ?? finalPrice.
+  // Client-side price filter applied at the product level.
+  // For variant products we only check the max bound here (using lowestVariantPrice) so
+  // that a product with variants spanning multiple price tiers isn't wrongly excluded when
+  // only its cheapest variant is below minPrice. ProductCardExpander handles per-variant
+  // min/max filtering and hides individual out-of-range variant cards.
   const priceFilteredItems = rawItems.filter((p) => {
-    const price = p.lowestVariantPrice ?? p.finalPrice;
+    const isPriceActive = minPrice > PRICE_FLOOR || maxPrice < PRICE_CEIL;
+    if (!isPriceActive) return true;
+
+    if (p.lowestVariantPrice !== null) {
+      // Variant product: include as long as the cheapest variant doesn't exceed maxPrice.
+      // ProductCardExpander will filter individual variants against minPrice/maxPrice.
+      if (maxPrice < PRICE_CEIL && p.lowestVariantPrice > maxPrice) return false;
+      return true;
+    }
+
+    // Single-price product: apply both bounds.
+    const price = p.finalPrice > 0 ? p.finalPrice : null;
+    if (!price) return true; // unknown price — include
     if (minPrice > PRICE_FLOOR && price < minPrice) return false;
     if (maxPrice < PRICE_CEIL && price > maxPrice) return false;
     return true;
@@ -729,6 +797,19 @@ useEffect(() => {
       : specFiltered;
   const total = data?.total ?? 0;
   const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
+
+  // Build a per-variant filter for TV size so ProductCardExpander shows only matching sizes
+  const tvSizeOpts = tvFilters["screenSize"] ?? [];
+  const tvVariantFilter = isTvCategory && tvSizeOpts.length > 0
+    ? (v: import("@/lib/api").Variant) => {
+        const sv = v.attributes["size"];
+        if (!sv) return true; // no size attribute — show the card
+        const m = String(sv).match(/^(\d+(?:\.\d+)?)/);
+        if (!m) return true;
+        const inch = Number(m[1]);
+        return tvSizeOpts.some((opt) => matchTvScreenSize(inch, opt));
+      }
+    : undefined;
 
   const setPhoneFilter = (key: string, values: string[]) => {
     setPhoneFilters((prev) => ({ ...prev, [key]: values }));
@@ -872,7 +953,29 @@ useEffect(() => {
         </div>
       </CollapsibleSection>
 
-      {/* Rating — collapsible */}
+      {/* Phone-specific filters — shown only for phone category */}
+      {isPhoneCategory && PHONE_FILTER_GROUPS.map((group) => (
+        <FilterSection
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          selected={phoneFilters[group.key] ?? []}
+          onChange={(vals) => setPhoneFilter(group.key, vals)}
+        />
+      ))}
+
+      {/* TV-specific filters — shown only for TV category */}
+      {isTvCategory && TV_FILTER_GROUPS.map((group) => (
+        <FilterSection
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          selected={tvFilters[group.key] ?? []}
+          onChange={(vals) => setTvFilter(group.key, vals)}
+        />
+      ))}
+
+      {/* Rating — always last */}
       <CollapsibleSection label="Rating">
         <div className="space-y-2">
           {ratingOptions.map((r) => (
@@ -905,28 +1008,6 @@ useEffect(() => {
           ))}
         </div>
       </CollapsibleSection>
-
-      {/* Phone-specific filters — shown only for phone category */}
-      {isPhoneCategory && PHONE_FILTER_GROUPS.map((group) => (
-        <FilterSection
-          key={group.key}
-          label={group.label}
-          options={group.options}
-          selected={phoneFilters[group.key] ?? []}
-          onChange={(vals) => setPhoneFilter(group.key, vals)}
-        />
-      ))}
-
-      {/* TV-specific filters — shown only for TV category */}
-      {isTvCategory && TV_FILTER_GROUPS.map((group) => (
-        <FilterSection
-          key={group.key}
-          label={group.label}
-          options={group.options}
-          selected={tvFilters[group.key] ?? []}
-          onChange={(vals) => setTvFilter(group.key, vals)}
-        />
-      ))}
 
       {/* Clear Filters */}
       {(selectedCategory !== null ||
@@ -1078,7 +1159,13 @@ useEffect(() => {
                     <PriceSortedGrid products={items} dir={sortValue === "price-asc" ? "asc" : "desc"} />
                   ) : (
                     items.map((product) => (
-                      <ProductCardExpander key={product.id} product={product} />
+                      <ProductCardExpander
+                        key={product.id}
+                        product={product}
+                        priceMin={minPrice > PRICE_FLOOR ? minPrice : undefined}
+                        priceMax={maxPrice < PRICE_CEIL ? maxPrice : undefined}
+                        variantFilter={tvVariantFilter}
+                      />
                     ))
                   )}
                 </div>

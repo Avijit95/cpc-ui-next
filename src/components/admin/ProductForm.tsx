@@ -1342,6 +1342,8 @@ function PhoneSpecsEditor({
 
 // ── TV-specific structured spec editor ───────────────────────────────────────
 
+const TV_CONNECTIVITY_OPTIONS = ["HDMI", "Wi-Fi", "USB", "AV", "Bluetooth", "Ethernet", "RF"] as const;
+
 const TV_SPEC_KEYS = new Set([
   "Screen Size", "Color", "Model Name", "Display Technology", "Resolution",
   "Operating System", "Product Dimensions", "Aspect Ratio", "Refresh Rate",
@@ -1427,6 +1429,45 @@ function TvSpecsEditor({
     onChange([...rows.filter((r) => TV_SPEC_KEYS.has(r.key)), ...next]);
   };
 
+  // Parse "Connectivity Technology" value into a Set of checked options
+  const connRaw = get("Connectivity Technology");
+  const connChecked = new Set<string>(
+    TV_CONNECTIVITY_OPTIONS.filter((opt) => {
+      const v = connRaw.toLowerCase();
+      if (opt === "HDMI") return v.includes("hdmi");
+      if (opt === "Wi-Fi") return v.includes("wi-fi") || v.includes("wifi");
+      if (opt === "USB") return v.includes("usb");
+      if (opt === "AV") return v.includes(" av") || v.startsWith("av");
+      if (opt === "Bluetooth") return v.includes("bluetooth");
+      if (opt === "Ethernet") return v.includes("ethernet") || v.includes("lan");
+      if (opt === "RF") return v.includes(" rf") || v.startsWith("rf") || v.includes("coaxial") || v.includes("antenna");
+      return false;
+    })
+  );
+
+  const toggleConnectivity = (opt: string) => {
+    const next = new Set<string>(connChecked);
+    if (next.has(opt)) next.delete(opt); else next.add(opt);
+    // Rebuild value in fixed order, then append any leftover text not in our known options
+    const known = TV_CONNECTIVITY_OPTIONS.filter((o) => next.has(o));
+    // Preserve any extra tokens from the existing value that aren't covered by our checkboxes
+    const extras = connRaw.split(",").map((s) => s.trim()).filter((s) => {
+      if (!s) return false;
+      const sl = s.toLowerCase();
+      return !TV_CONNECTIVITY_OPTIONS.some((o) => {
+        if (o === "HDMI") return sl.includes("hdmi");
+        if (o === "Wi-Fi") return sl.includes("wi-fi") || sl.includes("wifi");
+        if (o === "USB") return sl.includes("usb");
+        if (o === "AV") return sl.includes("av");
+        if (o === "Bluetooth") return sl.includes("bluetooth");
+        if (o === "Ethernet") return sl.includes("ethernet") || sl.includes("lan");
+        if (o === "RF") return sl.includes("rf") || sl.includes("coaxial") || sl.includes("antenna");
+        return false;
+      });
+    });
+    set("Connectivity Technology", [...known, ...extras].join(", "));
+  };
+
   return (
     <div className="space-y-4">
       {TV_SPEC_GROUPS.map((group) => (
@@ -1435,6 +1476,46 @@ function TvSpecsEditor({
             <span className="text-base leading-none">{group.icon}</span>
             <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
           </div>
+          {group.label === "Connectivity" ? (
+            <div className="p-3 sm:col-span-2 space-y-3">
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block">
+                Connectivity Technology
+              </label>
+              {/* Checkbox grid */}
+              <div className="flex flex-wrap gap-2">
+                {TV_CONNECTIVITY_OPTIONS.map((opt) => (
+                  <label
+                    key={opt}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium cursor-pointer select-none transition-colors ${
+                      connChecked.has(opt)
+                        ? "border-[#129cd3] bg-[#e8f7fc] text-[#129cd3]"
+                        : "border-gray-200 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
+                    } ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={connChecked.has(opt)}
+                      onChange={() => toggleConnectivity(opt)}
+                      disabled={disabled}
+                      className="sr-only"
+                    />
+                    {opt}
+                  </label>
+                ))}
+              </div>
+              {/* Also show/allow free-text for additional details */}
+              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                <input
+                  value={connRaw}
+                  onChange={(e) => set("Connectivity Technology", e.target.value)}
+                  placeholder="e.g. Wi-Fi, Bluetooth 5.0, HDMI, USB"
+                  disabled={disabled}
+                  className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                />
+              </div>
+              <p className="text-[11px] text-gray-400">Checkboxes auto-fill the field. You can also type additional details above.</p>
+            </div>
+          ) : (
           <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
             {group.fields.map((field) => (
               <div key={field.key} className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}>
@@ -1458,6 +1539,7 @@ function TvSpecsEditor({
               </div>
             ))}
           </div>
+          )}
         </div>
       ))}
 

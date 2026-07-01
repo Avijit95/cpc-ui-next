@@ -23,6 +23,33 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Tech-device sketch texture — sits BELOW all page content */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url('/tech-pattern.svg');
+  background-repeat: repeat;
+  background-size: 400px 400px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.12;
+}
+
+/* main and footer stack ABOVE the texture (z-index 2).
+   main's background is transparent so the texture shows through the
+   gaps between cards. Cards/panels carry bg-white which fully blocks
+   the texture in their area — zero transparency on content sections. */
+main {
+  position: relative;
+  z-index: 2;
+  background: transparent !important;
+}
+footer {
+  position: relative;
+  z-index: 2;
+}
+
 * {
   box-sizing: border-box;
 }
