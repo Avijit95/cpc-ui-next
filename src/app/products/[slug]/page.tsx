@@ -1081,7 +1081,10 @@ useEffect(() => {
                                 <span className="font-semibold">{selectedVal}</span>
                               </p>
                               <div className="flex flex-wrap gap-2">
-                                {g.values.map((val) => {
+                                {[...g.values].sort((a, b) => {
+                                  const na = parseFloat(a), nb = parseFloat(b);
+                                  return !isNaN(na) && !isNaN(nb) ? na - nb : a.localeCompare(b);
+                                }).map((val) => {
                                   const isActive = selectedVal === val;
                                   // Find the variant that would be selected
                                   const pillVariant =

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
@@ -60,11 +60,24 @@ type HeaderProps = {
 
 export default function Header({ initialNavLinks }: HeaderProps = {}) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<SuggestItem[]>([]);
   const [showSuggest, setShowSuggest] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const searchBoxRef = useRef<HTMLFormElement>(null);
+
+  const isNavActive = (href: string) => {
+    try {
+      const url = new URL(href, "http://x");
+      if (url.pathname !== pathname) return false;
+      const linkCategory = url.searchParams.get("category");
+      if (linkCategory) return searchParams.get("category") === linkCategory;
+      // HOME or DEALS with no category param
+      return !searchParams.get("category");
+    } catch { return false; }
+  };
   const [navLinks, setNavLinks] = useState<NavLink[]>(
     initialNavLinks
       ? [HOME_LINK, ...initialNavLinks, DEALS_LINK]
@@ -366,21 +379,26 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
       {/* Nav Bar */}
       <nav className="bg-[#129cd3] hidden md:block">
         <div className="max-w-7xl mx-auto flex items-center">
-          {navLinks.map((link) => (
-            <Link
-              key={link.name}
-              href={link.href}
-              className="flex items-center gap-1.5 px-4 py-3 text-white text-sm font-medium hover:bg-[#0e87b5] transition-colors whitespace-nowrap"
-            >
-              {link.name}
-              {link.badge && (
-                <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">
-                  {link.badge}
-                </span>
-              )}
-              {link.hasDropdown && <ChevronDown size={13} />}
-            </Link>
-          ))}
+          {navLinks.map((link) => {
+            const active = isNavActive(link.href);
+            return (
+              <Link
+                key={link.name}
+                href={link.href}
+                className={`flex items-center gap-1.5 px-4 py-3 text-white text-sm font-medium transition-colors whitespace-nowrap ${
+                  active ? "bg-[#0a6d93] font-bold" : "hover:bg-[#0e87b5]"
+                }`}
+              >
+                {link.name}
+                {link.badge && (
+                  <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">
+                    {link.badge}
+                  </span>
+                )}
+                {link.hasDropdown && <ChevronDown size={13} />}
+              </Link>
+            );
+          })}
         </div>
       </nav>
 
