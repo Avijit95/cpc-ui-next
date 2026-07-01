@@ -1713,24 +1713,18 @@ type SpecGroupMeta = {
 };
 
 const SPEC_GROUP_META: Record<string, SpecGroupMeta> = {
-  "General":               { icon: <Info size={14} />,      iconBg: "bg-slate-200 text-slate-600",   headerBg: "bg-slate-50",   accentBorder: "border-l-slate-400" },
-  "Display Features":      { icon: <Monitor size={14} />,   iconBg: "bg-blue-100 text-blue-600",     headerBg: "bg-blue-50",    accentBorder: "border-l-blue-400" },
-  "OS & Processor Features":{ icon: <Cpu size={14} />,      iconBg: "bg-purple-100 text-purple-600", headerBg: "bg-purple-50",  accentBorder: "border-l-purple-400" },
-  "Camera Features":       { icon: <Camera size={14} />,    iconBg: "bg-pink-100 text-pink-600",     headerBg: "bg-pink-50",    accentBorder: "border-l-pink-400" },
-  "Battery & Power Features":{ icon: <Zap size={14} />,     iconBg: "bg-orange-100 text-orange-600", headerBg: "bg-orange-50",  accentBorder: "border-l-orange-400" },
-  "Memory & Storage":      { icon: <HardDrive size={14} />, iconBg: "bg-emerald-100 text-emerald-600",headerBg: "bg-emerald-50",accentBorder: "border-l-emerald-400" },
-  "Connectivity":          { icon: <Wifi size={14} />,      iconBg: "bg-cyan-100 text-cyan-600",     headerBg: "bg-cyan-50",    accentBorder: "border-l-cyan-400" },
-  "Audio":                 { icon: <Volume2 size={14} />,   iconBg: "bg-yellow-100 text-yellow-600", headerBg: "bg-yellow-50",  accentBorder: "border-l-yellow-400" },
-  "Sensors":               { icon: <Activity size={14} />,  iconBg: "bg-teal-100 text-teal-600",     headerBg: "bg-teal-50",    accentBorder: "border-l-teal-400" },
-  "Dimensions":            { icon: <Ruler size={14} />,     iconBg: "bg-rose-100 text-rose-600",     headerBg: "bg-rose-50",    accentBorder: "border-l-rose-400" },
-  "Other Details":         { icon: <LayoutGrid size={14} />,iconBg: "bg-gray-100 text-gray-600",     headerBg: "bg-gray-50",    accentBorder: "border-l-gray-400" },
+  "General":                 { icon: <Info size={16} />,      iconBg: "bg-slate-200 text-slate-700",    headerBg: "bg-gradient-to-r from-slate-100 to-slate-50",   accentBorder: "border-l-slate-500" },
+  "Display Features":        { icon: <Monitor size={16} />,   iconBg: "bg-blue-100 text-blue-700",      headerBg: "bg-gradient-to-r from-blue-100 to-blue-50",     accentBorder: "border-l-blue-500" },
+  "OS & Processor Features": { icon: <Cpu size={16} />,       iconBg: "bg-purple-100 text-purple-700",  headerBg: "bg-gradient-to-r from-purple-100 to-purple-50", accentBorder: "border-l-purple-500" },
+  "Camera Features":         { icon: <Camera size={16} />,    iconBg: "bg-pink-100 text-pink-700",      headerBg: "bg-gradient-to-r from-pink-100 to-pink-50",     accentBorder: "border-l-pink-500" },
+  "Battery & Power Features":{ icon: <Zap size={16} />,       iconBg: "bg-orange-100 text-orange-700",  headerBg: "bg-gradient-to-r from-orange-100 to-orange-50", accentBorder: "border-l-orange-500" },
+  "Memory & Storage":        { icon: <HardDrive size={16} />, iconBg: "bg-emerald-100 text-emerald-700",headerBg: "bg-gradient-to-r from-emerald-100 to-emerald-50",accentBorder: "border-l-emerald-500" },
+  "Connectivity":            { icon: <Wifi size={16} />,      iconBg: "bg-cyan-100 text-cyan-700",      headerBg: "bg-gradient-to-r from-cyan-100 to-cyan-50",     accentBorder: "border-l-cyan-500" },
+  "Audio":                   { icon: <Volume2 size={16} />,   iconBg: "bg-yellow-100 text-yellow-700",  headerBg: "bg-gradient-to-r from-yellow-100 to-yellow-50", accentBorder: "border-l-yellow-500" },
+  "Sensors":                 { icon: <Activity size={16} />,  iconBg: "bg-teal-100 text-teal-700",      headerBg: "bg-gradient-to-r from-teal-100 to-teal-50",     accentBorder: "border-l-teal-500" },
+  "Dimensions":              { icon: <Ruler size={16} />,     iconBg: "bg-rose-100 text-rose-700",      headerBg: "bg-gradient-to-r from-rose-100 to-rose-50",     accentBorder: "border-l-rose-500" },
+  "Other Details":           { icon: <LayoutGrid size={16} />,iconBg: "bg-gray-100 text-gray-700",      headerBg: "bg-gradient-to-r from-gray-100 to-gray-50",     accentBorder: "border-l-gray-500" },
 };
-
-function chunkPairs<T>(arr: T[]): [T, T | undefined][] {
-  const out: [T, T | undefined][] = [];
-  for (let i = 0; i < arr.length; i += 2) out.push([arr[i], arr[i + 1]]);
-  return out;
-}
 
 function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
   const entries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
@@ -1759,47 +1753,35 @@ function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
     <div className="space-y-4">
       {renderedGroups.map((group) => {
         const meta = SPEC_GROUP_META[group.label] ?? SPEC_GROUP_META["Other Details"];
-        const pairs = chunkPairs(group.items);
         return (
           <div
             key={group.label}
-            className={`rounded-xl border border-gray-200 overflow-hidden shadow-sm border-l-4 ${meta.accentBorder}`}
+            className={`rounded-2xl border border-gray-200 overflow-hidden shadow-md border-l-[5px] ${meta.accentBorder}`}
           >
             {/* Group header */}
-            <div className={`flex items-center gap-2.5 px-4 py-2.5 ${meta.headerBg} border-b border-gray-200`}>
-              <span className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${meta.iconBg}`}>
+            <div className={`flex items-center gap-3 px-5 py-3.5 ${meta.headerBg} border-b border-gray-200`}>
+              <span className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${meta.iconBg}`}>
                 {meta.icon}
               </span>
-              <h3 className="text-sm font-bold text-gray-800 tracking-wide">{group.label}</h3>
+              <h3 className="text-sm font-extrabold text-gray-800 tracking-wide">{group.label}</h3>
+              <span className="ml-auto text-[10px] font-bold text-gray-400 bg-white rounded-full px-2 py-0.5 border border-gray-200 shadow-sm">
+                {group.items.length}
+              </span>
             </div>
 
-            {/* Spec rows — two per row on sm+ */}
+            {/* Spec rows — one per row, label left · value right */}
             <div className="divide-y divide-gray-100">
-              {pairs.map(([a, b], rowIdx) => (
+              {group.items.map(([key, value], idx) => (
                 <div
-                  key={rowIdx}
-                  className={`grid grid-cols-1 sm:grid-cols-2 ${rowIdx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}
+                  key={key}
+                  className={`flex items-start gap-4 px-5 py-3.5 transition-colors hover:bg-[#f0faff] ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
                 >
-                  <div className="px-4 py-3 sm:border-r border-gray-100">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-                      {humanizeSpecKey(a[0])}
-                    </p>
-                    <p className="text-sm font-medium text-gray-800 leading-snug">
-                      {formatSpecValue(a[1])}
-                    </p>
-                  </div>
-                  {b ? (
-                    <div className="px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-                        {humanizeSpecKey(b[0])}
-                      </p>
-                      <p className="text-sm font-medium text-gray-800 leading-snug">
-                        {formatSpecValue(b[1])}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="hidden sm:block" />
-                  )}
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
+                    {humanizeSpecKey(key)}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-800 flex-1 leading-snug">
+                    {formatSpecValue(value)}
+                  </span>
                 </div>
               ))}
             </div>
