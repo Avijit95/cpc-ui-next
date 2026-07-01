@@ -1312,10 +1312,14 @@ useEffect(() => {
                               <button
                                 type="button"
                                 onClick={() => setViewOfferKey((k) => k === c.key ? null : c.key)}
-                                className="flex-shrink-0 text-xs font-semibold text-[#129cd3] hover:text-[#0e87b5] underline underline-offset-2 whitespace-nowrap flex items-center gap-1 transition-colors"
+                                className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all duration-200 whitespace-nowrap shadow-sm ${
+                                  viewOfferKey === c.key
+                                    ? "bg-[#129cd3] text-white border-[#129cd3] shadow-[#129cd3]/30 shadow-md"
+                                    : "bg-white text-[#129cd3] border-[#129cd3] hover:bg-[#129cd3] hover:text-white hover:shadow-md hover:shadow-[#129cd3]/25"
+                                }`}
                               >
                                 View Offer
-                                <ChevronDown size={12} className={`transition-transform duration-150 ${viewOfferKey === c.key ? "rotate-180" : ""}`} />
+                                <ChevronDown size={12} className={`transition-transform duration-200 ${viewOfferKey === c.key ? "rotate-180" : ""}`} />
                               </button>
                             </div>
 
