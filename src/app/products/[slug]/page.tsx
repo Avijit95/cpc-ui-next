@@ -1234,21 +1234,21 @@ useEffect(() => {
                 <p className="text-xs text-red-600 -mt-4 mb-4">{addError}</p>
               )}
 
-              {/* Coupon Section */}
+              {/* Coupon Section — always visible */}
               {(() => {
                 const cartLineCoupons = cartItems.find((l) => l.slug === product.slug)?.availableCoupons ?? null;
                 const coupons = productCoupons ?? cartLineCoupons ?? product.availableCoupons ?? null;
-                if (!coupons?.customer && !coupons?.retail) return null;
+                const hasCoupons = !!(coupons?.customer || coupons?.retail);
 
                 const couponList: { key: "customer" | "retail"; name: string; label: string; isSelected: boolean; setSelected: () => void }[] = [];
-                if (coupons.customer) couponList.push({
+                if (coupons?.customer) couponList.push({
                   key: "customer",
                   name: coupons.customer.name,
                   label: `₹${coupons.customer.value.toLocaleString("en-IN")} OFF`,
                   isSelected: customerCouponSelected,
                   setSelected: () => setCustomerCouponSelected((v) => !v),
                 });
-                if (coupons.retail) couponList.push({
+                if (coupons?.retail) couponList.push({
                   key: "retail",
                   name: coupons.retail.name,
                   label: `${coupons.retail.value}% OFF`,
@@ -1263,25 +1263,31 @@ useEffect(() => {
                     {/* Header row: Available Coupons | dropdown toggle */}
                     <button
                       type="button"
-                      onClick={() => { setCouponPanelOpen((v) => !v); setViewOfferKey(null); }}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-green-50 transition-colors"
+                      onClick={() => { if (hasCoupons) { setCouponPanelOpen((v) => !v); setViewOfferKey(null); } }}
+                      className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${hasCoupons ? "hover:bg-green-50 cursor-pointer" : "cursor-default"}`}
                     >
                       <div className="flex items-center gap-2">
                         <Tag size={15} className="text-green-600 flex-shrink-0" />
                         <span className="text-sm font-bold text-gray-800">Available Coupons</span>
-                        <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full border border-green-200">
-                          {couponList.length}
-                        </span>
+                        {hasCoupons ? (
+                          <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full border border-green-200">
+                            {couponList.length}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 font-medium">No offers available</span>
+                        )}
                         {selectedCount > 0 && (
                           <span className="text-xs bg-green-500 text-white font-semibold px-2 py-0.5 rounded-full">
                             {selectedCount} applied
                           </span>
                         )}
                       </div>
-                      <ChevronDown
-                        size={16}
-                        className={`text-gray-500 transition-transform duration-200 ${couponPanelOpen ? "rotate-180" : ""}`}
-                      />
+                      {hasCoupons && (
+                        <ChevronDown
+                          size={16}
+                          className={`text-gray-500 transition-transform duration-200 ${couponPanelOpen ? "rotate-180" : ""}`}
+                        />
+                      )}
                     </button>
 
                     {/* Dropdown panel */}
