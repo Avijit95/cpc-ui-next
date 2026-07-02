@@ -978,10 +978,13 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const catName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
               const isPhone = catSlug.includes("phone") || catName.includes("phone");
               const isTv = catSlug.includes("tv") || catName.includes("tv") || catName.includes("television");
+              const isCamera = catSlug.includes("camera") || catName.includes("camera");
               return isPhone ? (
                 <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} isIPhone={isIPhone} onIsIPhoneChange={setIsIPhone} />
               ) : isTv ? (
                 <TvSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+              ) : isCamera ? (
+                <CameraSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : (
                 <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               );
@@ -1540,6 +1543,246 @@ function TvSpecsEditor({
             ))}
           </div>
           )}
+        </div>
+      ))}
+
+      {/* Additional free-form specs */}
+      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+      </div>
+    </div>
+  );
+}
+
+// ── Camera-specific structured spec editor ────────────────────────────────────
+
+const CAMERA_SPEC_KEYS = new Set([
+  // General
+  "Brand", "Model", "Series", "Camera Type", "Color", "Launch Year",
+  // Sensor
+  "Sensor Type", "Sensor Size", "Effective Resolution (MP)", "Image Processor", "ISO Range",
+  // Lens
+  "Lens Mount", "Lens Included", "Lens Name", "Focal Length", "Aperture",
+  // Display
+  "Screen Size", "Screen Type", "Touchscreen", "Vari-Angle Screen",
+  // Flash
+  "Built-in Flash", "Hot Shoe",
+  // Storage
+  "Memory Card Type", "Card Slots",
+  // Connectivity
+  "Wi-Fi", "Bluetooth", "NFC", "USB Type", "HDMI",
+  // Battery
+  "Battery Model", "Battery Life (Shots)",
+  // Video
+  "Video Resolution", "Video Quality",
+  // Shutter
+  "Shutter Speed", "Self-timer",
+  // Dimensions
+  "Width", "Depth", "Height", "Weight",
+]);
+
+const YES_NO_KEYS = new Set([
+  "Lens Included", "Touchscreen", "Vari-Angle Screen",
+  "Built-in Flash", "Hot Shoe", "Wi-Fi", "Bluetooth", "NFC", "HDMI", "Self-timer",
+]);
+
+type CameraSpecGroup = {
+  label: string;
+  icon: string;
+  fields: { key: string; placeholder?: string; unit?: string }[];
+};
+
+const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
+  {
+    label: "General",
+    icon: "📋",
+    fields: [
+      { key: "Brand", placeholder: "e.g. Sony, Canon, Nikon" },
+      { key: "Model", placeholder: "e.g. Alpha A7 IV" },
+      { key: "Series", placeholder: "e.g. Alpha, EOS, Z" },
+      { key: "Camera Type", placeholder: "e.g. Mirrorless, DSLR, Compact, Bridge" },
+      { key: "Color", placeholder: "e.g. Black, Silver" },
+      { key: "Launch Year", placeholder: "e.g. 2024" },
+    ],
+  },
+  {
+    label: "Sensor",
+    icon: "🔬",
+    fields: [
+      { key: "Sensor Type", placeholder: "e.g. Full-Frame BSI CMOS" },
+      { key: "Sensor Size", placeholder: "e.g. 35.9 × 23.9 mm" },
+      { key: "Effective Resolution (MP)", placeholder: "e.g. 33", unit: "MP" },
+      { key: "Image Processor", placeholder: "e.g. BIONZ XR" },
+      { key: "ISO Range", placeholder: "e.g. 100 – 51200 (expandable to 204800)" },
+    ],
+  },
+  {
+    label: "Lens",
+    icon: "🔭",
+    fields: [
+      { key: "Lens Mount", placeholder: "e.g. Sony E-Mount, Canon RF" },
+      { key: "Lens Included", placeholder: "" },
+      { key: "Lens Name", placeholder: "e.g. 28–70 mm F3.5–5.6 OSS" },
+      { key: "Focal Length", placeholder: "e.g. 28–70 mm", unit: "mm" },
+      { key: "Aperture", placeholder: "e.g. f/1.8 – f/22" },
+    ],
+  },
+  {
+    label: "Display",
+    icon: "🖥️",
+    fields: [
+      { key: "Screen Size", placeholder: "e.g. 3.0 inches", unit: "inches" },
+      { key: "Screen Type", placeholder: "e.g. TFT LCD, OLED" },
+      { key: "Touchscreen", placeholder: "" },
+      { key: "Vari-Angle Screen", placeholder: "" },
+    ],
+  },
+  {
+    label: "Flash",
+    icon: "⚡",
+    fields: [
+      { key: "Built-in Flash", placeholder: "" },
+      { key: "Hot Shoe", placeholder: "" },
+    ],
+  },
+  {
+    label: "Storage",
+    icon: "💾",
+    fields: [
+      { key: "Memory Card Type", placeholder: "e.g. SD / SDHC / SDXC / CFexpress Type A" },
+      { key: "Card Slots", placeholder: "e.g. 2 (Dual slot)" },
+    ],
+  },
+  {
+    label: "Connectivity",
+    icon: "🔌",
+    fields: [
+      { key: "Wi-Fi", placeholder: "" },
+      { key: "Bluetooth", placeholder: "" },
+      { key: "NFC", placeholder: "" },
+      { key: "USB Type", placeholder: "e.g. USB Type-C 3.2 Gen 2" },
+      { key: "HDMI", placeholder: "" },
+    ],
+  },
+  {
+    label: "Battery",
+    icon: "🔋",
+    fields: [
+      { key: "Battery Model", placeholder: "e.g. NP-FZ100" },
+      { key: "Battery Life (Shots)", placeholder: "e.g. 520 shots (LCD)", unit: "shots" },
+    ],
+  },
+  {
+    label: "Shutter",
+    icon: "📸",
+    fields: [
+      { key: "Shutter Speed", placeholder: "e.g. 1/4000 – 30 sec" },
+      { key: "Self-timer", placeholder: "" },
+    ],
+  },
+  {
+    label: "Video",
+    icon: "🎥",
+    fields: [
+      { key: "Video Resolution", placeholder: "e.g. 3840 × 2160" },
+      { key: "Video Quality", placeholder: "e.g. 4K 60fps, Full HD 120fps" },
+    ],
+  },
+  {
+    label: "Dimensions",
+    icon: "📐",
+    fields: [
+      { key: "Width", placeholder: "e.g. 131.3 mm", unit: "mm" },
+      { key: "Depth", placeholder: "e.g. 79.8 mm", unit: "mm" },
+      { key: "Height", placeholder: "e.g. 96.4 mm", unit: "mm" },
+      { key: "Weight", placeholder: "e.g. 658 g", unit: "g" },
+    ],
+  },
+];
+
+function CameraSpecsEditor({
+  rows,
+  onChange,
+  disabled,
+}: {
+  rows: SpecRow[];
+  onChange: (rows: SpecRow[]) => void;
+  disabled: boolean;
+}) {
+  const get = (key: string) => {
+    const val = rows.find((r) => r.key === key)?.value;
+    if (val !== undefined) return val;
+    if (key === "Lens Included") return "No"; // default to No
+    return "";
+  };
+
+  const lensIncluded = get("Lens Included") === "Yes";
+
+  const set = (key: string, value: string) => {
+    const existing = rows.find((r) => r.key === key);
+    if (existing) {
+      onChange(rows.map((r) => (r.id === existing.id ? { ...r, value } : r)));
+    } else {
+      onChange([...rows, { id: uid(), key, value }]);
+    }
+  };
+
+  const extraRows = rows.filter((r) => !CAMERA_SPEC_KEYS.has(r.key));
+  const setExtraRows = (next: SpecRow[]) => {
+    onChange([...rows.filter((r) => CAMERA_SPEC_KEYS.has(r.key)), ...next]);
+  };
+
+  return (
+    <div className="space-y-4">
+      {CAMERA_SPEC_GROUPS.map((group) => (
+        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+            <span className="text-base leading-none">{group.icon}</span>
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
+          </div>
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {group.fields.filter((field) => {
+              if (field.key === "Lens Name" || field.key === "Focal Length") return lensIncluded;
+              return true;
+            }).map((field) => (
+              <div
+                key={field.key}
+                className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
+              >
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  {field.key}
+                </label>
+                {YES_NO_KEYS.has(field.key) ? (
+                  <select
+                    value={get(field.key)}
+                    onChange={(e) => set(field.key, e.target.value)}
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">— Select —</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                ) : (
+                  <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                    <input
+                      value={get(field.key)}
+                      onChange={(e) => set(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      disabled={disabled}
+                      className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    {field.unit && (
+                      <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                        {field.unit}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       ))}
 

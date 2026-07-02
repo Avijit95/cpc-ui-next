@@ -51,9 +51,10 @@ type VariantRow = {
   uid: string;
   existingId?: string;
   ram: string;
-  storage: string;   // ROM
+  storage: string;    // ROM (phone) | Lens Name (camera) | Model No. (TV)
   color: string;
-  launchYear: string; // TV only
+  launchYear: string;   // TV + Camera
+  lensIncluded: string; // Camera only: "Yes" | "No"
   stock: string;
   base: string;      // MRP (struck price); blank = no separate MRP
   price: string;     // selling price (GST-inclusive); blank = use product base price
@@ -105,12 +106,17 @@ const TV_SIZE_PRESETS = ["32\"", "43\"", "50\"", "55\"", "65\"", "75\"", "85\""]
 
 function makeSku(name: string, r: VariantRow, isCamera: boolean): string {
   const base = slugifyPart(name) || "variant";
-  const tail = [r.ram, r.storage, r.color].map(slugifyPart).filter(Boolean).join("-");
+  const parts = isCamera
+    ? [r.ram, r.color, r.launchYear, r.lensIncluded === "Yes" ? r.storage : ""]
+    : [r.ram, r.storage, r.color];
+  const tail = parts.map(slugifyPart).filter(Boolean).join("-");
   return tail ? `${base}-${tail}` : base;
 }
 
-function comboKey(r: VariantRow): string {
-  return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
+function comboKey(r: VariantRow, isCamera: boolean): string {
+  return isCamera
+    ? `${r.ram.trim()}|${r.color.trim()}|${r.launchYear.trim()}|${r.lensIncluded.trim()}`.toLowerCase()
+    : `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
 // For TVs images are grouped by size (ram field); for all others by color.
@@ -122,7 +128,9 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean): Recor
   const a: Record<string, unknown> = {};
   if (isCamera) {
     if (r.ram.trim()) a.model = r.ram.trim();
-    if (r.storage.trim()) a.lens = r.storage.trim();
+    if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
+    a.lensIncluded = r.lensIncluded || "No";
+    if (r.lensIncluded === "Yes" && r.storage.trim()) a.lens = r.storage.trim();
   } else if (isTV) {
     if (r.ram.trim()) a.size = r.ram.trim();
     if (r.storage.trim()) a.model = r.storage.trim();
@@ -163,13 +171,17 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): V
       : isTV
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : (v.attributes.storage != null ? String(v.attributes.storage) : "");
+    const lensIncluded = isCamera
+      ? (v.attributes.lensIncluded != null ? String(v.attributes.lensIncluded) : "No")
+      : "";
     return {
       uid: uid(),
       existingId: v.id,
       ram: ramVal,
       storage: storageVal,
       color: v.attributes.color != null ? String(v.attributes.color) : "",
-      launchYear: isTV && v.attributes.launchYear != null ? String(v.attributes.launchYear) : "",
+      launchYear: (isTV || isCamera) && v.attributes.launchYear != null ? String(v.attributes.launchYear) : "",
+      lensIncluded,
       stock: String(v.stock ?? 0),
       base,
       price,
@@ -251,6 +263,7 @@ const ProductVariantsEditor = forwardRef<
         storage: "",
         color: "",
         launchYear: "",
+        lensIncluded: isCamera ? "No" : "",
         stock: "0",
         base: "",
         price: "",
@@ -334,9 +347,9 @@ const ProductVariantsEditor = forwardRef<
       validate: () => {
         const seen = new Set<string>();
         for (const r of rows) {
-          if (!r.ram.trim() && !r.storage.trim() && !r.color.trim()) {
+          if (!r.ram.trim() && !r.color.trim()) {
             return isCamera
-              ? "Each variant needs at least one of Model No., Lens, or Color."
+              ? "Each variant needs at least one of Model No. or Color."
               : isTV
               ? "Each variant needs at least one of Size, Model No., or Color."
               : "Each variant needs at least one of RAM, ROM, or Color.";
@@ -368,10 +381,10 @@ const ProductVariantsEditor = forwardRef<
               return "MRP must be greater than or equal to the selling price.";
             }
           }
-          const key = comboKey(r);
+          const key = comboKey(r, isCamera);
           if (seen.has(key)) {
             return isCamera
-              ? "Two variants have the same Model No. / Lens / Color combination."
+              ? "Two variants have the same Model No. / Color / Launch Year combination."
               : isTV
               ? "Two variants have the same Size / Model No. / Color combination."
               : "Two variants have the same RAM / ROM / Color combination.";
@@ -448,7 +461,7 @@ const ProductVariantsEditor = forwardRef<
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
           {isCamera
-            ? "Add each Model No. / Lens / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images are shared per color."
             : isTV
             ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
             : hideRam
@@ -493,21 +506,73 @@ const ProductVariantsEditor = forwardRef<
             className={`grid grid-cols-2 gap-2 items-end border border-gray-100 rounded-lg p-2.5 ${
               isTV
                 ? "sm:grid-cols-[repeat(10,1fr)_auto]"
-                : isCamera || !hideRam
+                : isCamera
+                ? r.lensIncluded === "Yes" ? "sm:grid-cols-[repeat(11,1fr)_auto]" : "sm:grid-cols-[repeat(10,1fr)_auto]"
+                : !hideRam
                 ? "sm:grid-cols-[repeat(9,1fr)_auto]"
                 : "sm:grid-cols-[repeat(8,1fr)_auto]"
             }`}
           >
             {isCamera ? (
-              <Field label="Model No.">
-                <input
-                  value={r.ram}
-                  onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
-                  placeholder="e.g. EOS R50"
-                  disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-                />
-              </Field>
+              <>
+                <Field label="Model No.">
+                  <input
+                    value={r.ram}
+                    onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                    placeholder="e.g. EOS R50"
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="Color">
+                  <input
+                    value={r.color}
+                    onChange={(e) => updateRow(r.uid, { color: e.target.value })}
+                    list="variant-color-presets"
+                    placeholder="e.g. Black"
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="Launch Year">
+                  <select
+                    value={r.launchYear}
+                    onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                  >
+                    <option value="">— Year —</option>
+                    {Array.from({ length: new Date().getFullYear() - 2018 }, (_, i) => 2019 + i).map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Lens Included">
+                  <select
+                    value={r.lensIncluded || "No"}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      updateRow(r.uid, { lensIncluded: val, storage: val === "No" ? "" : r.storage });
+                    }}
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                  >
+                    <option value="No">No</option>
+                    <option value="Yes">Yes</option>
+                  </select>
+                </Field>
+                {r.lensIncluded === "Yes" && (
+                  <Field label="Lens Name">
+                    <input
+                      value={r.storage}
+                      onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
+                      placeholder="e.g. 18-55mm f/3.5-5.6"
+                      disabled={disabled}
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    />
+                  </Field>
+                )}
+              </>
             ) : isTV ? (
               <Field label="Size (inch)">
                 <input
@@ -531,21 +596,7 @@ const ProductVariantsEditor = forwardRef<
                 />
               </Field>
             ) : null}
-            {isCamera ? (
-              <Field label="Lens">
-                <select
-                  value={r.storage}
-                  onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
-                  disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
-                >
-                  <option value="">— Select lens —</option>
-                  {LENS_OPTIONS.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              </Field>
-            ) : isTV ? (
+            {isTV ? (
               <Field label="Model No.">
                 <input
                   value={r.storage}
@@ -571,7 +622,7 @@ const ProductVariantsEditor = forwardRef<
                 </select>
               </Field>
             )}
-            {!isTV && (
+            {!isTV && !isCamera && (
               <Field label="ROM">
                 <input
                   value={r.storage}
@@ -583,16 +634,18 @@ const ProductVariantsEditor = forwardRef<
                 />
               </Field>
             )}
-            <Field label="Color">
-              <input
-                value={r.color}
-                onChange={(e) => updateRow(r.uid, { color: e.target.value })}
-                list="variant-color-presets"
-                placeholder="Red"
-                disabled={disabled}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-              />
-            </Field>
+            {!isCamera && (
+              <Field label="Color">
+                <input
+                  value={r.color}
+                  onChange={(e) => updateRow(r.uid, { color: e.target.value })}
+                  list="variant-color-presets"
+                  placeholder="Red"
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
+              </Field>
+            )}
             <Field label="Stock">
               <input
                 type="number"

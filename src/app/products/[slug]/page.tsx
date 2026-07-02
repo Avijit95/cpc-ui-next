@@ -632,6 +632,9 @@ useEffect(() => {
   const isTvProduct = product.breadcrumbs.some(
     (b) => b.slug?.toLowerCase().includes("tv") || b.name?.toLowerCase().includes("tv") || b.name?.toLowerCase().includes("television")
   );
+  const isCameraProduct = product.breadcrumbs.some(
+    (b) => b.slug?.toLowerCase().includes("camera") || b.name?.toLowerCase().includes("camera")
+  );
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
   const galleryImages =
     selectedVariant && selectedVariant.images.length > 0
@@ -873,7 +876,7 @@ useEffect(() => {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} isTv={isTvProduct} selectedVariant={selectedVariant} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} selectedVariant={selectedVariant} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1918,9 +1921,51 @@ function buildTvHighlights(specs: Record<string, unknown>, selectedVariant?: Var
   return rows;
 }
 
-function ProductHighlights({ specs, isTv, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; selectedVariant?: Variant }) {
+function buildCameraHighlights(specs: Record<string, unknown>): HighlightRow[] {
+  const s = (key: string) => {
+    const v = specs[key];
+    return v ? String(v).trim() : "";
+  };
+  const rows: HighlightRow[] = [];
+
+  const lensMount = s("Lens Mount");
+  if (lensMount) rows.push({ icon: <Camera size={18} />, label: "Lens Mount", text: lensMount, accent: "bg-blue-100 text-blue-600" });
+
+  const aspectRatio = s("Aspect Ratio");
+  if (aspectRatio) rows.push({ icon: <Monitor size={18} />, label: "Aspect Ratio", text: aspectRatio, accent: "bg-cyan-100 text-cyan-600" });
+
+  const memCard = s("Memory Card Type");
+  if (memCard) rows.push({ icon: <HardDrive size={18} />, label: "Memory Card", text: memCard, accent: "bg-purple-100 text-purple-600" });
+
+  const connParts: string[] = [];
+  if (s("Wi-Fi") === "Yes") connParts.push("Wi-Fi");
+  if (s("Bluetooth") === "Yes") connParts.push("Bluetooth");
+  if (s("NFC") === "Yes") connParts.push("NFC");
+  const usbType = s("USB Type");
+  if (usbType) connParts.push(`USB ${usbType}`);
+  if (s("HDMI") === "Yes") connParts.push("HDMI");
+  if (connParts.length > 0) rows.push({ icon: <Wifi size={18} />, label: "Connectivity", text: connParts.join(", "), accent: "bg-green-100 text-green-600" });
+
+  const shutterSpeed = s("Shutter Speed");
+  if (shutterSpeed) rows.push({ icon: <Zap size={18} />, label: "Shutter Speed", text: shutterSpeed, accent: "bg-yellow-100 text-yellow-600" });
+
+  const dimParts: string[] = [];
+  const w = s("Width"), d = s("Depth"), h = s("Height");
+  if (w && d && h) dimParts.push(`${w} × ${d} × ${h}`);
+  const wt = s("Weight");
+  if (wt) dimParts.push(wt);
+  if (dimParts.length > 0) rows.push({ icon: <Ruler size={18} />, label: "Dimensions", text: dimParts.join(" · "), accent: "bg-gray-100 text-gray-500" });
+
+  return rows;
+}
+
+function ProductHighlights({ specs, isTv, isCamera, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; selectedVariant?: Variant }) {
   const [expanded, setExpanded] = useState(true);
-  const highlights = isTv ? buildTvHighlights(specs, selectedVariant) : buildHighlights(specs);
+  const highlights = isCamera
+    ? buildCameraHighlights(specs)
+    : isTv
+    ? buildTvHighlights(specs, selectedVariant)
+    : buildHighlights(specs);
 
   if (highlights.length === 0) return null;
 

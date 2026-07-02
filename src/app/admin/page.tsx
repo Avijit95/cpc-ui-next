@@ -11,7 +11,6 @@ import type {
   OrderStatus,
 } from "@/lib/api";
 import {
-  ArrowUpRight,
   ChevronDown,
   Plus,
   ShoppingBag,
@@ -45,6 +44,26 @@ const STATUS_STYLE: Record<OrderStatus, string> = {
 
 function formatPrice(n: number) {
   return "₹" + n.toLocaleString("en-IN");
+}
+
+/** Parse the API label into a display name + optional variant sub-label. */
+function parseStockLabel(
+  label: string,
+  kind: "product" | "variant",
+): { name: string; sub: string | null } {
+  if (kind === "product") return { name: label, sub: null };
+  const slash = label.indexOf(" / ");
+  if (slash === -1) return { name: label, sub: null };
+  const productName = label.slice(0, slash);
+  const variantSlug = label.slice(slash + 3);
+  // Strip the product-name prefix from the variant slug to get just the variant-specific part
+  const productPrefix = productName.toLowerCase().replace(/\s+/g, "-");
+  const withoutPrefix = variantSlug.startsWith(productPrefix + "-")
+    ? variantSlug.slice(productPrefix.length + 1)
+    : variantSlug;
+  // Convert slug to readable uppercase (e.g. "12gb-128gb-midnight" → "12GB 128GB MIDNIGHT")
+  const readable = withoutPrefix.split("-").map((w) => w.toUpperCase()).join(" ");
+  return { name: productName, sub: readable || variantSlug };
 }
 
 function formatDate(iso: string) {
@@ -85,7 +104,7 @@ export default function AdminDashboard() {
     let cancelled = false;
     Promise.all([
       adminApi.getDashboard(),
-      adminApi.listOrders({ limit: 5, offset: 0 }),
+      adminApi.listOrders({ limit: 5, offset: 0, sortBy: "createdAt", sortOrder: "desc" }),
     ])
       .then(([s, o]) => {
         if (cancelled) return;
@@ -253,33 +272,53 @@ export default function AdminDashboard() {
               </div>
             ) : !summary || summary.lowStockAlerts.items.length === 0 ? (
               <p className="text-sm text-gray-500">All stock levels are healthy.</p>
-            ) : (
-              <ul className="space-y-2">
-                {summary.lowStockAlerts.items.map((it) => (
-                  <li
-                    key={`${it.kind}-${it.id}`}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <AlertTriangle
-                      size={12}
-                      className={
-                        it.stock === 0 ? "text-red-500" : "text-amber-500"
-                      }
-                    />
-                    <span className="flex-1 text-gray-700 truncate">
-                      {it.label}
-                    </span>
-                    <span
-                      className={`text-xs font-semibold ${
-                        it.stock === 0 ? "text-red-600" : "text-amber-600"
-                      }`}
-                    >
-                      {it.stock}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            ) : (() => {
+              const visible = summary.lowStockAlerts.items.slice(0, 6);
+              const remaining = summary.lowStockAlerts.items.length - visible.length;
+              return (
+                <ul className="space-y-2">
+                  {visible.map((it) => {
+                    const { name, sub } = parseStockLabel(it.label, it.kind);
+                    return (
+                      <li
+                        key={`${it.kind}-${it.id}`}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <AlertTriangle
+                          size={12}
+                          className={`flex-shrink-0 ${it.stock === 0 ? "text-red-500" : "text-amber-500"}`}
+                        />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-gray-700 truncate font-medium">{name}</span>
+                          {sub && (
+                            <span className="block text-xs text-gray-400 truncate">{sub}</span>
+                          )}
+                        </span>
+                        {it.stock === 0 ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-600 whitespace-nowrap flex-shrink-0">
+                            Out of stock
+                          </span>
+                        ) : (
+                          <span className="text-xs font-semibold text-amber-600 flex-shrink-0">
+                            {it.stock} left
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                  {remaining > 0 && (
+                    <li>
+                      <Link
+                        href="/admin/products"
+                        className="text-xs text-[#129cd3] hover:underline"
+                      >
+                        +{remaining} more →
+                      </Link>
+                    </li>
+                  )}
+                </ul>
+              );
+            })()}
           </div>
         </div>
 

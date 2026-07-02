@@ -1,8 +1,9 @@
 "use client";
 
-import { Bell, Menu, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import React from "react";
 import { useAdminMobile } from "./AdminMobileContext";
+import NotificationBell from "./NotificationBell";
 
 interface AdminHeaderProps {
   title: string;
@@ -49,10 +50,7 @@ export default function AdminHeader({ title, subtitle, actions, searchValue, onS
           />
         </div>
         {/* Bell — order-2 on mobile (same row as search), order-3 on sm+ (rightmost) */}
-        <button className="relative order-2 sm:order-3 w-9 h-9 md:w-10 md:h-10 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center text-gray-600 transition-colors flex-shrink-0">
-          <Bell size={16} />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
-        </button>
+        <NotificationBell />
         {/* Actions — order-3 on mobile (own full-width row, right-aligned), order-2 on sm+ */}
         {actions && (
           <div className="flex items-center gap-2 order-3 sm:order-2 basis-full sm:basis-auto justify-end sm:justify-start">
