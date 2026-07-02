@@ -106,8 +106,13 @@ function comboKey(r: VariantRow, isCamera: boolean): string {
     : `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-// For TVs images are grouped by size (ram field); for all others by color.
-function imageGroupKey(r: VariantRow, isTV: boolean): string {
+// For cameras images are grouped by body / lens; for TVs by size; for all others by color.
+function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean): string {
+  if (isCamera) {
+    return r.lensIncluded === "Yes" && r.storage.trim()
+      ? `Lens: ${r.storage.trim()}`
+      : "Camera";
+  }
   return isTV ? r.ram.trim() : r.color.trim();
 }
 
@@ -180,13 +185,21 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): V
 }
 
 // Variants sharing the same group key share one image set — take the first non-empty.
-// TV: grouped by size; all others: grouped by color.
-function initColorImages(variants: AdminVariant[], isTV: boolean): Record<string, ColorImages> {
+// Camera: grouped by body/lens; TV: grouped by size; all others: grouped by color.
+function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean): Record<string, ColorImages> {
   const map: Record<string, ColorImages> = {};
   for (const v of variants) {
-    const groupKey = isTV
-      ? (v.attributes.size != null ? String(v.attributes.size).trim() : "")
-      : (v.attributes.color != null ? String(v.attributes.color).trim() : "");
+    let groupKey: string;
+    if (isCamera) {
+      const lensName = v.attributes.lens != null ? String(v.attributes.lens).trim() : "";
+      groupKey = v.attributes.lensIncluded === "Yes" && lensName
+        ? `Lens: ${lensName}`
+        : "Camera";
+    } else {
+      groupKey = isTV
+        ? (v.attributes.size != null ? String(v.attributes.size).trim() : "")
+        : (v.attributes.color != null ? String(v.attributes.color).trim() : "");
+    }
     if (!groupKey) continue;
     if (!map[groupKey]) map[groupKey] = { items: [], defaultId: null };
     if (map[groupKey].items.length === 0 && v.imagesObjectKeys.length > 0) {
@@ -211,18 +224,18 @@ const ProductVariantsEditor = forwardRef<
   const isTV = isTvCategory(categorySlug);
   const [rows, setRows] = useState<VariantRow[]>(() => initRows(initialVariants, isCamera, isTV));
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
-    () => initColorImages(initialVariants, isTV),
+    () => initColorImages(initialVariants, isTV, isCamera),
   );
 
-  // Distinct image group keys (size for TV, color otherwise) — drives the image uploaders.
+  // Distinct image group keys (camera: body/lens; TV: size; others: color) — drives the image uploaders.
   const colors = useMemo(() => {
     const out: string[] = [];
     for (const r of rows) {
-      const c = imageGroupKey(r, isTV);
+      const c = imageGroupKey(r, isTV, isCamera);
       if (c && !out.includes(c)) out.push(c);
     }
     return out;
-  }, [rows, isTV]);
+  }, [rows, isTV, isCamera]);
 
   // Revoke blob previews on unmount.
   useEffect(() => {
@@ -421,7 +434,7 @@ const ProductVariantsEditor = forwardRef<
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
-            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV)] ?? [],
+            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera)] ?? [],
           };
           if (r.existingId && initialVariants.some((v) => v.id === r.existingId)) {
             keptIds.add(r.existingId);
@@ -448,7 +461,7 @@ const ProductVariantsEditor = forwardRef<
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
           {isCamera
-            ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images are shared per color."
+            ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images: Camera section for body-only variants, Lens sections for each included lens."
             : isTV
             ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
             : hideRam
@@ -728,10 +741,12 @@ const ProductVariantsEditor = forwardRef<
         </button>
       </div>
 
-      {/* Per-group images (size for TV, color otherwise) */}
+      {/* Per-group images (camera: body/lens; TV: size; others: color) */}
       {colors.length > 0 && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-700">{isTV ? "Images by size" : "Images by color"}</p>
+          <p className="text-xs font-semibold text-gray-700">
+            {isCamera ? "Images by body / lens" : isTV ? "Images by size" : "Images by color"}
+          </p>
           {colors.map((color) => {
             const ci = colorImages[color] ?? { items: [], defaultId: null };
             const count = ci.items.length;

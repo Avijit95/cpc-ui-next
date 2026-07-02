@@ -1019,7 +1019,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             )}
             <CouponAttachments
               productId={isEdit ? mode.productId : (createdId ?? "")}
-              initialCoupons={isEdit ? mode.initial.coupons : {}}
+              initialCoupons={isEdit ? (mode.initial.coupons ?? {}) : {}}
             />
           </div>
         </div>

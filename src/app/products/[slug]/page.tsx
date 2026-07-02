@@ -305,13 +305,10 @@ export default function ProductDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, variantParam]);
 
-  // Seed coupons from the product detail response (availableCoupons field).
-  // If the product already has coupons embedded, use them immediately.
-  // Otherwise try a silent add→peek→remove for authenticated users.
+  // Seed coupons: try embedded → cart line → dedicated public endpoint.
   useEffect(() => {
     if (!product) return;
     let cancelled = false;
-    let tempCartItemId: string | null = null;
 
     type CouponMap = { customer?: { id: string; name: string; value: number }; retail?: { id: string; name: string; value: number } };
 
@@ -333,36 +330,12 @@ export default function ProductDetailPage() {
       return;
     }
 
-    // 3. Silent add→peek→remove (authenticated only).
-    if (status !== "authenticated") return;
-    const variantId = product.variants.length > 0
-      ? (product.variants.find((v) => v.stock > 0) ?? product.variants[0])?.id ?? null
-      : null;
+    // 3. Fetch directly from the dedicated public coupons endpoint (no auth required).
+    catalogApi.getProductCoupons(product.slug)
+      .then((coupons) => { if (!cancelled) apply(coupons as CouponMap); })
+      .catch(() => {});
 
-    cartApi
-      .addItem({ productId: product.id, variantId: variantId ?? undefined, qty: 1 })
-      .then((cartView) => {
-        const line = cartView.items.find(
-          (l) => l.slug === product.slug && l.variantId === variantId,
-        );
-        if (!line) return null;
-        tempCartItemId = line.cartItemId;
-        if (!cancelled) apply(line.availableCoupons as CouponMap);
-        return cartApi.removeItem(line.cartItemId);
-      })
-      .then((updated) => {
-        tempCartItemId = null;
-        if (updated && !cancelled) syncHeaderCart(updated);
-      })
-      .catch(() => { /* OOS or other error — ignore */ });
-
-    return () => {
-      cancelled = true;
-      if (tempCartItemId) {
-        cartApi.removeItem(tempCartItemId).then((v) => syncHeaderCart(v)).catch(() => {});
-        tempCartItemId = null;
-      }
-    };
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
 
@@ -679,10 +652,14 @@ useEffect(() => {
           colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === selectedColor)
         )
       : product.variants;
-  const selectedVariantLabel = nonColorGroups
-    .map((g) => selectedAttrs[g.key])
-    .filter(Boolean)
-    .join(" + ");
+  const selectedVariantLabel = isCameraProduct
+    ? selectedAttrs["lensIncluded"] === "Yes"
+      ? `Body with ${selectedAttrs["lens"] ?? ""}`.trim()
+      : "Body Only"
+    : nonColorGroups
+        .map((g) => selectedAttrs[g.key])
+        .filter(Boolean)
+        .join(" + ");
 
   return (
     <>
@@ -1032,12 +1009,16 @@ useEffect(() => {
                               Variant: <span className="font-semibold">{selectedVariantLabel}</span>
                             </p>
                           )}
-                          <div className="flex flex-wrap gap-3">
+                          <div className={`flex gap-3 ${isCameraProduct ? "overflow-x-auto pb-2 flex-nowrap" : "flex-wrap"}`}>
                             {colorFilteredVariants.map((v) => {
-                              const label = nonColorGroups
-                                .map((g) => attrValue(v, g.key))
-                                .filter(Boolean)
-                                .join(" + ");
+                              const label = isCameraProduct
+                                ? attrValue(v, "lensIncluded") === "Yes"
+                                  ? `Body with ${attrValue(v, "lens")}`.trim()
+                                  : "Body Only"
+                                : nonColorGroups
+                                    .map((g) => attrValue(v, g.key))
+                                    .filter(Boolean)
+                                    .join(" + ");
                               if (!label) return null;
                               const isActive = nonColorGroups.every(
                                 (g) => selectedAttrs[g.key] === attrValue(v, g.key)
@@ -1048,26 +1029,40 @@ useEffect(() => {
                                 vBase > vFinal
                                   ? Math.round(((vBase - vFinal) / vBase) * 100)
                                   : 0;
+                              const vStockKey = `v:${v.id}`;
+                              const vStock = stocks[vStockKey] ?? v.stock ?? 0;
+                              const vOutOfStock = vStock === 0;
                               return (
-                                <button
-                                  key={v.id}
-                                  type="button"
-                                  onClick={() => { setSelectedAttrs(attrsOf(v)); setActiveImageIdx(0); }}
-                                  className={`flex flex-col items-start text-left px-3 py-2 rounded-lg border-2 transition-colors min-w-[110px] ${
-                                    isActive
-                                      ? "border-[#129cd3] bg-blue-50"
-                                      : "border-gray-200 bg-white hover:border-gray-400"
-                                  }`}
-                                >
-                                  <span className="text-sm font-semibold text-gray-800 mb-0.5">{label}</span>
-                                  {vDiscount > 0 && (
-                                    <span className="text-xs text-green-600 font-medium">
-                                      ↓{vDiscount}%{" "}
-                                      <span className="line-through text-gray-400">{formatPrice(vBase)}</span>
+                                <div key={v.id} className="flex flex-col items-center gap-0.5 flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={vOutOfStock}
+                                    onClick={() => { setSelectedAttrs(attrsOf(v)); setActiveImageIdx(0); }}
+                                    className={`flex flex-col items-start text-left px-3 py-2 rounded-lg border-2 transition-colors min-w-[110px] ${
+                                      isActive
+                                        ? "border-[#129cd3] bg-blue-50"
+                                        : vOutOfStock
+                                        ? "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                                        : "border-gray-200 bg-white hover:border-gray-400"
+                                    }`}
+                                  >
+                                    <span className={`text-sm font-semibold mb-0.5 ${vOutOfStock ? "text-gray-400 line-through" : "text-gray-800"}`}>{label}</span>
+                                    {vDiscount > 0 && (
+                                      <span className="text-xs text-green-600 font-medium">
+                                        ↓{vDiscount}%{" "}
+                                        <span className="line-through text-gray-400">{formatPrice(vBase)}</span>
+                                      </span>
+                                    )}
+                                    <span className="text-sm font-bold text-gray-900">{formatPrice(vFinal)}</span>
+                                  </button>
+                                  {vOutOfStock ? (
+                                    <span className="text-[10px] font-semibold text-red-400">Out of stock</span>
+                                  ) : vStock <= 9 ? (
+                                    <span className={`text-[10px] font-semibold ${vStock <= 4 ? "text-red-500" : "text-orange-500"}`}>
+                                      {vStock <= 4 ? `${vStock} left` : "Few left"}
                                     </span>
-                                  )}
-                                  <span className="text-sm font-bold text-gray-900">{formatPrice(vFinal)}</span>
-                                </button>
+                                  ) : null}
+                                </div>
                               );
                             })}
                           </div>

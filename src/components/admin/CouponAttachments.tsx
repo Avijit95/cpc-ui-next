@@ -64,7 +64,7 @@ export default function CouponAttachments({
 
   const [customer, setCustomer] = useState<SlotState>(() => ({
     ...initialSlot,
-    current: initialCoupons.customer
+    current: initialCoupons?.customer
       ? {
           couponId: initialCoupons.customer.id,
           couponName: initialCoupons.customer.name,
@@ -74,7 +74,7 @@ export default function CouponAttachments({
   }));
   const [retail, setRetail] = useState<SlotState>(() => ({
     ...initialSlot,
-    current: initialCoupons.retail
+    current: initialCoupons?.retail
       ? {
           couponId: initialCoupons.retail.id,
           couponName: initialCoupons.retail.name,
