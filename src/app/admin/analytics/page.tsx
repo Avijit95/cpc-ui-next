@@ -53,6 +53,29 @@ function formatDate(iso: string | null | undefined) {
   }
 }
 
+function formatBucket(bucket: string) {
+  try {
+    return new Date(bucket).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return bucket;
+  }
+}
+
+function formatBucketShort(bucket: string) {
+  try {
+    return new Date(bucket).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+    });
+  } catch {
+    return bucket.slice(5, 10);
+  }
+}
+
 function isoStart(daysAgo: number): string {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
@@ -88,8 +111,20 @@ export default function AnalyticsPage() {
   // React 19 set-state-in-effect lint can see only the cancelled-flag pattern.
   useEffect(() => {
     let cancelled = false;
-    const fromIso = new Date(from).toISOString();
-    const toIso = new Date(to).toISOString();
+    setLoading(true);
+    setError(null);
+    const fromDate = from ? new Date(from) : null;
+    const toDate = to ? new Date(to) : null;
+    if (
+      !fromDate || isNaN(fromDate.getTime()) ||
+      !toDate   || isNaN(toDate.getTime())
+    ) {
+      setLoading(false);
+      setError("Please enter a valid date range.");
+      return;
+    }
+    const fromIso = fromDate.toISOString();
+    const toIso = toDate.toISOString();
     const promise =
       tab === "sales"
         ? adminApi
@@ -114,9 +149,6 @@ export default function AnalyticsPage() {
               if (!cancelled) setProducts(r);
             });
     promise
-      .then(() => {
-        if (!cancelled) setError(null);
-      })
       .catch((err: unknown) => {
         if (!cancelled) {
           setError(
@@ -393,18 +425,20 @@ function SalesView({ report }: { report: SalesReport }) {
             {report.buckets.map((b) => (
               <div
                 key={b.bucket}
-                className="flex-1 min-w-[24px] flex flex-col items-center gap-1"
+                className="flex-1 min-w-[40px] h-full flex flex-col items-center gap-1"
               >
-                <div
-                  className="w-full bg-gradient-to-t from-[#129cd3] to-[#8dd4ee] rounded-t"
-                  style={{
-                    height: `${(b.grandTotal / maxBar) * 100}%`,
-                    minHeight: b.grandTotal > 0 ? "4px" : "0",
-                  }}
-                  title={`${b.bucket}: ${formatPrice(b.grandTotal)}`}
-                />
-                <span className="text-[10px] text-gray-400">
-                  {b.bucket.slice(5)}
+                <div className="flex-1 w-full flex items-end">
+                  <div
+                    className="w-full bg-gradient-to-t from-[#129cd3] to-[#8dd4ee] rounded-t"
+                    style={{
+                      height: `${(b.grandTotal / maxBar) * 100}%`,
+                      minHeight: b.grandTotal > 0 ? "4px" : "0",
+                    }}
+                    title={`${formatBucket(b.bucket)}: ${formatPrice(b.grandTotal)}`}
+                  />
+                </div>
+                <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                  {formatBucketShort(b.bucket)}
                 </span>
               </div>
             ))}
@@ -431,7 +465,7 @@ function SalesView({ report }: { report: SalesReport }) {
               {report.buckets.map((b) => (
                 <tr key={b.bucket} className="hover:bg-gray-50">
                   <td className="px-5 py-3 text-gray-700 whitespace-nowrap">
-                    {b.bucket}
+                    {formatBucket(b.bucket)}
                   </td>
                   <td className="px-5 py-3 text-right text-gray-700">
                     {b.orderCount}
@@ -482,6 +516,9 @@ function PartnersView({ report }: { report: PartnersReport }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {report.partners.length === 0 && (
+              <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-gray-400">No partner orders in this date range.</td></tr>
+            )}
             {report.partners.map((p) => (
               <tr key={p.partnerId} className="hover:bg-gray-50">
                 <td className="px-5 py-3">
@@ -528,6 +565,9 @@ function ProductsView({ report }: { report: ProductsReport }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
+            {report.products.length === 0 && (
+              <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-400">No product sales in this date range.</td></tr>
+            )}
             {report.products.map((p) => (
               <tr key={p.productId} className="hover:bg-gray-50">
                 <td className="px-5 py-3 text-gray-700">{p.name}</td>

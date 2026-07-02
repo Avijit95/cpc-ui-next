@@ -795,7 +795,7 @@ export default function AdminProductsPage() {
                     const variantCount = p._count?.variants ?? 0;
                     return (
                       <>
-                      <tr key={p.id} className={`hover:bg-gray-50 ${p.status === "ARCHIVED" ? "bg-red-50/60" : ""}`}>
+                      <tr key={p.id} className={`${p.status === "ARCHIVED" ? "bg-red-100 hover:bg-red-200 opacity-50 hover:opacity-70" : p.status === "ACTIVE" ? "bg-green-100 hover:bg-green-200 font-semibold text-gray-900" : "hover:bg-gray-50"}`}>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
                             <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center flex-shrink-0">
@@ -926,7 +926,7 @@ export default function AdminProductsPage() {
                         </td>
                       </tr>
                       {expandedId === p.id && (
-                        <tr key={`${p.id}-variants`} className="bg-[#f8fbfd]">
+                        <tr key={`${p.id}-variants`} className={`${p.status === "ARCHIVED" ? "bg-red-100 opacity-50 hover:opacity-70" : "bg-[#f8fbfd]"}`}>
                           <td colSpan={12} className="px-4 pb-3 pt-0">
                             {variantsLoading[p.id] ? (
                               <div className="flex items-center gap-2 py-3 text-sm text-gray-400">
