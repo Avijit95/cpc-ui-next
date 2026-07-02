@@ -15,20 +15,7 @@ import type { AdminVariant, ProductImageContentType } from "@/lib/api";
 // Presets are suggestions only (datalist) — the merchant can type anything.
 const RAM_PRESETS = ["4GB", "6GB", "8GB", "12GB", "16GB"];
 const STORAGE_PRESETS = ["64GB", "128GB", "256GB", "512GB", "1TB"];
-const LENS_OPTIONS = [
-  "Body Only",
-  "Kit Lens (18-55mm f/3.5-5.6)",
-  "18-135mm f/3.5-5.6",
-  "18-200mm f/3.5-6.3",
-  "24-70mm f/2.8",
-  "70-200mm f/2.8",
-  "16-35mm f/2.8",
-  "50mm f/1.8",
-  "85mm f/1.8",
-  "100mm f/2.8 Macro",
-  "100-400mm f/4.5-5.6",
-  "150-600mm f/5-6.3",
-];
+
 const COLOR_PRESETS = [
   "Black",
   "White",

@@ -1728,9 +1728,67 @@ function CameraSpecsEditor({
     }
   };
 
-  const extraRows = rows.filter((r) => !CAMERA_SPEC_KEYS.has(r.key));
+  // ── Multi-lens helpers ────────────────────────────────────────────────
+  const lensKey = (i: number, field: "name" | "focal") => {
+    const base = field === "name" ? "Lens Name" : "Focal Length";
+    return i === 0 ? base : `${base} ${i + 1}`;
+  };
+
+  const getLensEntries = (): { name: string; focal: string }[] => {
+    const entries: { name: string; focal: string }[] = [
+      { name: get("Lens Name"), focal: get("Focal Length") },
+    ];
+    for (let i = 2; ; i++) {
+      const nk = `Lens Name ${i}`;
+      const fk = `Focal Length ${i}`;
+      const nRow = rows.find((r) => r.key === nk);
+      const fRow = rows.find((r) => r.key === fk);
+      if (!nRow && !fRow) break;
+      entries.push({ name: nRow?.value ?? "", focal: fRow?.value ?? "" });
+    }
+    return entries;
+  };
+
+  const setLensField = (index: number, field: "name" | "focal", value: string) => {
+    const key = lensKey(index, field);
+    const existing = rows.find((r) => r.key === key);
+    if (existing) {
+      onChange(rows.map((r) => (r.id === existing.id ? { ...r, value } : r)));
+    } else {
+      onChange([...rows, { id: uid(), key, value }]);
+    }
+  };
+
+  const addLens = () => {
+    const next = getLensEntries().length + 1;
+    onChange([
+      ...rows,
+      { id: uid(), key: `Lens Name ${next}`, value: "" },
+      { id: uid(), key: `Focal Length ${next}`, value: "" },
+    ]);
+  };
+
+  const removeLens = (index: number) => {
+    if (index === 0) return;
+    const entries = getLensEntries().filter((_, i) => i !== index);
+    const lensPattern = /^(Lens Name|Focal Length)( \d+)?$/;
+    let updated = rows.filter((r) => !lensPattern.test(r.key));
+    entries.forEach((e, i) => {
+      if (e.name) updated = [...updated, { id: uid(), key: lensKey(i, "name"), value: e.name }];
+      if (e.focal) updated = [...updated, { id: uid(), key: lensKey(i, "focal"), value: e.focal }];
+    });
+    onChange(updated);
+  };
+
+  const lensEntries = getLensEntries();
+  // ─────────────────────────────────────────────────────────────────────
+
+  const isDynamicLensKey = (key: string) =>
+    /^(Lens Name|Focal Length)( \d+)?$/.test(key);
+
+  const extraRows = rows.filter((r) => !CAMERA_SPEC_KEYS.has(r.key) && !isDynamicLensKey(r.key));
   const setExtraRows = (next: SpecRow[]) => {
-    onChange([...rows.filter((r) => CAMERA_SPEC_KEYS.has(r.key)), ...next]);
+    onChange([...rows.filter((r) => CAMERA_SPEC_KEYS.has(r.key) || isDynamicLensKey(r.key)), ...next]);
   };
 
   return (
@@ -1741,48 +1799,150 @@ function CameraSpecsEditor({
             <span className="text-base leading-none">{group.icon}</span>
             <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
           </div>
-          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {group.fields.filter((field) => {
-              if (field.key === "Lens Name" || field.key === "Focal Length") return lensIncluded;
-              return true;
-            }).map((field) => (
-              <div
-                key={field.key}
-                className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
-              >
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                  {field.key}
-                </label>
-                {YES_NO_KEYS.has(field.key) ? (
-                  <select
-                    value={get(field.key)}
-                    onChange={(e) => set(field.key, e.target.value)}
+
+          {group.label === "Lens" ? (
+            <div className="p-3 space-y-3">
+              {/* Static Lens fields (Mount, Included, Aperture) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {group.fields
+                  .filter((f) => f.key !== "Lens Name" && f.key !== "Focal Length")
+                  .map((field) => (
+                    <div key={field.key} className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                        {field.key}
+                      </label>
+                      {YES_NO_KEYS.has(field.key) ? (
+                        <select
+                          value={get(field.key)}
+                          onChange={(e) => set(field.key, e.target.value)}
+                          disabled={disabled}
+                          className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                        >
+                          <option value="">— Select —</option>
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      ) : (
+                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                          <input
+                            value={get(field.key)}
+                            onChange={(e) => set(field.key, e.target.value)}
+                            placeholder={field.placeholder}
+                            disabled={disabled}
+                            className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                          />
+                          {field.unit && (
+                            <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                              {field.unit}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+
+              {/* Multi-lens entries — only visible when Lens Included = Yes */}
+              {lensIncluded && (
+                <div className="space-y-2 pt-1 border-t border-gray-100">
+                  {lensEntries.map((entry, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                      {/* Lens Name */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                          Lens Name{i > 0 ? ` ${i + 1}` : ""}
+                        </label>
+                        <input
+                          value={entry.name}
+                          onChange={(e) => setLensField(i, "name", e.target.value)}
+                          placeholder="e.g. 28–70 mm F3.5–5.6 OSS"
+                          disabled={disabled}
+                          className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                        />
+                      </div>
+                      {/* Focal Length */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                          Focal Length{i > 0 ? ` ${i + 1}` : ""}
+                        </label>
+                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                          <input
+                            value={entry.focal}
+                            onChange={(e) => setLensField(i, "focal", e.target.value)}
+                            placeholder="e.g. 28–70 mm"
+                            disabled={disabled}
+                            className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                          />
+                          <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">mm</span>
+                        </div>
+                      </div>
+                      {/* Remove button (not for first entry) */}
+                      {i > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => removeLens(i)}
+                          disabled={disabled}
+                          className="mb-0.5 w-8 h-9 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      ) : (
+                        <div className="w-8" />
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addLens}
                     disabled={disabled}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    className="flex items-center gap-1.5 text-xs font-semibold text-[#129cd3] hover:text-[#0e87b5] disabled:opacity-40 transition-colors py-1"
                   >
-                    <option value="">— Select —</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                  </select>
-                ) : (
-                  <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                    <input
+                    <Plus size={13} /> Add Lens
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {group.fields.map((field) => (
+                <div
+                  key={field.key}
+                  className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
+                >
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                    {field.key}
+                  </label>
+                  {YES_NO_KEYS.has(field.key) ? (
+                    <select
                       value={get(field.key)}
                       onChange={(e) => set(field.key, e.target.value)}
-                      placeholder={field.placeholder}
                       disabled={disabled}
-                      className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                    />
-                    {field.unit && (
-                      <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
-                        {field.unit}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="">— Select —</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  ) : (
+                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                      <input
+                        value={get(field.key)}
+                        onChange={(e) => set(field.key, e.target.value)}
+                        placeholder={field.placeholder}
+                        disabled={disabled}
+                        className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                      {field.unit && (
+                        <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                          {field.unit}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
 

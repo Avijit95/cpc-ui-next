@@ -66,7 +66,7 @@ function kindMeta(kind: NotifKind) {
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<NotifItem[]>([]);
   const [badge, setBadge] = useState(0);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
@@ -144,9 +144,12 @@ export default function NotificationBell() {
 
   // Initial load + periodic refresh (interval is created only once)
   useEffect(() => {
-    fetchNotifications();
+    const timeout = setTimeout(fetchNotifications, 0);
     const id = setInterval(fetchNotifications, REFRESH_MS);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(id);
+    };
   }, [fetchNotifications]);
 
   // Close on outside click

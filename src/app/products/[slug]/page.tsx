@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { adminApi, cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
+import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
 import type { ProductDetail, Variant, Review, ReviewListResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
