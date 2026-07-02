@@ -111,22 +111,14 @@ export default function AnalyticsPage() {
   // React 19 set-state-in-effect lint can see only the cancelled-flag pattern.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     const fromDate = from ? new Date(from) : null;
     const toDate = to ? new Date(to) : null;
-    if (
-      !fromDate || isNaN(fromDate.getTime()) ||
-      !toDate   || isNaN(toDate.getTime())
-    ) {
-      setLoading(false);
-      setError("Please enter a valid date range.");
-      return;
-    }
-    const fromIso = fromDate.toISOString();
-    const toIso = toDate.toISOString();
+    const fromIso = fromDate && !isNaN(fromDate.getTime()) ? fromDate.toISOString() : null;
+    const toIso = toDate && !isNaN(toDate.getTime()) ? toDate.toISOString() : null;
     const promise =
-      tab === "sales"
+      !fromIso || !toIso
+        ? Promise.reject(new Error("Please enter a valid date range."))
+        : tab === "sales"
         ? adminApi
             .getSalesReport({ from: fromIso, to: toIso, groupBy })
             .then((r) => {
@@ -149,10 +141,17 @@ export default function AnalyticsPage() {
               if (!cancelled) setProducts(r);
             });
     promise
+      .then(() => {
+        if (!cancelled) setError(null);
+      })
       .catch((err: unknown) => {
         if (!cancelled) {
           setError(
-            isApiError(err) ? err.displayMessage : "Could not load report",
+            isApiError(err)
+              ? err.displayMessage
+              : err instanceof Error
+              ? err.message
+              : "Could not load report",
           );
         }
       })
