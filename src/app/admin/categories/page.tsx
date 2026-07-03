@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import DateRangeFilter, {
@@ -429,8 +430,18 @@ export default function AdminCategoriesPage() {
                       <tr key={c.id} className="hover:bg-gray-50">
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center">
-                              <FolderTree size={16} />
+                            <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {c.imageUrl ? (
+                                <Image
+                                  src={c.imageUrl}
+                                  alt={c.name}
+                                  width={36}
+                                  height={36}
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <FolderTree size={16} className="text-[#129cd3]" />
+                              )}
                             </div>
                             <p className="font-semibold text-gray-800">
                               {c.name}

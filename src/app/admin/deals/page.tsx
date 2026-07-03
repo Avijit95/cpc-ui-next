@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Plus,
@@ -221,6 +221,10 @@ export default function AdminDealsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
+  // productId → resolved S3 image URL (fetched lazily after items/picker load)
+  const [productImages, setProductImages] = useState<Record<string, string>>({});
+  const fetchedProductIdsRef = useRef<Set<string>>(new Set());
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
@@ -232,6 +236,57 @@ export default function AdminDealsPage() {
     const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
   }, []);
+
+  const S3_BASE = "https://cpn-uploads.s3.ap-south-1.amazonaws.com";
+
+  // After deals load, fetch admin product details to resolve image URLs.
+  useEffect(() => {
+    const toFetch = [...new Set(items.map((d) => d.product.id))].filter(
+      (id) => !fetchedProductIdsRef.current.has(id),
+    );
+    if (toFetch.length === 0) return;
+    toFetch.forEach((id) => fetchedProductIdsRef.current.add(id));
+    void Promise.allSettled(toFetch.map((id) => adminApi.getProduct(id))).then(
+      (results) => {
+        const map: Record<string, string> = {};
+        results.forEach((r, i) => {
+          if (r.status !== "fulfilled") return;
+          const p = r.value;
+          // Product-level images first, then fall back to first variant image
+          const key =
+            p.images[0] ??
+            p.variants.flatMap((v) => v.imagesObjectKeys)[0];
+          if (key) map[toFetch[i]] = `${S3_BASE}/${key}`;
+        });
+        if (Object.keys(map).length > 0)
+          setProductImages((prev) => ({ ...prev, ...map }));
+      },
+    );
+  }, [items]);
+
+  // After picker results load, resolve their image URLs too.
+  useEffect(() => {
+    const toFetch = pickerResults
+      .map((p) => p.id)
+      .filter((id) => !fetchedProductIdsRef.current.has(id));
+    if (toFetch.length === 0) return;
+    toFetch.forEach((id) => fetchedProductIdsRef.current.add(id));
+    void Promise.allSettled(toFetch.map((id) => adminApi.getProduct(id))).then(
+      (results) => {
+        const map: Record<string, string> = {};
+        results.forEach((r, i) => {
+          if (r.status !== "fulfilled") return;
+          const p = r.value;
+          const key =
+            p.images[0] ??
+            p.variants.flatMap((v) => v.imagesObjectKeys)[0];
+          if (key) map[toFetch[i]] = `${S3_BASE}/${key}`;
+        });
+        if (Object.keys(map).length > 0)
+          setProductImages((prev) => ({ ...prev, ...map }));
+      },
+    );
+  }, [pickerResults]);
 
   const loadItems = useCallback(
     async (status: DealLifecycle, withSpinner: boolean) => {
@@ -831,9 +886,9 @@ export default function AdminDealsPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          {d.product.primaryImageUrl ? (
+                          {productImages[d.product.id] ? (
                             <Image
-                              src={d.product.primaryImageUrl}
+                              src={productImages[d.product.id]}
                               alt={d.product.name}
                               width={36}
                               height={36}
@@ -986,9 +1041,9 @@ export default function AdminDealsPage() {
                     </label>
                     {form.productId ? (
                       <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-                        {form.productImageUrl ? (
+                        {(productImages[form.productId] ?? form.productImageUrl) ? (
                           <Image
-                            src={form.productImageUrl}
+                            src={(productImages[form.productId] ?? form.productImageUrl)!}
                             alt={form.productName}
                             width={48}
                             height={48}
@@ -1370,9 +1425,9 @@ export default function AdminDealsPage() {
                         onClick={() => pickProduct(p)}
                         className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-[#129cd3] hover:bg-[#f0faff] transition-colors text-left"
                       >
-                        {p.primaryImageUrl ? (
+                        {(productImages[p.id] ?? p.primaryImageUrl) ? (
                           <Image
-                            src={p.primaryImageUrl}
+                            src={(productImages[p.id] ?? p.primaryImageUrl)!}
                             alt={p.name}
                             width={48}
                             height={48}

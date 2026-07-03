@@ -43,6 +43,29 @@ function Countdown({ endsAt }: { endsAt: string }) {
   );
 }
 
+const S3_BASE = "https://cpn-uploads.s3.ap-south-1.amazonaws.com";
+
+function dealImageUrl(
+  dealDetails: Record<string, import("@/lib/api").ProductDetail>,
+  slug: string,
+): string | null {
+  const detail = dealDetails[slug];
+  if (!detail) return null;
+  // Product-level image
+  if (detail.images.length > 0) {
+    const img = detail.images[0];
+    return img.url || `${S3_BASE}/${img.objectKey}`;
+  }
+  // Fall back to first variant image (variant products store images per-variant)
+  for (const v of detail.variants) {
+    if (v.images.length > 0) {
+      const img = v.images[0];
+      return img.url || `${S3_BASE}/${img.objectKey}`;
+    }
+  }
+  return null;
+}
+
 function StarRating({ rating }: { rating: number }) {
   return (
     <div className="flex">
@@ -218,9 +241,9 @@ export default function DealsSection() {
                   href={`/products/${deal.product.slug}`}
                   className="relative flex-shrink-0 w-[220px] h-[280px]"
                 >
-                  {deal.product.primaryImageUrl ? (
+                  {dealImageUrl(dealDetails, deal.product.slug) ? (
                     <Image
-                      src={deal.product.primaryImageUrl}
+                      src={dealImageUrl(dealDetails, deal.product.slug)!}
                       alt={deal.product.name}
                       fill
                       sizes="220px"
@@ -386,9 +409,9 @@ export default function DealsSection() {
                       }`}
                     >
                       <div className="relative w-full h-16">
-                        {d.product.primaryImageUrl ? (
+                        {dealImageUrl(dealDetails, d.product.slug) ? (
                           <Image
-                            src={d.product.primaryImageUrl}
+                            src={dealImageUrl(dealDetails, d.product.slug)!}
                             alt={d.product.name}
                             fill
                             sizes="112px"

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import DateRangeFilter, {
@@ -203,6 +204,31 @@ export default function AdminProductsPage() {
   const [busyToggles, setBusyToggles] = useState<
     Record<string, "status" | "bestSeller" | "featured" | undefined>
   >({});
+
+  // productId → resolved S3 image URL (fetched lazily for variant products)
+  const [variantImages, setVariantImages] = useState<Record<string, string>>({});
+  const fetchedImgIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    // Only fetch for products that have no product-level image but have variants
+    const toFetch = items
+      .filter((p) => !p.images[0] && (p._count?.variants ?? 0) > 0 && !fetchedImgIdsRef.current.has(p.id))
+      .map((p) => p.id);
+    if (toFetch.length === 0) return;
+    toFetch.forEach((id) => fetchedImgIdsRef.current.add(id));
+    void Promise.allSettled(toFetch.map((id) => adminApi.getProduct(id))).then(
+      (results) => {
+        const map: Record<string, string> = {};
+        results.forEach((r, i) => {
+          if (r.status !== "fulfilled") return;
+          const key = r.value.variants.flatMap((v) => v.imagesObjectKeys)[0];
+          if (key) map[toFetch[i]] = `https://cpn-uploads.s3.ap-south-1.amazonaws.com/${key}`;
+        });
+        if (Object.keys(map).length > 0)
+          setVariantImages((prev) => ({ ...prev, ...map }));
+      },
+    );
+  }, [items]);
 
   // Variant expand panel
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -794,12 +820,22 @@ export default function AdminProductsPage() {
                       categoryNameById.get(p.categoryId) ?? "—";
                     const variantCount = p._count?.variants ?? 0;
                     return (
-                      <>
-                      <tr key={p.id} className={`${p.status === "ARCHIVED" ? "bg-red-100 hover:bg-red-200 opacity-50 hover:opacity-70" : p.status === "ACTIVE" ? "bg-green-100 hover:bg-green-200 font-semibold text-gray-900" : "hover:bg-gray-50"}`}>
+                      <Fragment key={p.id}>
+                      <tr className={`${p.status === "ARCHIVED" ? "bg-red-100 hover:bg-red-200 opacity-50 hover:opacity-70" : p.status === "ACTIVE" ? "bg-green-100 hover:bg-green-200 font-semibold text-gray-900" : "hover:bg-gray-50"}`}>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] text-[#129cd3] flex items-center justify-center flex-shrink-0">
-                              <Package size={16} />
+                            <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                              {(p.images[0] ? `https://cpn-uploads.s3.ap-south-1.amazonaws.com/${p.images[0]}` : variantImages[p.id]) ? (
+                                <Image
+                                  src={p.images[0] ? `https://cpn-uploads.s3.ap-south-1.amazonaws.com/${p.images[0]}` : variantImages[p.id]!}
+                                  alt={p.name}
+                                  width={36}
+                                  height={36}
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <Package size={16} className="text-[#129cd3]" />
+                              )}
                             </div>
                             <div className="min-w-0">
                               <p className="font-semibold text-gray-800 line-clamp-1 text-sm">
@@ -988,7 +1024,7 @@ export default function AdminProductsPage() {
                           </td>
                         </tr>
                       )}
-                      </>
+                      </Fragment>
                     );
                   })
                 )}
