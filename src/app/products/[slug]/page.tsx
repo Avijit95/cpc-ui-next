@@ -166,7 +166,7 @@ function findVariant(
   groups: VariantGroup[],
 ): Variant | undefined {
   return variants.find((v) =>
-    groups.every((g) => attrValue(v, g.key) === attrs[g.key]),
+    groups.every((g) => attrValue(v, g.key) === (attrs[g.key] ?? "")),
   );
 }
 
@@ -609,14 +609,25 @@ useEffect(() => {
     (b) => b.slug?.toLowerCase().includes("camera") || b.name?.toLowerCase().includes("camera")
   );
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
-  const galleryImages =
-    selectedVariant && selectedVariant.images.length > 0
-      ? selectedVariant.images.map((im, i) => ({
-          objectKey: im.objectKey,
-          url: im.url,
-          sortOrder: i,
-        }))
-      : productImages;
+  const galleryImages = (() => {
+    if (selectedVariant && selectedVariant.images.length > 0) {
+      return selectedVariant.images.map((im, i) => ({ objectKey: im.objectKey, url: im.url, sortOrder: i }));
+    }
+    // Fallback: when selected variant has no images, try same-color variant with images
+    if (selectedVariant) {
+      const colorKeys = [...new Set(product.variants.flatMap((v) => Object.keys(v.attributes)))].filter((k) => /^colou?r$/i.test(k));
+      const selectedColorVal = colorKeys.map((k) => selectedAttrs[k]).find(Boolean);
+      if (selectedColorVal) {
+        const colorVariant = product.variants.find(
+          (v) => colorKeys.some((k) => String(v.attributes[k] ?? "") === selectedColorVal) && v.images.length > 0
+        );
+        if (colorVariant) {
+          return colorVariant.images.map((im, i) => ({ objectKey: im.objectKey, url: im.url, sortOrder: i }));
+        }
+      }
+    }
+    return productImages;
+  })();
   const activeImage = galleryImages[activeImageIdx] ?? galleryImages[0];
   const stockKey = selectedVariant ? `v:${selectedVariant.id}` : `p:${product.slug}`;
   const liveStock = stocks[stockKey] !== undefined

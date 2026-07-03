@@ -106,12 +106,12 @@ function comboKey(r: VariantRow, isCamera: boolean): string {
     : `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-// For cameras images are grouped by body / lens; for TVs by size; for all others by color.
+// For cameras images are grouped by body color / lens; for TVs by size; for all others by color.
 function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean): string {
   if (isCamera) {
-    return r.lensIncluded === "Yes" && r.storage.trim()
-      ? `Lens: ${r.storage.trim()}`
-      : "Camera";
+    if (r.lensIncluded === "Yes" && r.storage.trim()) return `Lens: ${r.storage.trim()}`;
+    const color = r.color.trim();
+    return color ? `Camera: ${color}` : "Camera";
   }
   return isTV ? r.ram.trim() : r.color.trim();
 }
@@ -192,9 +192,12 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
     let groupKey: string;
     if (isCamera) {
       const lensName = v.attributes.lens != null ? String(v.attributes.lens).trim() : "";
-      groupKey = v.attributes.lensIncluded === "Yes" && lensName
-        ? `Lens: ${lensName}`
-        : "Camera";
+      if (v.attributes.lensIncluded === "Yes" && lensName) {
+        groupKey = `Lens: ${lensName}`;
+      } else {
+        const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
+        groupKey = color ? `Camera: ${color}` : "Camera";
+      }
     } else {
       groupKey = isTV
         ? (v.attributes.size != null ? String(v.attributes.size).trim() : "")
@@ -461,7 +464,7 @@ const ProductVariantsEditor = forwardRef<
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
           {isCamera
-            ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images: Camera section for body-only variants, Lens sections for each included lens."
+            ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images: Camera: [Color] sections for body-only variants per color, Lens sections for each included lens."
             : isTV
             ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
             : hideRam
