@@ -343,20 +343,17 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const couponSectionRef = useRef<HTMLDivElement>(null);
 
   // ── Draft auto-save (create mode only) ────────────────────────────────────
-  const [pendingDraft, setPendingDraft] = useState<DraftPayload | null>(null);
+  // Load draft once on mount via lazy initialiser — avoids setState-in-effect lint error.
+  const [pendingDraft, setPendingDraft] = useState<DraftPayload | null>(() => {
+    if (mode.kind !== "create") return null;
+    const draft = loadDraft();
+    return draft && draft.form.name ? draft : null;
+  });
   // Draft variant rows passed directly to the editor as an initialisation prop.
   // Set on restore, cleared after 3 s so future category changes start fresh.
   const [draftInitRows, setDraftInitRows] = useState<unknown[] | null>(null);
   // Incremented on each restore to force the editor to remount and pick up draftInitRows.
   const [restoreKey, setRestoreKey] = useState(0);
-
-  // On mount: detect any saved draft and surface the restore banner.
-  useEffect(() => {
-    if (mode.kind !== "create") return;
-    const draft = loadDraft();
-    if (draft && draft.form.name) setPendingDraft(draft);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Auto-save whenever form, specRows, or images change (debounced 1 s).
   useEffect(() => {
