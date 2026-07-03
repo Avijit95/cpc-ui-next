@@ -221,6 +221,10 @@ export default function AdminDealsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
+
   // `now` is used for the per-row lifecycle badge; ticking once per minute
   // keeps the "LIVE" → "EXPIRED" flip fresh without re-fetching the list.
   const [now, setNow] = useState(() => Date.now());
@@ -626,6 +630,50 @@ export default function AdminDealsPage() {
     }
   };
 
+  const filteredItems = useMemo(
+    () =>
+      items.filter(
+        (d) =>
+          !searchInput.trim() ||
+          d.product.name.toLowerCase().includes(searchInput.trim().toLowerCase()),
+      ),
+    [items, searchInput],
+  );
+
+  const allSelected =
+    filteredItems.length > 0 && filteredItems.every((d) => selectedIds.has(d.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredItems.map((d) => d.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const bulkDelete = async () => {
+    setBulkDeleteBusy(true);
+    try {
+      await Promise.all([...selectedIds].map((id) => adminApi.deleteDeal(id)));
+      setSelectedIds(new Set());
+      setConfirmBulkDelete(false);
+      await loadItems(statusFilter, false);
+    } catch (e) {
+      setError(isApiError(e) ? e.displayMessage : "Delete failed");
+    } finally {
+      setBulkDeleteBusy(false);
+    }
+  };
+
   return (
     <>
       <AdminHeader
@@ -662,6 +710,15 @@ export default function AdminDealsPage() {
           </div>
           {/* Sort / Dates / New Deal */}
           <div className="flex flex-col min-[440px]:flex-row min-[440px]:items-center gap-2 min-[768px]:flex-shrink-0">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={() => setConfirmBulkDelete(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors w-full min-[440px]:w-auto"
+              >
+                <Trash2 size={16} />
+                Delete Selected ({selectedIds.size})
+              </button>
+            )}
             <SortByDropdown
               className="w-full min-[440px]:w-auto"
               options={SORT_OPTIONS}
@@ -704,6 +761,15 @@ export default function AdminDealsPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr className="text-left text-xs font-bold text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 cursor-pointer"
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="px-3 py-3">Product</th>
                   <SortableHeader
                     field="dealPrice"
@@ -750,13 +816,19 @@ export default function AdminDealsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {items.filter((d) =>
-                  !searchInput.trim() ||
-                  d.product.name.toLowerCase().includes(searchInput.trim().toLowerCase())
-                ).map((d) => {
+                {filteredItems.map((d) => {
                   const phase = lifecycleOf(d, now);
                   return (
-                    <tr key={d.id} className="hover:bg-gray-50">
+                    <tr key={d.id} className={`hover:bg-gray-50 ${selectedIds.has(d.id) ? "bg-blue-50" : ""}`}>
+                      <td className="px-3 py-3 w-8">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(d.id)}
+                          onChange={() => toggleSelect(d.id)}
+                          className="rounded border-gray-300 cursor-pointer"
+                          aria-label="Select deal"
+                        />
+                      </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
                           {d.product.primaryImageUrl ? (
@@ -1348,6 +1420,36 @@ export default function AdminDealsPage() {
               >
                 {deleteBusy && <Loader2 size={14} className="animate-spin" />}
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmBulkDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
+            <h3 className="font-bold text-gray-800 mb-2">
+              Delete {selectedIds.size} deal{selectedIds.size !== 1 ? "s" : ""}?
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              All selected products will immediately return to their normal prices. This cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setConfirmBulkDelete(false)}
+                disabled={bulkDeleteBusy}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={bulkDelete}
+                disabled={bulkDeleteBusy}
+                className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {bulkDeleteBusy && <Loader2 size={14} className="animate-spin" />}
+                Delete {selectedIds.size} deal{selectedIds.size !== 1 ? "s" : ""}
               </button>
             </div>
           </div>
