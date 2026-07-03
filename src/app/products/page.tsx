@@ -112,6 +112,74 @@ const PHONE_FILTER_GROUPS: PhoneFilterGroup[] = [
   },
 ];
 
+// ── Camera-specific filter groups ────────────────────────────────────────────
+type CameraFilterGroup = { key: string; label: string; options: string[] };
+
+const CAMERA_FILTER_GROUPS: CameraFilterGroup[] = [
+  {
+    key: "cameraType",
+    label: "Camera Type",
+    options: ["DSLR", "Mirrorless"],
+  },
+  {
+    key: "autofocusPoints",
+    label: "Autofocus Points",
+    options: ["9", "19", "39", "49", "99", "121", "425"],
+  },
+  {
+    key: "lensMount",
+    label: "Lens Mount",
+    options: [
+      "Canon RF",
+      "Canon EF",
+      "Nikon Z",
+      "Nikon F",
+      "Sony E",
+      "Fujifilm X",
+      "Fujifilm G",
+      "L Mount",
+      "Micro Four Thirds",
+      "Leica M",
+      "Pentax K",
+      "Other…",
+    ],
+  },
+  {
+    key: "kitType",
+    label: "Kit Type",
+    options: ["Body Only", "With Kit Lens", "Twin Lens Kit"],
+  },
+  {
+    key: "sensorTech",
+    label: "Sensor Technology",
+    options: ["BSI CMOS", "CCD", "CMOS", "MOS"],
+  },
+  {
+    key: "resolution",
+    label: "Resolution (Megapixels)",
+    options: ["Under 20 MP", "20–24 MP", "24–30 MP", "30–45 MP", "Above 45 MP"],
+  },
+  {
+    key: "connectivity",
+    label: "Connectivity",
+    options: ["Wi-Fi", "Bluetooth", "NFC", "USB-C"],
+  },
+  {
+    key: "shutterSpeed",
+    label: "Shutter Speed",
+    options: [
+      "1/4000 sec",
+      "1/4000 - 30 sec",
+      "1/8000 sec",
+      "1/8000 - 30 sec",
+      "1/8000 - 60 sec",
+      "1/16000 sec",
+      "1/16000 sec, 1/8000 - 30 sec",
+      "1/32000 sec",
+    ],
+  },
+];
+
 // ── TV-specific filter groups ─────────────────────────────────────────────────
 type TvFilterGroup = { key: string; label: string; options: string[] };
 
@@ -473,9 +541,155 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
   });
 }
 
+const KNOWN_LENS_MOUNTS = [
+  "canon rf", "canon ef", "nikon z", "nikon f", "sony e",
+  "fujifilm x", "fujifilm g", "l mount", "micro four thirds", "leica m", "pentax k",
+];
+
+function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, string[]>): ListCard[] {
+  const typeOpts    = cameraFilters["cameraType"]      ?? [];
+  const afOpts      = cameraFilters["autofocusPoints"] ?? [];
+  const mountOpts   = cameraFilters["lensMount"]       ?? [];
+  const kitOpts     = cameraFilters["kitType"]         ?? [];
+  const sensorOpts  = cameraFilters["sensorTech"]      ?? [];
+  const resOpts     = cameraFilters["resolution"]      ?? [];
+  const connOpts    = cameraFilters["connectivity"]    ?? [];
+  const shutterOpts = cameraFilters["shutterSpeed"]    ?? [];
+
+  const hasAny = [typeOpts, afOpts, mountOpts, kitOpts, sensorOpts, resOpts, connOpts, shutterOpts].some((a) => a.length > 0);
+  if (!hasAny) return items;
+
+  // Normalise a spec string: lowercase + collapse whitespace + remove hyphens for fuzzy matching.
+  const norm = (v: unknown) =>
+    String(v ?? "").toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
+
+  return items.filter((item) => {
+    const cached = detailCache.get(item.slug);
+    const specs  = cached?.specs ?? {};
+
+    // Camera Type — check spec then fall back to product name.
+    if (typeOpts.length > 0) {
+      const raw = norm(
+        specs["Camera Type"] ?? specs["Type"] ?? specs["camera-type"] ??
+        specs["Camera Style"] ?? specs["Form Factor"] ?? item.name
+      );
+      if (!typeOpts.some((opt) => raw.includes(norm(opt)))) return false;
+    }
+
+    // Autofocus Points — extract the first integer from the spec value.
+    if (afOpts.length > 0) {
+      const raw = String(
+        specs["Autofocus Points"] ?? specs["AF Points"] ?? specs["Number of Focus Points"] ??
+        specs["Phase Detection AF Points"] ?? specs["Auto Focus Points"] ??
+        specs["Total Focus Points"] ?? ""
+      );
+      const match = raw.match(/\d+/);
+      const num = match ? parseInt(match[0], 10) : NaN;
+      if (isNaN(num) || !afOpts.includes(String(num))) return false;
+    }
+
+    // Lens Mount — named options use substring match; "Other…" matches unknown mounts.
+    if (mountOpts.length > 0) {
+      const raw = norm(
+        specs["Lens Mount"] ?? specs["Mount"] ?? specs["Compatible Lenses"] ??
+        specs["lens-mount"] ?? specs["Lens Type"] ?? specs["Mount Type"] ?? ""
+      );
+      const nonOther = mountOpts.filter((o) => o !== "Other…");
+      const wantsOther = mountOpts.includes("Other…");
+      const matchesNamed = nonOther.some((opt) => raw.includes(norm(opt)));
+      if (!matchesNamed) {
+        if (wantsOther) {
+          // "Other…" = mount field has a value but doesn't match any known named mount.
+          const isKnown = KNOWN_LENS_MOUNTS.some((m) => raw.includes(m.replace(/-/g, " ")));
+          if (!raw || isKnown) return false;
+        } else {
+          return false;
+        }
+      }
+    }
+
+    // Kit Type — needs variant data; skip (hide) the product until detail is cached.
+    if (kitOpts.length > 0) {
+      if (!cached) return false;
+      const variants = cached.variants;
+      const lensVariants = variants.filter((v) => String(v.attributes.lensIncluded) === "Yes");
+      const uniqueLenses = new Set(
+        lensVariants.map((v) => String(v.attributes.lens ?? "").toLowerCase().trim())
+      );
+      const hasBodyOnly = variants.some((v) => String(v.attributes.lensIncluded) !== "Yes");
+      const kitMatch = kitOpts.some((opt) => {
+        if (opt === "Body Only")     return hasBodyOnly;
+        if (opt === "With Kit Lens") return uniqueLenses.size === 1;
+        if (opt === "Twin Lens Kit") return uniqueLenses.size >= 2;
+        return false;
+      });
+      if (!kitMatch) return false;
+    }
+
+    // Sensor Technology — normalise hyphens so "BSI-CMOS" matches "BSI CMOS".
+    if (sensorOpts.length > 0) {
+      const raw = norm(
+        specs["Sensor Type"] ?? specs["Image Sensor"] ?? specs["Sensor"] ??
+        specs["sensor-type"] ?? specs["Sensor Technology"] ?? specs["Image Sensor Type"] ?? ""
+      );
+      if (!sensorOpts.some((opt) => raw.includes(norm(opt)))) return false;
+    }
+
+    // Resolution (Megapixels) — parse leading number from various spec keys.
+    if (resOpts.length > 0) {
+      const mp = parseSpec(
+        specs["Maximum Resolution"] ?? specs["Effective Megapixels"] ?? specs["Resolution"] ??
+        specs["Megapixels"] ?? specs["Sensor Resolution"] ?? specs["Effective Pixels"] ??
+        specs["Maximum Megapixels"]
+      );
+      if (mp === null) return false;
+      if (!resOpts.some((opt) => {
+        if (opt === "Under 20 MP") return mp < 20;
+        if (opt === "20\u201324 MP") return mp >= 20 && mp <= 24;
+        if (opt === "24\u201330 MP") return mp > 24 && mp <= 30;
+        if (opt === "30\u201345 MP") return mp > 30 && mp <= 45;
+        if (opt === "Above 45 MP") return mp > 45;
+        return false;
+      })) return false;
+    }
+
+    // Connectivity — handle alternate spellings (WiFi / Wi-Fi, USB-C / Type-C).
+    if (connOpts.length > 0) {
+      const raw = norm(
+        specs["Connectivity"] ?? specs["Wireless Connectivity"] ??
+        specs["Connectivity Technology"] ?? specs["connectivity"] ??
+        specs["Wireless Features"] ?? specs["Wireless Communication"] ?? ""
+      );
+      if (!connOpts.some((opt) => {
+        const o = norm(opt);
+        if (raw.includes(o)) return true;
+        // Alternate spellings
+        if (o === "wi fi" && raw.includes("wifi")) return true;
+        if (o === "usb c" && (raw.includes("type c") || raw.includes("usb type c"))) return true;
+        return false;
+      })) return false;
+    }
+
+    // Shutter Speed — flexible substring match after normalisation.
+    if (shutterOpts.length > 0) {
+      const raw = norm(
+        specs["Shutter Speed"] ?? specs["Maximum Shutter Speed"] ??
+        specs["shutter-speed"] ?? specs["Shutter Speed Range"] ??
+        specs["Electronic Shutter"] ?? ""
+      );
+      if (!shutterOpts.some((opt) => {
+        const o = norm(opt);
+        return raw.includes(o) || o.includes(raw);
+      })) return false;
+    }
+
+    return true;
+  });
+}
+
 // Generic collapsible wrapper used by Price Range, Brand, Rating
 function CollapsibleSection({ label, children }: { label: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   return (
     <div>
       <button
@@ -648,6 +862,8 @@ function ProductsPageInner() {
   const [phoneFilters, setPhoneFilters] = useState<Record<string, string[]>>({});
   // TV-specific filters (shown only when TV category is selected)
   const [tvFilters, setTvFilters] = useState<Record<string, string[]>>({});
+  // Camera-specific filters (shown only when camera category is selected)
+  const [cameraFilters, setCameraFiltersState] = useState<Record<string, string[]>>({});
 const [headerHeight, setHeaderHeight] = useState(0);
 
 useEffect(() => {
@@ -699,6 +915,7 @@ useEffect(() => {
     // Reset category-specific filters when changing category
     setPhoneFilters({});
     setTvFilters({});
+    setCameraFiltersState({});
   };
 
   useEffect(() => {
@@ -773,9 +990,12 @@ useEffect(() => {
     selectedCategory?.toLowerCase().includes("television") ||
     false;
   const hasTvFilters = Object.values(tvFilters).some((v) => v.length > 0);
+  const isCameraCategory = !!selectedCategory?.toLowerCase().includes("camera");
+  const hasCameraFilters = Object.values(cameraFilters).some((v) => v.length > 0);
   // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
   // Pre-fetch detail for TVs as soon as the category is selected (small catalogue, needed for size/res/conn filters).
-  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory;
+  // Pre-fetch detail for cameras only when a filter is active.
+  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || (isCameraCategory && hasCameraFilters);
 
   // When spec filters are active, pre-fetch detail for items not yet cached.
   useEffect(() => {
@@ -802,6 +1022,8 @@ useEffect(() => {
     ? applyPhoneFilters(priceFilteredItems, phoneFilters)
     : isTvCategory
     ? applyTvFilters(priceFilteredItems, tvFilters)
+    : isCameraCategory
+    ? applyCameraFilters(priceFilteredItems, cameraFilters)
     : priceFilteredItems;
   // Re-sort client-side by effective price (lowestVariantPrice ?? finalPrice) so products
   // with basePrice=0 (variant-only pricing) appear in the correct position.
@@ -834,6 +1056,9 @@ useEffect(() => {
   };
   const setTvFilter = (key: string, values: string[]) => {
     setTvFilters((prev) => ({ ...prev, [key]: values }));
+  };
+  const setCameraFilter = (key: string, values: string[]) => {
+    setCameraFiltersState((prev) => ({ ...prev, [key]: values }));
   };
 
   const filterSidebar = (
@@ -993,6 +1218,17 @@ useEffect(() => {
         />
       ))}
 
+      {/* Camera-specific filters — shown only for camera category */}
+      {isCameraCategory && CAMERA_FILTER_GROUPS.map((group) => (
+        <FilterSection
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          selected={cameraFilters[group.key] ?? []}
+          onChange={(vals) => setCameraFilter(group.key, vals)}
+        />
+      ))}
+
       {/* Rating — always last */}
       <CollapsibleSection label="Rating">
         <div className="space-y-2">
@@ -1034,7 +1270,8 @@ useEffect(() => {
         minPrice !== PRICE_FLOOR ||
         maxPrice !== PRICE_CEIL ||
         hasPhoneFilters ||
-        hasTvFilters) && (
+        hasTvFilters ||
+        hasCameraFilters) && (
         <button
           onClick={() => {
             selectCategory(null);
@@ -1044,6 +1281,7 @@ useEffect(() => {
             setMaxPrice(PRICE_CEIL);
             setPhoneFilters({});
             setTvFilters({});
+            setCameraFiltersState({});
           }}
           className="w-full py-2 border border-[#129cd3] text-[#129cd3] text-sm rounded hover:bg-[#e8f7fc] transition-colors"
         >

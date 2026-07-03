@@ -46,10 +46,13 @@ export default function WishlistPage() {
             const cur = stocks[`v:${v.id}`];
             if (cur === undefined || v.stock < cur) setStock(`v:${v.id}`, v.stock);
           });
-          if (detail.variants.length === 0) {
-            const cur = stocks[`p:${slug}`];
-            if (cur === undefined || detail.stock < cur) setStock(`p:${slug}`, detail.stock);
-          }
+          // Always seed product-level stock — for non-variant products use detail.stock;
+          // for variant products use max of variant stocks so the card reflects real availability.
+          const effectiveStock = detail.variants.length > 0
+            ? Math.max(detail.stock, ...detail.variants.map((v) => v.stock))
+            : detail.stock;
+          const curP = stocks[`p:${slug}`];
+          if (curP === undefined || effectiveStock < curP) setStock(`p:${slug}`, effectiveStock);
         });
         setProductDetails((prev) => ({ ...prev, ...newDetails }));
       }

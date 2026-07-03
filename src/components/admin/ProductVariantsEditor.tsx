@@ -67,6 +67,9 @@ export type ProductVariantsHandle = {
   hasRows: () => boolean;
   // Returns the minimum selling price across all variant rows (0 if none set).
   getMinSellingPrice: () => number;
+  // Draft persistence — get current rows for saving, set rows when restoring.
+  getRows: () => unknown[];
+  setRows: (rows: unknown[]) => void;
 };
 
 function uid(): string {
@@ -101,9 +104,12 @@ function makeSku(name: string, r: VariantRow, isCamera: boolean): string {
 }
 
 function comboKey(r: VariantRow, isCamera: boolean): string {
-  return isCamera
-    ? `${r.ram.trim()}|${r.color.trim()}|${r.launchYear.trim()}|${r.lensIncluded.trim()}`.toLowerCase()
-    : `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
+  if (isCamera) {
+    // Lens name (storage) distinguishes variants when lensIncluded=Yes.
+    const lensKey = r.lensIncluded === "Yes" ? r.storage.trim() : "";
+    return `${r.ram.trim()}|${r.color.trim()}|${r.launchYear.trim()}|${r.lensIncluded.trim()}|${lensKey}`.toLowerCase();
+  }
+  return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
 // For cameras images are grouped by body color / lens; for TVs by size; for all others by color.
@@ -221,11 +227,16 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
 
 const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
-  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; hideRam?: boolean }
->(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, hideRam = false }, ref) {
+  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; hideRam?: boolean; draftRows?: unknown[] }
+>(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, hideRam = false, draftRows }, ref) {
   const isCamera = isCameraCategory(categorySlug);
   const isTV = isTvCategory(categorySlug);
-  const [rows, setRows] = useState<VariantRow[]>(() => initRows(initialVariants, isCamera, isTV));
+  const [rows, setRows] = useState<VariantRow[]>(() => {
+    if (draftRows && draftRows.length > 0) {
+      return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined }));
+    }
+    return initRows(initialVariants, isCamera, isTV);
+  });
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
     () => initColorImages(initialVariants, isTV, isCamera),
   );
@@ -387,7 +398,7 @@ const ProductVariantsEditor = forwardRef<
           const key = comboKey(r, isCamera);
           if (seen.has(key)) {
             return isCamera
-              ? "Two variants have the same Model No. / Color / Launch Year combination."
+              ? "Two variants have the same Model No. / Color / Launch Year / Lens combination."
               : isTV
               ? "Two variants have the same Size / Model No. / Color combination."
               : "Two variants have the same RAM / ROM / Color combination.";
@@ -397,6 +408,10 @@ const ProductVariantsEditor = forwardRef<
         return null;
       },
       hasRows: () => rows.length > 0,
+      getRows: () => rows as unknown[],
+      setRows: (newRows: unknown[]) => setRows(
+        (newRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined }))
+      ),
       getMinSellingPrice: () => {
         const prices = rows.map((r) => Number(r.price)).filter((n) => !isNaN(n) && n > 0);
         return prices.length > 0 ? Math.min(...prices) : 0;
@@ -455,7 +470,7 @@ const ProductVariantsEditor = forwardRef<
         }
       },
     }),
-    [rows, colors, colorImages, productName, initialVariants, isCamera],
+    [rows, colors, colorImages, productName, initialVariants, isCamera, isTV],
   );
 
   return (

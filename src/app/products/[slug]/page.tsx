@@ -211,7 +211,7 @@ export default function ProductDetailPage() {
   const [retailCouponSelected, setRetailCouponSelected] = useState(false);
   const [couponPanelOpen, setCouponPanelOpen] = useState(false);
   const [viewOfferKey, setViewOfferKey] = useState<"customer" | "retail" | null>(null);
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ Description: true });
   const toggleSection = (name: string) => setOpenSections((p) => ({ ...p, [name]: !p[name] }));
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [thumbOffset, setThumbOffset] = useState(0);
@@ -1031,9 +1031,7 @@ useEffect(() => {
                                     .filter(Boolean)
                                     .join(" + ");
                               if (!label) return null;
-                              const isActive = nonColorGroups.every(
-                                (g) => selectedAttrs[g.key] === attrValue(v, g.key)
-                              );
+                              const isActive = selectedVariant?.id === v.id;
                               const vBase = v.deal ? v.deal.basePrice : v.pricing.basePrice;
                               const vFinal = v.deal ? v.deal.dealPrice : v.pricing.finalPrice;
                               const vDiscount =

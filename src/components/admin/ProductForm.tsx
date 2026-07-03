@@ -46,6 +46,46 @@ type Mode =
   | { kind: "create"; initialCategoryId?: string }
   | { kind: "edit"; productId: string; initial: AdminProductDetail };
 
+// ── Draft auto-save (create mode only) ───────────────────────────────────────
+const DRAFT_KEY = "cpc-admin-product-draft";
+
+type DraftPayload = {
+  form: FormState;
+  specRows: { key: string; value: string }[];
+  variantRows: unknown[];
+  pendingImageNames: string[]; // filenames of pending (not-yet-uploaded) images for reminder
+  savedAt: number; // Date.now()
+};
+
+function loadDraft(): DraftPayload | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as DraftPayload;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(payload: DraftPayload) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+  } catch { /* storage full or disabled */ }
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+}
+
+function draftAge(savedAt: number): string {
+  const mins = Math.floor((Date.now() - savedAt) / 60000);
+  if (mins < 1) return "just now";
+  if (mins === 1) return "1 minute ago";
+  if (mins < 60) return `${mins} minutes ago`;
+  const hrs = Math.floor(mins / 60);
+  return hrs === 1 ? "1 hour ago" : `${hrs} hours ago`;
+}
+
 type FormState = {
   name: string;
   slug: string;
@@ -301,6 +341,58 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const variantsRef = useRef<ProductVariantsHandle | null>(null);
   const [isIPhone, setIsIPhone] = useState(false);
   const couponSectionRef = useRef<HTMLDivElement>(null);
+
+  // ── Draft auto-save (create mode only) ────────────────────────────────────
+  const [pendingDraft, setPendingDraft] = useState<DraftPayload | null>(null);
+  // Draft variant rows passed directly to the editor as an initialisation prop.
+  // Set on restore, cleared after 3 s so future category changes start fresh.
+  const [draftInitRows, setDraftInitRows] = useState<unknown[] | null>(null);
+  // Incremented on each restore to force the editor to remount and pick up draftInitRows.
+  const [restoreKey, setRestoreKey] = useState(0);
+
+  // On mount: detect any saved draft and surface the restore banner.
+  useEffect(() => {
+    if (mode.kind !== "create") return;
+    const draft = loadDraft();
+    if (draft && draft.form.name) setPendingDraft(draft);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save whenever form, specRows, or images change (debounced 1 s).
+  useEffect(() => {
+    if (mode.kind !== "create") return;
+    const id = setTimeout(() => {
+      saveDraft({
+        form,
+        specRows: specRows.map(({ key, value }) => ({ key, value })),
+        variantRows: variantsRef.current?.getRows() ?? [],
+        pendingImageNames: images
+          .filter((i) => i.kind === "pending")
+          .map((i) => (i as Extract<typeof i, { kind: "pending" }>).file.name),
+        savedAt: Date.now(),
+      });
+    }, 1000);
+    return () => clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, specRows, images]);
+
+  // Also save variant rows every 20 s (covers variant-only changes between form saves).
+  useEffect(() => {
+    if (mode.kind !== "create") return;
+    const id = setInterval(() => {
+      saveDraft({
+        form,
+        specRows: specRows.map(({ key, value }) => ({ key, value })),
+        variantRows: variantsRef.current?.getRows() ?? [],
+        pendingImageNames: images
+          .filter((i) => i.kind === "pending")
+          .map((i) => (i as Extract<typeof i, { kind: "pending" }>).file.name),
+        savedAt: Date.now(),
+      });
+    }, 20000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, specRows, images]);
 
   // Cleanup object URLs on unmount.
   useEffect(() => {
@@ -782,14 +874,18 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         try {
           await variantsRef.current.commit(productId);
         } catch (err) {
+          const readable = readableError(err);
+          // If it's a raw JS error (not from the API), append its message so the admin can diagnose it.
+          const rawMsg = !isApiError(err) && err instanceof Error ? ` (${err.message})` : "";
           setErrorMsg(
-            readableError(err) +
-            "\nThe product saved, but variants failed to save. Edit the product to retry.",
+            "The product saved, but variants failed to save: " + readable + rawMsg +
+            "\nEdit the product to retry.",
           );
           return;
         }
       }
 
+      clearDraft();
       router.replace("/admin/products");
       router.refresh();
     } catch (err) {
@@ -857,6 +953,53 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       {errorMsg && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-4 whitespace-pre-line">
           {errorMsg}
+        </div>
+      )}
+
+      {/* Draft restore banner — shown only in create mode when an unsaved draft is detected */}
+      {pendingDraft && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">
+              Unsaved draft found — &ldquo;{pendingDraft.form.name || "Untitled product"}&rdquo;
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Saved {draftAge(pendingDraft.savedAt)}.
+              {pendingDraft.pendingImageNames?.length > 0 ? (
+                <> <span className="font-medium">Images must be re-uploaded:</span>{" "}
+                  {pendingDraft.pendingImageNames.join(", ")}.</>
+              ) : " All other fields will be restored."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const d = pendingDraft;
+                setForm(d.form);
+                setSpecRows(d.specRows.map((r) => ({ id: uid(), key: r.key, value: r.value })));
+                // Pass draft rows directly to editor via prop (no timing issues).
+                // restoreKey forces a remount so the useState initialiser re-runs with draftInitRows.
+                if (d.variantRows.length > 0) {
+                  setDraftInitRows(d.variantRows);
+                  setRestoreKey((k) => k + 1);
+                  // Clear after 3 s so future category changes start with empty rows.
+                  setTimeout(() => setDraftInitRows(null), 3000);
+                }
+                setPendingDraft(null);
+              }}
+              className="px-3 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+            >
+              Restore draft
+            </button>
+            <button
+              type="button"
+              onClick={() => { clearDraft(); setPendingDraft(null); }}
+              className="px-3 py-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900 border border-amber-300 rounded-lg transition-colors"
+            >
+              Discard
+            </button>
+          </div>
         </div>
       )}
 
@@ -991,7 +1134,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             const catSlug = categories.find((c) => c.id === form.categoryId)?.slug;
             // Key includes catSlug so the editor remounts once categories load,
             // ensuring isTV/isCamera are correct when initRows/initColorImages run.
-            const editorKey = `${isEdit ? mode.productId : "new"}-${catSlug ?? ""}`;
+            // restoreKey forces a remount on draft restore so draftRows are picked up.
+            const editorKey = `${isEdit ? mode.productId : "new"}-${catSlug ?? ""}-${restoreKey}`;
             return (
               <ProductVariantsEditor
                 key={editorKey}
@@ -1001,6 +1145,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 disabled={busy}
                 categorySlug={catSlug}
                 hideRam={isIPhone}
+                draftRows={draftInitRows ?? undefined}
               />
             );
           })()}
