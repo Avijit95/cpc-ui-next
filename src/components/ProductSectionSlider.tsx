@@ -50,6 +50,25 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
         const variants = allVariants[i];
         if (variants.length === 0) {
           expanded.push({ product: p });
+        } else if (variants.some((v) => "lensIncluded" in v.attributes)) {
+          // Camera: one card per lens type, best representative per group
+          const groups = new Map<string, typeof variants>();
+          for (const v of variants) {
+            const color = String(v.attributes.color ?? "").toLowerCase().trim();
+            const key = String(v.attributes.lensIncluded) === "Yes"
+              ? `lens:${String(v.attributes.lens ?? "")}`.toLowerCase()
+              : color ? `body-only:${color}` : "body-only";
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(v);
+          }
+          for (const group of groups.values()) {
+            const best =
+              group.find((v) => v.stock > 0 && v.images.length > 0) ??
+              group.find((v) => v.stock > 0) ??
+              group.find((v) => v.images.length > 0) ??
+              group[0];
+            expanded.push({ product: p, variant: best });
+          }
         } else {
           variants.forEach((v) => expanded.push({ product: p, variant: v }));
         }

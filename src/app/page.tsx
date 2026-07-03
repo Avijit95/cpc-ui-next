@@ -12,7 +12,7 @@ import { serverGetActiveBanners, serverGetNavLinks, serverListProducts } from "@
 
 export default async function Home() {
   const [tabsInitial, navLinks, banners] = await Promise.all([
-    serverListProducts({ newOnly: true, limit: 7 }),
+    serverListProducts({ newOnly: true, limit: 12 }),
     serverGetNavLinks(),
     serverGetActiveBanners(),
   ]);

@@ -742,12 +742,15 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     setSubmitting(status);
     try {
       let productId: string;
-      if (mode.kind === "create") {
+      if (mode.kind === "create" && !createdId) {
         const created = await adminApi.createProduct(built);
         productId = created.id;
+        // Record immediately so any retry (e.g. after image failure) updates instead of re-creating.
+        setCreatedId(created.id);
       } else {
-        await adminApi.updateProduct(mode.productId, built as UpdateProductBody);
-        productId = mode.productId;
+        const existingId = mode.kind === "edit" ? mode.productId : createdId!;
+        await adminApi.updateProduct(existingId, built as UpdateProductBody);
+        productId = existingId;
       }
 
       // Process scraped images client-side (fetch → PNG → bg removal) so they
@@ -787,16 +790,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         }
       }
 
-      if (mode.kind === "create") {
-        setCreatedId(productId);
-        // Scroll to coupon section after React re-renders
-        setTimeout(() => {
-          couponSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 100);
-      } else {
-        router.replace("/admin/products");
-        router.refresh();
-      }
+      router.replace("/admin/products");
+      router.refresh();
     } catch (err) {
       setErrorMsg(readableError(err));
     } finally {

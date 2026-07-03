@@ -24,11 +24,52 @@ export const detailCache = new Map<string, CachedDetail>();
 // Build a short human-readable label for a variant chip.
 function variantLabel(v: Variant): string {
   const attrs = v.attributes;
+  // Camera subtitle: show color + body/lens info
+  if ("lensIncluded" in attrs) {
+    const color = attrs.color ? String(attrs.color) : "";
+    const lens = String(attrs.lensIncluded) === "Yes" && attrs.lens
+      ? `Body with ${attrs.lens}`
+      : "Body Only";
+    return color ? `${color} · ${lens}` : lens;
+  }
   const parts: string[] = [];
   for (const key of ["color", "ram", "storage", "rom"]) {
     if (attrs[key] != null) parts.push(String(attrs[key]));
   }
   return parts.join(" / ") || v.sku;
+}
+
+function cameraLensKey(v: Variant): string {
+  if (String(v.attributes.lensIncluded) === "Yes") {
+    return `lens:${String(v.attributes.lens ?? "")}`.toLowerCase();
+  }
+  // Body-only: one card per color so White and Black body variants both show
+  const color = String(v.attributes.color ?? "").toLowerCase().trim();
+  return color ? `body-only:${color}` : "body-only";
+}
+
+// Returns the suffix to append to the product name in the card title.
+function variantTitleSuffix(v: Variant): string | null {
+  const attrs = v.attributes;
+  // Camera: body/lens info
+  if ("lensIncluded" in attrs) {
+    if (String(attrs.lensIncluded) === "Yes" && attrs.lens) return `Body with ${attrs.lens}`;
+    return "Body Only";
+  }
+  // TV: screen size
+  if (attrs.size) return String(attrs.size);
+  return null;
+}
+
+// From a group of same-lens-type variants, pick the best representative:
+// prefer in-stock + has image, then in-stock, then has image, then first.
+function pickBestCameraVariant(group: Variant[]): Variant {
+  return (
+    group.find((v) => v.stock > 0 && v.images.length > 0) ??
+    group.find((v) => v.stock > 0) ??
+    group.find((v) => v.images.length > 0) ??
+    group[0]
+  );
 }
 
 type AddState = "idle" | "busy" | "added" | "error";
@@ -67,10 +108,13 @@ export default function ProductCard({
   // Only seeds keys not already in the store to avoid overwriting live adjustments.
   useEffect(() => {
     if (variantOverride) return;
+    const effectiveProductStock = (stock: number, variants: Variant[]) =>
+      variants.length > 0 ? Math.max(stock, ...variants.map((v) => v.stock)) : stock;
+
     const cached = detailCache.get(product.slug);
     if (cached) {
       if (stocks[`p:${product.slug}`] === undefined) {
-        setStock(`p:${product.slug}`, cached.stock);
+        setStock(`p:${product.slug}`, effectiveProductStock(cached.stock, cached.variants));
       }
       cached.variants.forEach((v) => {
         if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
@@ -82,7 +126,7 @@ export default function ProductCard({
         const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);
         if (stocks[`p:${product.slug}`] === undefined) {
-          setStock(`p:${product.slug}`, d.stock);
+          setStock(`p:${product.slug}`, effectiveProductStock(d.stock, d.variants));
         }
         d.variants.forEach((v) => {
           if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
@@ -93,7 +137,11 @@ export default function ProductCard({
   }, []);
 
   // Displayed values: variant override → product-level data
-  const displayImage = (variantOverride?.images[0]?.url) ?? product.primaryImageUrl;
+  const displayImage =
+    variantOverride?.images[0]?.url ??
+    product.primaryImageUrl ??
+    detailCache.get(product.slug)?.variants?.[0]?.images?.[0]?.url ??
+    null;
   const displayFinalPrice = variantOverride
     ? variantOverride.pricing.finalPrice
     : product.finalPrice;
@@ -117,6 +165,7 @@ export default function ProductCard({
     : `/products/${product.slug}`;
 
   const variantAttrLabel = variantOverride ? variantLabel(variantOverride) : null;
+  const cameraTitleSuffix = variantOverride ? variantTitleSuffix(variantOverride) : null;
 
   const isOutOfStock = stockValue !== null && stockValue === 0;
   const isCriticalStock = stockValue !== null && stockValue > 0 && stockValue < 5;
@@ -209,7 +258,7 @@ export default function ProductCard({
         )}
         <Link href={productLink}>
           <h3 className="text-xs max-[499px]:text-[13px] max-[499px]:leading-normal font-semibold text-gray-800 mb-1 max-[499px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
-            {product.name}
+            {product.name}{cameraTitleSuffix ? ` ${cameraTitleSuffix}` : ""}
           </h3>
         </Link>
         {variantAttrLabel && (
@@ -377,6 +426,26 @@ export function ProductCardExpander({
 
   if (variants.length === 0) {
     return <ProductCard product={product} />;
+  }
+
+  // Camera: one card per lens type (Body Only, Body with each lens).
+  // Colors are selected on the detail page.
+  const isCamera = variants.some((v) => "lensIncluded" in v.attributes);
+  if (isCamera) {
+    const groups = new Map<string, Variant[]>();
+    for (const v of variants) {
+      const key = cameraLensKey(v);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(v);
+    }
+    const cameraVariants = [...groups.values()].map(pickBestCameraVariant);
+    return (
+      <>
+        {cameraVariants.map((v) => (
+          <ProductCard key={v.id} product={product} variantOverride={v} />
+        ))}
+      </>
+    );
   }
 
   const sortedVariants = priceSortDir
