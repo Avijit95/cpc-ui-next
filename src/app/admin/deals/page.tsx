@@ -440,7 +440,7 @@ export default function AdminDealsPage() {
     setForm({
       productId: d.productId,
       productName: d.product.name,
-      productImageUrl: d.product.primaryImageUrl,
+      productImageUrl: productImages[d.productId] ?? d.product.primaryImageUrl,
       productBasePrice: d.basePrice,
       productSellingPrice: null,
       variantId: d.variantId,
@@ -1093,9 +1093,9 @@ export default function AdminDealsPage() {
 
               {modalMode === "edit" && (
                 <div className="p-3 bg-gray-50 rounded-lg flex items-center gap-3">
-                  {form.productImageUrl ? (
+                  {(productImages[form.productId] ?? form.productImageUrl) ? (
                     <Image
-                      src={form.productImageUrl}
+                      src={(productImages[form.productId] ?? form.productImageUrl)!}
                       alt={form.productName}
                       width={48}
                       height={48}
