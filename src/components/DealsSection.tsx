@@ -84,16 +84,17 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function BestSellerRow({ product }: { product: ListCard }) {
+function BestSellerRow({ product, imageUrl }: { product: ListCard; imageUrl: string | null }) {
   const showOriginal = product.finalPrice !== product.basePrice;
+  const src = imageUrl ?? product.primaryImageUrl;
   return (
     <Link
       href={`/products/${product.slug}`}
       className="flex items-center gap-4 px-4 py-3 hover:bg-[#e8f7fc] transition-colors"
     >
-      {product.primaryImageUrl ? (
+      {src ? (
         <Image
-          src={product.primaryImageUrl}
+          src={src}
           alt={product.name}
           width={64}
           height={64}
@@ -145,8 +146,14 @@ export default function DealsSection() {
         setBestSellers(
           bestRes.status === "fulfilled" ? bestRes.value.items : [],
         );
-        // Fetch product details for all deal products to get description/specs.
-        const slugs = [...new Set(livDeals.map((d) => d.product.slug))];
+        // Fetch product details for all deal + best-seller products (images, specs).
+        const bestSlugs = bestRes.status === "fulfilled"
+          ? bestRes.value.items.map((p) => p.slug)
+          : [];
+        const slugs = [...new Set([
+          ...livDeals.map((d) => d.product.slug),
+          ...bestSlugs,
+        ])];
         Promise.allSettled(slugs.map((s) => catalogApi.getProduct(s))).then(
           (results) => {
             if (cancelled) return;
@@ -459,7 +466,7 @@ export default function DealsSection() {
             </div>
             <div className="divide-y divide-gray-100 overflow-y-auto" style={{ maxHeight: "452px" }}>
               {bestSellers.slice(0, 8).map((product) => (
-                <BestSellerRow key={product.id} product={product} />
+                <BestSellerRow key={product.id} product={product} imageUrl={dealImageUrl(dealDetails, product.slug)} />
               ))}
             </div>
             <div className="flex-shrink-0 border-t border-gray-100 px-4 py-3">
