@@ -8,7 +8,7 @@ type Props = {
   viewAllHref?: string;
 };
 
-const ITEM_LIMIT = 7;
+const ITEM_LIMIT = 8;
 
 function queryFromFilter(filter: Props["filter"]): {
   sort?: CatalogSort;
