@@ -277,7 +277,7 @@ function RegisterPageInner() {
 
         <div className="relative z-10">
           <Link href="/">
-            <Image src="/logo-light.png" alt="CPC" width={150} height={52} className="brightness-0 invert" />
+            <Image src="/logo-light.png" alt="CPC" width={150} height={52} className="brightness-0 invert" style={{ height: "auto" }} />
           </Link>
         </div>
 
@@ -310,7 +310,7 @@ function RegisterPageInner() {
       <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12">
         <div className="lg:hidden mb-8">
           <Link href="/">
-            <Image src="/logo-light.png" alt="CPC" width={140} height={48} />
+            <Image src="/logo-light.png" alt="CPC" width={140} height={48} style={{ height: "auto" }} />
           </Link>
         </div>
 
