@@ -73,7 +73,7 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
           variants.forEach((v) => expanded.push({ product: p, variant: v }));
         }
       });
-      setSliderItems(expanded);
+      setSliderItems(expanded.slice(0, 8));
     });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
