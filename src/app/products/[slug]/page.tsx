@@ -221,6 +221,7 @@ export default function ProductDetailPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [buying, setBuying] = useState(false);
   const [wishlistBusy, setWishlistBusy] = useState(false);
+  const [titleExpanded, setTitleExpanded] = useState(false);
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
   const { setCart: syncHeaderCart, items: cartItems } = useCart();
   const { stocks, setStock, adjustStock } = useStock();
@@ -810,9 +811,21 @@ useEffect(() => {
 
               <h1
                 title={product.name}
-                className="text-2xl font-bold text-gray-900 mb-3 leading-snug line-clamp-2"
+                className="text-2xl font-bold text-gray-900 mb-3 leading-snug"
               >
-                {product.name}
+                {!titleExpanded && product.name.length > 80 ? (
+                  <>
+                    {product.name.slice(0, 80)}
+                    <span
+                      className="text-[#129cd3] cursor-pointer font-normal text-base ml-0.5"
+                      onClick={() => setTitleExpanded(true)}
+                    >
+                      ...more
+                    </span>
+                  </>
+                ) : (
+                  product.name
+                )}
               </h1>
 
               {/* Rating (live from reviewsResp.aggregate) */}

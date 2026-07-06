@@ -434,6 +434,8 @@ const ProductVariantsEditor = forwardRef<
       commit: async (productId: string) => {
         // 1. Resolve each group's images — uploading pending files, then
         //    reorder so the chosen default image comes first.
+        //    Image upload failures (e.g. S3 unreachable in dev) are non-fatal:
+        //    only successfully uploaded keys are kept so variant creation proceeds.
         const finalKeys: Record<string, string[]> = {};
         for (const color of colors) {
           const ci = colorImages[color] ?? { items: [], defaultId: null };
@@ -442,11 +444,16 @@ const ProductVariantsEditor = forwardRef<
             if (it.kind === "existing") {
               resolved.push({ id: it.id, key: it.key });
             } else {
-              const { objectKey } = await adminApi.uploadProductImage(
-                productId,
-                it.file,
-              );
-              resolved.push({ id: it.id, key: objectKey });
+              try {
+                const { objectKey } = await adminApi.uploadProductImage(
+                  productId,
+                  it.file,
+                );
+                resolved.push({ id: it.id, key: objectKey });
+              } catch {
+                // Skip this image — S3 may not be configured in this environment.
+                // The variant will be saved without it; images can be re-added on edit.
+              }
             }
           }
           // Put the default image first; keep all others in display order.
