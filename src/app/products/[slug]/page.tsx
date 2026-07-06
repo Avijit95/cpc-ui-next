@@ -609,6 +609,9 @@ useEffect(() => {
   const isLensProduct = product.breadcrumbs.some(
     (b) => b.slug?.toLowerCase().includes("lens") || b.name?.toLowerCase().includes("lens")
   );
+  const isSpeakerProduct = product.breadcrumbs.some(
+    (b) => b.slug?.toLowerCase().includes("speaker") || b.name?.toLowerCase().includes("speaker")
+  );
   const isCameraProduct = !isLensProduct && product.breadcrumbs.some(
     (b) => b.slug?.toLowerCase().includes("camera") || b.name?.toLowerCase().includes("camera")
   );
@@ -880,7 +883,7 @@ useEffect(() => {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} selectedVariant={selectedVariant} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} selectedVariant={selectedVariant} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1450,7 +1453,8 @@ useEffect(() => {
                   <SpecsTable
                     specs={product.specs}
                     isLens={isLensProduct}
-                    lensModelIdx={isLensProduct ? getActiveLensModelIndex(product.specs, selectedVariant) : 0}
+                    isSpeaker={isSpeakerProduct}
+                    modelIdx={getActiveModelIndex(product.specs, selectedVariant)}
                   />
                 </div>
               )}
@@ -1763,13 +1767,30 @@ useEffect(() => {
 // products never render raw arrays like ["8GB","12GB"] in the spec table.
 const HIDDEN_SPEC_KEYS = new Set(["ramOptions", "storageOptions", "colorOptions"]);
 
-// ── Lens multi-model helpers ──────────────────────────────────────────────────
-const MAX_LENS_MODELS_DISPLAY = 5;
+// ── Multi-model spec helpers (shared by Lens and Speaker) ────────────────────
+const MAX_MULTIMODEL_DISPLAY = 5;
 
-function lensKeyForIdx(base: string, idx: number): string {
+function multiModelKey(base: string, idx: number): string {
   return idx === 0 ? base : `${base} ${idx + 1}`;
 }
 
+function getActiveModelIndex(
+  specs: Record<string, unknown>,
+  selectedVariant?: Variant,
+): number {
+  if (!selectedVariant) return 0;
+  const modelNo = selectedVariant.attributes?.ram != null
+    ? String(selectedVariant.attributes.ram).trim().toLowerCase()
+    : "";
+  if (!modelNo) return 0;
+  for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
+    const val = specs[multiModelKey("Model", i)];
+    if (val && String(val).trim().toLowerCase() === modelNo) return i;
+  }
+  return 0;
+}
+
+// ── Lens per-model keys ───────────────────────────────────────────────────────
 const LENS_PER_MODEL_SPEC_BASES = [
   "Model",
   "Lens Name", "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
@@ -1779,21 +1800,24 @@ const LENS_PER_MODEL_SPEC_BASES = [
   "Recommended Usage",
 ];
 
-function getActiveLensModelIndex(
-  specs: Record<string, unknown>,
-  selectedVariant?: Variant,
-): number {
-  if (!selectedVariant) return 0;
-  const modelNo = selectedVariant.attributes?.ram != null
-    ? String(selectedVariant.attributes.ram).trim().toLowerCase()
-    : "";
-  if (!modelNo) return 0;
-  for (let i = 0; i < MAX_LENS_MODELS_DISPLAY; i++) {
-    const val = specs[lensKeyForIdx("Model", i)];
-    if (val && String(val).trim().toLowerCase() === modelNo) return i;
-  }
-  return 0;
-}
+// ── Speaker per-model keys ────────────────────────────────────────────────────
+const SPEAKER_PER_MODEL_SPEC_BASES = [
+  "Model", "Speaker Type", "Color",
+  "Audio Output Power (RMS)", "Frequency Response", "Driver Size",
+  "Number of Drivers", "Speaker Configuration", "Impedance", "Sensitivity", "Signal-to-Noise Ratio",
+  "Bluetooth", "Bluetooth Version", "Wi-Fi", "AUX Input", "USB Port",
+  "HDMI", "Optical Input", "RCA Input", "NFC",
+  "Voice Assistant Support", "Multi-Room Audio", "Stereo Pairing", "Party Mode", "Mobile App Support",
+  "Battery Capacity", "Battery Life", "Charging Time", "Charging Port",
+  "Material", "Water Resistance Rating", "Dust Resistance", "Dimensions", "Weight",
+  "Power Source", "Input Voltage",
+  "Volume Control", "Playback Controls", "Built-in Microphone", "Hands-Free Calling",
+  "Package Contents",
+];
+
+// Convenience aliases kept for the lens-specific helpers below
+const lensKeyForIdx = multiModelKey;
+const getActiveLensModelIndex = getActiveModelIndex;
 
 function humanizeSpecKey(key: string): string {
   const spaced = key
@@ -1823,40 +1847,45 @@ const SPEC_GROUP_DEFS: { label: string; patterns: string[] }[] = [
   { label: "Dimensions", patterns: ["height", "width", "thickness", "depth", "weight", "dimension", "size", "build", "material"] },
 ];
 
+function filterMultiModelEntries(
+  allEntries: [string, unknown][],
+  perModelBases: string[],
+  modelIdx: number,
+): [string, unknown][] {
+  const activeKeys = new Set(perModelBases.map((b) => multiModelKey(b, modelIdx)));
+  const otherKeys = new Set<string>();
+  for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
+    if (i === modelIdx) continue;
+    for (const base of perModelBases) otherKeys.add(multiModelKey(base, i));
+  }
+  return allEntries
+    .filter(([key]) => !otherKeys.has(key))
+    .map(([key, value]) => {
+      if (modelIdx > 0 && activeKeys.has(key)) {
+        const suffix = ` ${modelIdx + 1}`;
+        return [key.endsWith(suffix) ? key.slice(0, -suffix.length) : key, value] as [string, unknown];
+      }
+      return [key, value] as [string, unknown];
+    });
+}
+
 function SpecsTable({
   specs,
   isLens = false,
-  lensModelIdx = 0,
+  isSpeaker = false,
+  modelIdx = 0,
 }: {
   specs: Record<string, unknown>;
   isLens?: boolean;
-  lensModelIdx?: number;
+  isSpeaker?: boolean;
+  modelIdx?: number;
 }) {
   let allEntries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
 
   if (isLens) {
-    // Keys belonging to the active model
-    const activeKeys = new Set(
-      LENS_PER_MODEL_SPEC_BASES.map((b) => lensKeyForIdx(b, lensModelIdx)),
-    );
-    // Keys belonging to all OTHER models — must be excluded
-    const otherKeys = new Set<string>();
-    for (let i = 0; i < MAX_LENS_MODELS_DISPLAY; i++) {
-      if (i === lensModelIdx) continue;
-      for (const base of LENS_PER_MODEL_SPEC_BASES) {
-        otherKeys.add(lensKeyForIdx(base, i));
-      }
-    }
-    allEntries = allEntries
-      .filter(([key]) => !otherKeys.has(key))
-      .map(([key, value]) => {
-        // Strip the " 2" / " 3" suffix so the label reads cleanly
-        if (lensModelIdx > 0 && activeKeys.has(key)) {
-          const suffix = ` ${lensModelIdx + 1}`;
-          return [key.endsWith(suffix) ? key.slice(0, -suffix.length) : key, value] as [string, unknown];
-        }
-        return [key, value] as [string, unknown];
-      });
+    allEntries = filterMultiModelEntries(allEntries, LENS_PER_MODEL_SPEC_BASES, modelIdx);
+  } else if (isSpeaker) {
+    allEntries = filterMultiModelEntries(allEntries, SPEAKER_PER_MODEL_SPEC_BASES, modelIdx);
   }
 
   const entries = allEntries;
@@ -2075,11 +2104,43 @@ function buildLensHighlights(specs: Record<string, unknown>, modelIdx = 0): High
   return rows;
 }
 
-function ProductHighlights({ specs, isTv, isCamera, isLens, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; selectedVariant?: Variant }) {
+function buildSpeakerHighlights(specs: Record<string, unknown>, modelIdx = 0): HighlightRow[] {
+  const s = (base: string) => {
+    const v = specs[multiModelKey(base, modelIdx)];
+    return v ? String(v).trim() : "";
+  };
+  const rows: HighlightRow[] = [];
+
+  const bt = s("Bluetooth");
+  const btVer = s("Bluetooth Version");
+  const connectivity = bt === "Yes" && btVer ? `Bluetooth ${btVer}` : bt === "Yes" ? "Bluetooth" : btVer ? `Bluetooth ${btVer}` : "";
+  if (connectivity) rows.push({ icon: <Wifi size={18} />, label: "Connectivity", text: connectivity, accent: "bg-blue-100 text-blue-600" });
+
+  const power = s("Audio Output Power (RMS)");
+  if (power) rows.push({ icon: <Zap size={18} />, label: "Audio Output", text: power, accent: "bg-orange-100 text-orange-600" });
+
+  const battery = s("Battery Life");
+  if (battery) rows.push({ icon: <BatteryMedium size={18} />, label: "Battery Life", text: battery, accent: "bg-green-100 text-green-600" });
+
+  const water = s("Water Resistance Rating");
+  if (water) rows.push({ icon: <HardDrive size={18} />, label: "Water Resistance", text: water, accent: "bg-cyan-100 text-cyan-600" });
+
+  const assistant = s("Voice Assistant Support");
+  if (assistant) rows.push({ icon: <Smartphone size={18} />, label: "Voice Assistant", text: assistant, accent: "bg-purple-100 text-purple-600" });
+
+  const type = s("Speaker Type");
+  if (type) rows.push({ icon: <Monitor size={18} />, label: "Speaker Type", text: type, accent: "bg-indigo-100 text-indigo-600" });
+
+  return rows;
+}
+
+function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; isSpeaker?: boolean; selectedVariant?: Variant }) {
   const [expanded, setExpanded] = useState(true);
-  const lensModelIdx = isLens ? getActiveLensModelIndex(specs, selectedVariant) : 0;
+  const activeModelIdx = (isLens || isSpeaker) ? getActiveModelIndex(specs, selectedVariant) : 0;
   const highlights = isLens
-    ? buildLensHighlights(specs, lensModelIdx)
+    ? buildLensHighlights(specs, activeModelIdx)
+    : isSpeaker
+    ? buildSpeakerHighlights(specs, activeModelIdx)
     : isCamera
     ? buildCameraHighlights(specs)
     : isTv
