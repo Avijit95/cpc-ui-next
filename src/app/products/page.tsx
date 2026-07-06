@@ -211,6 +211,42 @@ const LENS_FILTER_GROUPS: LensFilterGroup[] = [
   },
 ];
 
+// ── Speaker-specific filter groups ────────────────────────────────────────────
+type SpeakerFilterGroup = { key: string; label: string; options: string[] };
+
+const SPEAKER_FILTER_GROUPS: SpeakerFilterGroup[] = [
+  {
+    key: "connectivity",
+    label: "Connectivity",
+    options: ["Bluetooth", "Wi-Fi", "AUX", "USB", "HDMI ARC", "Optical", "RCA"],
+  },
+  {
+    key: "bluetoothVersion",
+    label: "Bluetooth Version",
+    options: ["4.2", "5.0", "5.1", "5.2", "5.3", "5.4 & Above"],
+  },
+  {
+    key: "voiceAssistant",
+    label: "Voice Assistant",
+    options: ["Amazon Alexa", "Google Assistant", "Apple Siri", "None"],
+  },
+  {
+    key: "batteryLife",
+    label: "Battery Life",
+    options: ["Up to 10 Hours", "10–20 Hours", "20–30 Hours", "Above 30 Hours"],
+  },
+  {
+    key: "waterResistance",
+    label: "Water Resistance",
+    options: ["IPX4", "IPX5", "IPX6", "IPX7", "IP67"],
+  },
+  {
+    key: "color",
+    label: "Color",
+    options: ["Black", "White", "Blue", "Red", "Green", "Gray"],
+  },
+];
+
 // ── TV-specific filter groups ─────────────────────────────────────────────────
 type TvFilterGroup = { key: string; label: string; options: string[] };
 
@@ -718,6 +754,102 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
   });
 }
 
+function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, string[]>): ListCard[] {
+  const connOpts    = speakerFilters["connectivity"]      ?? [];
+  const btOpts      = speakerFilters["bluetoothVersion"]  ?? [];
+  const vaOpts      = speakerFilters["voiceAssistant"]    ?? [];
+  const battOpts    = speakerFilters["batteryLife"]       ?? [];
+  const waterOpts   = speakerFilters["waterResistance"]   ?? [];
+  const colorOpts   = speakerFilters["color"]             ?? [];
+
+  const hasAny = [connOpts, btOpts, vaOpts, battOpts, waterOpts, colorOpts].some((a) => a.length > 0);
+  if (!hasAny) return items;
+
+  const norm = (v: unknown) =>
+    String(v ?? "").toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
+
+  const parseHours = (v: unknown): number | null => {
+    const m = String(v ?? "").match(/([\d.]+)/);
+    return m ? parseFloat(m[1]) : null;
+  };
+
+  const parseBtVersion = (v: unknown): number | null => {
+    const m = String(v ?? "").match(/([\d.]+)/);
+    return m ? parseFloat(m[1]) : null;
+  };
+
+  return items.filter((item) => {
+    const cached = detailCache.get(item.slug);
+    const specs  = cached?.specs ?? {};
+
+    // Connectivity — each option is a separate connectivity type
+    if (connOpts.length > 0) {
+      const has = (opt: string): boolean => {
+        const o = norm(opt);
+        if (o === "bluetooth")  return norm(specs["Bluetooth"]) === "yes";
+        if (o === "wi fi")      return norm(specs["Wi-Fi"]) === "yes";
+        if (o === "aux")        return norm(specs["AUX Input"]) === "yes";
+        if (o === "usb")        return !!specs["USB Port"];
+        if (o === "hdmi arc")   return norm(specs["HDMI"]) === "yes";
+        if (o === "optical")    return norm(specs["Optical Input"]) === "yes";
+        if (o === "rca")        return norm(specs["RCA Input"]) === "yes";
+        return false;
+      };
+      if (!connOpts.some(has)) return false;
+    }
+
+    // Bluetooth Version
+    if (btOpts.length > 0) {
+      const ver = parseBtVersion(specs["Bluetooth Version"]);
+      if (ver === null) return false;
+      if (!btOpts.some((opt) => {
+        if (opt === "5.4 & Above") return ver >= 5.4;
+        const target = parseBtVersion(opt);
+        return target !== null && Math.abs(ver - target) < 0.05;
+      })) return false;
+    }
+
+    // Voice Assistant
+    if (vaOpts.length > 0) {
+      const raw = norm(specs["Voice Assistant Support"] ?? "");
+      if (!vaOpts.some((opt) => {
+        const o = norm(opt);
+        if (o === "none") return !raw || raw === "none" || raw === "no";
+        return raw.includes(o);
+      })) return false;
+    }
+
+    // Battery Life
+    if (battOpts.length > 0) {
+      const hrs = parseHours(specs["Battery Life"]);
+      if (hrs === null) return false;
+      if (!battOpts.some((opt) => {
+        if (opt === "Up to 10 Hours") return hrs <= 10;
+        if (opt === "10\u201320 Hours") return hrs > 10 && hrs <= 20;
+        if (opt === "20\u201330 Hours") return hrs > 20 && hrs <= 30;
+        if (opt === "Above 30 Hours")  return hrs > 30;
+        return false;
+      })) return false;
+    }
+
+    // Water Resistance
+    if (waterOpts.length > 0) {
+      const raw = norm(specs["Water Resistance Rating"] ?? "");
+      if (!waterOpts.some((opt) => raw.includes(norm(opt)))) return false;
+    }
+
+    // Color — check spec then variant attributes
+    if (colorOpts.length > 0) {
+      const specColor = norm(specs["Color"] ?? "");
+      const variantColors = cached?.variants.map((v) => norm(v.attributes.color ?? "")) ?? [];
+      const allColors = specColor ? [specColor, ...variantColors] : variantColors;
+      if (!colorOpts.some((opt) => allColors.some((c) => c.includes(norm(opt))))) return false;
+    }
+
+    return true;
+  });
+}
+
 function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[]>): ListCard[] {
   const mountOpts    = lensFilters["lensMount"]    ?? [];
   const focalOpts    = lensFilters["focalLength"]  ?? [];
@@ -994,6 +1126,8 @@ function ProductsPageInner() {
   const [cameraFilters, setCameraFiltersState] = useState<Record<string, string[]>>({});
   // Lens-specific filters (shown only when lens category is selected)
   const [lensFilters, setLensFiltersState] = useState<Record<string, string[]>>({});
+  // Speaker-specific filters (shown only when speaker category is selected)
+  const [speakerFilters, setSpeakerFiltersState] = useState<Record<string, string[]>>({});
 const [headerHeight, setHeaderHeight] = useState(0);
 
 useEffect(() => {
@@ -1047,6 +1181,7 @@ useEffect(() => {
     setTvFilters({});
     setCameraFiltersState({});
     setLensFiltersState({});
+    setSpeakerFiltersState({});
   };
 
   useEffect(() => {
@@ -1123,12 +1258,14 @@ useEffect(() => {
   const hasTvFilters = Object.values(tvFilters).some((v) => v.length > 0);
   const isLensCategory = !!selectedCategory?.toLowerCase().includes("lens");
   const isCameraCategory = !isLensCategory && !!selectedCategory?.toLowerCase().includes("camera");
+  const isSpeakerCategory = !!selectedCategory?.toLowerCase().includes("speaker");
   const hasCameraFilters = Object.values(cameraFilters).some((v) => v.length > 0);
   const hasLensFilters = Object.values(lensFilters).some((v) => v.length > 0);
+  const hasSpeakerFilters = Object.values(speakerFilters).some((v) => v.length > 0);
   // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
   // Pre-fetch detail for TVs as soon as the category is selected (small catalogue, needed for size/res/conn filters).
-  // Pre-fetch detail for cameras/lenses only when a filter is active.
-  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || (isCameraCategory && hasCameraFilters) || (isLensCategory && hasLensFilters);
+  // Pre-fetch detail for cameras/lenses/speakers only when a filter is active.
+  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || (isCameraCategory && hasCameraFilters) || (isLensCategory && hasLensFilters) || (isSpeakerCategory && hasSpeakerFilters);
 
   // When spec filters are active, pre-fetch detail for items not yet cached.
   useEffect(() => {
@@ -1159,6 +1296,8 @@ useEffect(() => {
     ? applyCameraFilters(priceFilteredItems, cameraFilters)
     : isLensCategory
     ? applyLensFilters(priceFilteredItems, lensFilters)
+    : isSpeakerCategory
+    ? applySpeakerFilters(priceFilteredItems, speakerFilters)
     : priceFilteredItems;
   // Re-sort client-side by effective price (lowestVariantPrice ?? finalPrice) so products
   // with basePrice=0 (variant-only pricing) appear in the correct position.
@@ -1197,6 +1336,9 @@ useEffect(() => {
   };
   const setLensFilter = (key: string, values: string[]) => {
     setLensFiltersState((prev) => ({ ...prev, [key]: values }));
+  };
+  const setSpeakerFilter = (key: string, values: string[]) => {
+    setSpeakerFiltersState((prev) => ({ ...prev, [key]: values }));
   };
 
   const filterSidebar = (
@@ -1375,6 +1517,17 @@ useEffect(() => {
           options={group.options}
           selected={lensFilters[group.key] ?? []}
           onChange={(vals) => setLensFilter(group.key, vals)}
+        />
+      ))}
+
+      {/* Speaker-specific filters — shown only for speaker category */}
+      {isSpeakerCategory && SPEAKER_FILTER_GROUPS.map((group) => (
+        <FilterSection
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          selected={speakerFilters[group.key] ?? []}
+          onChange={(vals) => setSpeakerFilter(group.key, vals)}
         />
       ))}
 

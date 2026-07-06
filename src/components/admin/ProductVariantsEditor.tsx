@@ -116,12 +116,18 @@ function comboKey(r: VariantRow, isCamera: boolean): string {
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-// For cameras images are grouped by body color / lens; for TVs by size; for all others by color.
-function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean): string {
+// For cameras images are grouped by body color / lens; for TVs by size; lens by model+color; all others by color.
+function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false): string {
   if (isCamera) {
     if (r.lensIncluded === "Yes" && r.storage.trim()) return `Lens: ${r.storage.trim()}`;
     const color = r.color.trim();
     return color ? `Camera: ${color}` : "Camera";
+  }
+  if (isLens) {
+    const model = r.ram.trim();
+    const color = r.color.trim();
+    if (model && color) return `${model} / ${color}`;
+    return model || color || "Lens";
   }
   return isTV ? r.ram.trim() : r.color.trim();
 }
@@ -195,8 +201,8 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): V
 }
 
 // Variants sharing the same group key share one image set — take the first non-empty.
-// Camera: grouped by body/lens; TV: grouped by size; all others: grouped by color.
-function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean): Record<string, ColorImages> {
+// Camera: grouped by body/lens; TV: grouped by size; lens by model+color; all others: grouped by color.
+function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean, isLens = false): Record<string, ColorImages> {
   const map: Record<string, ColorImages> = {};
   for (const v of variants) {
     let groupKey: string;
@@ -208,6 +214,10 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
         const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
         groupKey = color ? `Camera: ${color}` : "Camera";
       }
+    } else if (isLens) {
+      const model = v.attributes.ram != null ? String(v.attributes.ram).trim() : "";
+      const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
+      groupKey = model && color ? `${model} / ${color}` : model || color || "";
     } else {
       groupKey = isTV
         ? (v.attributes.size != null ? String(v.attributes.size).trim() : "")
@@ -243,18 +253,18 @@ const ProductVariantsEditor = forwardRef<
     return initRows(initialVariants, isCamera, isTV);
   });
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
-    () => initColorImages(initialVariants, isTV, isCamera),
+    () => initColorImages(initialVariants, isTV, isCamera, isLens),
   );
 
   // Distinct image group keys (camera: body/lens; TV: size; others: color) — drives the image uploaders.
   const colors = useMemo(() => {
     const out: string[] = [];
     for (const r of rows) {
-      const c = imageGroupKey(r, isTV, isCamera);
+      const c = imageGroupKey(r, isTV, isCamera, isLens);
       if (c && !out.includes(c)) out.push(c);
     }
     return out;
-  }, [rows, isTV, isCamera]);
+  }, [rows, isTV, isCamera, isLens]);
 
   // Revoke blob previews on unmount.
   useEffect(() => {
@@ -457,7 +467,7 @@ const ProductVariantsEditor = forwardRef<
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
-            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera)] ?? [],
+            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens)] ?? [],
           };
           if (r.existingId && initialVariants.some((v) => v.id === r.existingId)) {
             keptIds.add(r.existingId);

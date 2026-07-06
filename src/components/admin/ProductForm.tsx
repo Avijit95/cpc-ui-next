@@ -1115,6 +1115,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const isTv = catSlug.includes("tv") || catName.includes("tv") || catName.includes("television");
               const isLens = catSlug.includes("lens") || catName.includes("lens");
               const isCamera = !isLens && (catSlug.includes("camera") || catName.includes("camera"));
+              const isSpeaker = catSlug.includes("speaker") || catName.includes("speaker");
               return isPhone ? (
                 <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} isIPhone={isIPhone} onIsIPhoneChange={setIsIPhone} />
               ) : isTv ? (
@@ -1123,6 +1124,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 <CameraLensSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isCamera ? (
                 <CameraSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+              ) : isSpeaker ? (
+                <SpeakerSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : (
                 <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               );
@@ -2209,6 +2212,223 @@ function CameraLensSpecsEditor({
                   {field.key}
                 </label>
                 {LENS_YES_NO_KEYS.has(field.key) ? (
+                  <select
+                    value={get(field.key)}
+                    onChange={(e) => set(field.key, e.target.value)}
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">— Select —</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                ) : (
+                  <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                    <input
+                      value={get(field.key)}
+                      onChange={(e) => set(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      disabled={disabled}
+                      className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    {field.unit && (
+                      <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                        {field.unit}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Additional free-form specs */}
+      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+      </div>
+    </div>
+  );
+}
+
+// ── Speaker-specific structured spec editor ───────────────────────────────────
+
+const SPEAKER_SPEC_KEYS = new Set([
+  // General
+  "Brand", "Model", "Series", "Speaker Type", "Color",
+  // Audio
+  "Audio Output Power (RMS)", "Frequency Response", "Driver Size",
+  "Number of Drivers", "Speaker Configuration", "Impedance", "Sensitivity", "Signal-to-Noise Ratio",
+  // Connectivity
+  "Bluetooth", "Bluetooth Version", "Wi-Fi", "AUX Input", "USB Port",
+  "HDMI", "Optical Input", "RCA Input", "NFC",
+  // Smart Features
+  "Voice Assistant Support", "Multi-Room Audio", "Stereo Pairing", "Party Mode", "Mobile App Support",
+  // Battery
+  "Battery Capacity", "Battery Life", "Charging Time", "Charging Port",
+  // Build
+  "Material", "Water Resistance Rating", "Dust Resistance", "Dimensions", "Weight",
+  // Power
+  "Power Source", "Input Voltage",
+  // Controls
+  "Volume Control", "Playback Controls", "Built-in Microphone", "Hands-Free Calling",
+  // Package
+  "Package Contents",
+]);
+
+const SPEAKER_YES_NO_KEYS = new Set([
+  "Bluetooth", "Wi-Fi", "AUX Input", "HDMI", "Optical Input", "RCA Input", "NFC",
+  "Multi-Room Audio", "Stereo Pairing", "Party Mode", "Dust Resistance",
+  "Volume Control", "Playback Controls", "Built-in Microphone", "Hands-Free Calling",
+]);
+
+type SpeakerSpecGroup = { label: string; icon: string; fields: { key: string; placeholder?: string; unit?: string }[] };
+
+const SPEAKER_SPEC_GROUPS: SpeakerSpecGroup[] = [
+  {
+    label: "General",
+    icon: "📋",
+    fields: [
+      { key: "Brand",        placeholder: "e.g. JBL, Sony, Bose" },
+      { key: "Model",        placeholder: "e.g. Flip 7" },
+      { key: "Series",       placeholder: "e.g. Flip Series" },
+      { key: "Speaker Type", placeholder: "e.g. Portable Bluetooth Speaker" },
+      { key: "Color",        placeholder: "e.g. Black, White, Blue" },
+    ],
+  },
+  {
+    label: "Audio",
+    icon: "🔊",
+    fields: [
+      { key: "Audio Output Power (RMS)", placeholder: "e.g. 40 W",           unit: "W" },
+      { key: "Frequency Response",       placeholder: "e.g. 60 Hz – 20 kHz" },
+      { key: "Driver Size",              placeholder: "e.g. 45 mm",          unit: "mm" },
+      { key: "Number of Drivers",        placeholder: "e.g. 2" },
+      { key: "Speaker Configuration",    placeholder: "e.g. Stereo" },
+      { key: "Impedance",                placeholder: "e.g. 4 Ω",            unit: "Ω" },
+      { key: "Sensitivity",              placeholder: "e.g. 85 dB",          unit: "dB" },
+      { key: "Signal-to-Noise Ratio",    placeholder: "e.g. 80 dB",          unit: "dB" },
+    ],
+  },
+  {
+    label: "Connectivity",
+    icon: "🔌",
+    fields: [
+      { key: "Bluetooth",         placeholder: "" },
+      { key: "Bluetooth Version", placeholder: "e.g. 5.3" },
+      { key: "Wi-Fi",             placeholder: "" },
+      { key: "AUX Input",         placeholder: "" },
+      { key: "USB Port",          placeholder: "e.g. USB Type-C" },
+      { key: "HDMI",              placeholder: "" },
+      { key: "Optical Input",     placeholder: "" },
+      { key: "RCA Input",         placeholder: "" },
+      { key: "NFC",               placeholder: "" },
+    ],
+  },
+  {
+    label: "Smart Features",
+    icon: "🤖",
+    fields: [
+      { key: "Voice Assistant Support", placeholder: "e.g. Google Assistant, Amazon Alexa" },
+      { key: "Multi-Room Audio",        placeholder: "" },
+      { key: "Stereo Pairing",          placeholder: "" },
+      { key: "Party Mode",              placeholder: "" },
+      { key: "Mobile App Support",      placeholder: "e.g. JBL Portable App" },
+    ],
+  },
+  {
+    label: "Battery",
+    icon: "🔋",
+    fields: [
+      { key: "Battery Capacity", placeholder: "e.g. 4800 mAh", unit: "mAh" },
+      { key: "Battery Life",     placeholder: "e.g. Up to 20 Hours" },
+      { key: "Charging Time",    placeholder: "e.g. 2.5 Hours" },
+      { key: "Charging Port",    placeholder: "e.g. USB Type-C" },
+    ],
+  },
+  {
+    label: "Build",
+    icon: "📐",
+    fields: [
+      { key: "Material",              placeholder: "e.g. Fabric & Rubber" },
+      { key: "Water Resistance Rating", placeholder: "e.g. IP67" },
+      { key: "Dust Resistance",       placeholder: "" },
+      { key: "Dimensions",            placeholder: "e.g. 182 × 69 × 71 mm" },
+      { key: "Weight",                placeholder: "e.g. 550 g", unit: "g" },
+    ],
+  },
+  {
+    label: "Power",
+    icon: "⚡",
+    fields: [
+      { key: "Power Source",  placeholder: "e.g. Rechargeable Battery" },
+      { key: "Input Voltage", placeholder: "e.g. 5 V / 3 A" },
+    ],
+  },
+  {
+    label: "Controls",
+    icon: "🎛️",
+    fields: [
+      { key: "Volume Control",      placeholder: "" },
+      { key: "Playback Controls",   placeholder: "" },
+      { key: "Built-in Microphone", placeholder: "" },
+      { key: "Hands-Free Calling",  placeholder: "" },
+    ],
+  },
+  {
+    label: "Package Contents",
+    icon: "📦",
+    fields: [
+      { key: "Package Contents", placeholder: "e.g. Speaker, USB Type-C Cable, User Manual, Warranty Card" },
+    ],
+  },
+];
+
+function SpeakerSpecsEditor({
+  rows,
+  onChange,
+  disabled,
+}: {
+  rows: SpecRow[];
+  onChange: (rows: SpecRow[]) => void;
+  disabled: boolean;
+}) {
+  const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
+
+  const set = (key: string, value: string) => {
+    const existing = rows.find((r) => r.key === key);
+    if (existing) {
+      onChange(rows.map((r) => (r.id === existing.id ? { ...r, value } : r)));
+    } else {
+      onChange([...rows, { id: uid(), key, value }]);
+    }
+  };
+
+  const extraRows = rows.filter((r) => !SPEAKER_SPEC_KEYS.has(r.key));
+  const setExtraRows = (next: SpecRow[]) => {
+    onChange([...rows.filter((r) => SPEAKER_SPEC_KEYS.has(r.key)), ...next]);
+  };
+
+  return (
+    <div className="space-y-4">
+      {SPEAKER_SPEC_GROUPS.map((group) => (
+        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+            <span className="text-base leading-none">{group.icon}</span>
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
+          </div>
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {group.fields.map((field) => (
+              <div
+                key={field.key}
+                className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
+              >
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  {field.key}
+                </label>
+                {SPEAKER_YES_NO_KEYS.has(field.key) ? (
                   <select
                     value={get(field.key)}
                     onChange={(e) => set(field.key, e.target.value)}
