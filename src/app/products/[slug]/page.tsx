@@ -605,7 +605,10 @@ useEffect(() => {
   const isTvProduct = product.breadcrumbs.some(
     (b) => b.slug?.toLowerCase().includes("tv") || b.name?.toLowerCase().includes("tv") || b.name?.toLowerCase().includes("television")
   );
-  const isCameraProduct = product.breadcrumbs.some(
+  const isLensProduct = product.breadcrumbs.some(
+    (b) => b.slug?.toLowerCase().includes("lens") || b.name?.toLowerCase().includes("lens")
+  );
+  const isCameraProduct = !isLensProduct && product.breadcrumbs.some(
     (b) => b.slug?.toLowerCase().includes("camera") || b.name?.toLowerCase().includes("camera")
   );
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -864,7 +867,7 @@ useEffect(() => {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} selectedVariant={selectedVariant} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} selectedVariant={selectedVariant} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1963,9 +1966,36 @@ function buildCameraHighlights(specs: Record<string, unknown>): HighlightRow[] {
   return rows;
 }
 
-function ProductHighlights({ specs, isTv, isCamera, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; selectedVariant?: Variant }) {
+function buildLensHighlights(specs: Record<string, unknown>): HighlightRow[] {
+  const s = (key: string) => {
+    const v = specs[key];
+    return v ? String(v).trim() : "";
+  };
+  const rows: HighlightRow[] = [];
+
+  const mount = s("Lens Mount");
+  if (mount) rows.push({ icon: <Camera size={18} />, label: "Compatible Mountings", text: mount, accent: "bg-blue-100 text-blue-600" });
+
+  const focal = s("Focal Length");
+  if (focal) rows.push({ icon: <Zap size={18} />, label: "Focal Length", text: focal, accent: "bg-purple-100 text-purple-600" });
+
+  const lensType = s("Lens Type");
+  if (lensType) rows.push({ icon: <Monitor size={18} />, label: "Lens Type", text: lensType, accent: "bg-cyan-100 text-cyan-600" });
+
+  const focusType = s("Focus Type");
+  if (focusType) rows.push({ icon: <Wifi size={18} />, label: "Autofocus", text: focusType, accent: "bg-green-100 text-green-600" });
+
+  const aperture = s("Maximum Aperture");
+  if (aperture) rows.push({ icon: <HardDrive size={18} />, label: "Maximum Aperture", text: aperture, accent: "bg-orange-100 text-orange-600" });
+
+  return rows;
+}
+
+function ProductHighlights({ specs, isTv, isCamera, isLens, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; selectedVariant?: Variant }) {
   const [expanded, setExpanded] = useState(true);
-  const highlights = isCamera
+  const highlights = isLens
+    ? buildLensHighlights(specs)
+    : isCamera
     ? buildCameraHighlights(specs)
     : isTv
     ? buildTvHighlights(specs, selectedVariant)

@@ -180,6 +180,37 @@ const CAMERA_FILTER_GROUPS: CameraFilterGroup[] = [
   },
 ];
 
+// ── Lens-specific filter groups ───────────────────────────────────────────────
+type LensFilterGroup = { key: string; label: string; options: string[] };
+
+const LENS_FILTER_GROUPS: LensFilterGroup[] = [
+  {
+    key: "lensMount",
+    label: "Compatible Mountings",
+    options: ["Canon RF", "Canon EF", "Canon EF-S", "Nikon Z", "Nikon F", "Sony E", "Sony FE", "Fujifilm X", "Other"],
+  },
+  {
+    key: "focalLength",
+    label: "Focal Length",
+    options: ["8–15 mm", "16–24 mm", "24–70 mm", "70–200 mm", "200–400 mm", "400 mm & Above"],
+  },
+  {
+    key: "lensType",
+    label: "Lens Type",
+    options: ["Fisheye", "Macro", "Standard", "Telephoto", "Wide-angle"],
+  },
+  {
+    key: "focusType",
+    label: "Autofocus",
+    options: ["Autofocus", "Manual Focus"],
+  },
+  {
+    key: "maxAperture",
+    label: "Maximum Aperture",
+    options: ["f/1.2", "f/1.4", "f/1.8", "f/2", "f/2.8", "f/4", "f/5.6 & Smaller"],
+  },
+];
+
 // ── TV-specific filter groups ─────────────────────────────────────────────────
 type TvFilterGroup = { key: string; label: string; options: string[] };
 
@@ -687,6 +718,103 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
   });
 }
 
+function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[]>): ListCard[] {
+  const mountOpts    = lensFilters["lensMount"]    ?? [];
+  const focalOpts    = lensFilters["focalLength"]  ?? [];
+  const typeOpts     = lensFilters["lensType"]     ?? [];
+  const focusOpts    = lensFilters["focusType"]    ?? [];
+  const apertureOpts = lensFilters["maxAperture"]  ?? [];
+
+  const hasAny = [mountOpts, focalOpts, typeOpts, focusOpts, apertureOpts].some((a) => a.length > 0);
+  if (!hasAny) return items;
+
+  const norm = (v: unknown) =>
+    String(v ?? "").toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
+
+  // Parse first float from a string like "f/5.6-6.3" → 5.6
+  const parseAperture = (v: unknown): number | null => {
+    const m = String(v ?? "").match(/f\/?([\d.]+)/i);
+    return m ? parseFloat(m[1]) : null;
+  };
+
+  // Parse focal range from "200-600 mm" → {min: 200, max: 600}; "50 mm" → {min: 50, max: 50}
+  const parseFocal = (v: unknown): { min: number; max: number } | null => {
+    const s = String(v ?? "");
+    const range = s.match(/([\d.]+)\s*[-–]\s*([\d.]+)/);
+    if (range) return { min: parseFloat(range[1]), max: parseFloat(range[2]) };
+    const single = s.match(/([\d.]+)/);
+    if (single) { const f = parseFloat(single[1]); return { min: f, max: f }; }
+    return null;
+  };
+
+  return items.filter((item) => {
+    const cached = detailCache.get(item.slug);
+    const specs  = cached?.specs ?? {};
+
+    // Compatible Mountings
+    if (mountOpts.length > 0) {
+      const raw = norm(specs["Lens Mount"] ?? specs["Compatible Camera"] ?? "");
+      const nonOther = mountOpts.filter((o) => o !== "Other");
+      const wantsOther = mountOpts.includes("Other");
+      const knownMounts = ["canon rf", "canon ef", "canon ef s", "nikon z", "nikon f", "sony e", "sony fe", "fujifilm x"];
+      const matchesNamed = nonOther.some((opt) => {
+        const o = norm(opt);
+        // "Canon EF" must not match "Canon EF-S" (ef s is a superset of ef)
+        if (o === "canon ef") return raw.includes("canon ef") && !raw.includes("canon ef s");
+        return raw.includes(o);
+      });
+      if (!matchesNamed) {
+        if (wantsOther) {
+          const isKnown = knownMounts.some((m) => raw.includes(m));
+          if (!raw || isKnown) return false;
+        } else {
+          return false;
+        }
+      }
+    }
+
+    // Focal Length — match by overlap of lens range with filter range
+    if (focalOpts.length > 0) {
+      const focal = parseFocal(specs["Focal Length"] ?? "");
+      if (!focal) return false;
+      if (!focalOpts.some((opt) => {
+        if (opt === "8–15 mm")         return focal.min <= 15 && focal.max >= 8;
+        if (opt === "16–24 mm")        return focal.min <= 24 && focal.max >= 16;
+        if (opt === "24–70 mm")        return focal.min <= 70 && focal.max >= 24;
+        if (opt === "70–200 mm")       return focal.min <= 200 && focal.max >= 70;
+        if (opt === "200–400 mm")      return focal.min <= 400 && focal.max >= 200;
+        if (opt === "400 mm & Above")  return focal.max >= 400;
+        return false;
+      })) return false;
+    }
+
+    // Lens Type
+    if (typeOpts.length > 0) {
+      const raw = norm(specs["Lens Type"] ?? specs["Lens Series"] ?? item.name);
+      if (!typeOpts.some((opt) => raw.includes(norm(opt)))) return false;
+    }
+
+    // Autofocus / Focus Type
+    if (focusOpts.length > 0) {
+      const raw = norm(specs["Focus Type"] ?? specs["Autofocus"] ?? "");
+      if (!focusOpts.some((opt) => raw.includes(norm(opt)))) return false;
+    }
+
+    // Maximum Aperture
+    if (apertureOpts.length > 0) {
+      const ap = parseAperture(specs["Maximum Aperture"] ?? specs["Aperture"] ?? "");
+      if (ap === null) return false;
+      if (!apertureOpts.some((opt) => {
+        if (opt === "f/5.6 & Smaller") return ap >= 5.6;
+        const target = parseAperture(opt);
+        return target !== null && Math.abs(ap - target) < 0.05;
+      })) return false;
+    }
+
+    return true;
+  });
+}
+
 // Generic collapsible wrapper used by Price Range, Brand, Rating
 function CollapsibleSection({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -864,6 +992,8 @@ function ProductsPageInner() {
   const [tvFilters, setTvFilters] = useState<Record<string, string[]>>({});
   // Camera-specific filters (shown only when camera category is selected)
   const [cameraFilters, setCameraFiltersState] = useState<Record<string, string[]>>({});
+  // Lens-specific filters (shown only when lens category is selected)
+  const [lensFilters, setLensFiltersState] = useState<Record<string, string[]>>({});
 const [headerHeight, setHeaderHeight] = useState(0);
 
 useEffect(() => {
@@ -916,6 +1046,7 @@ useEffect(() => {
     setPhoneFilters({});
     setTvFilters({});
     setCameraFiltersState({});
+    setLensFiltersState({});
   };
 
   useEffect(() => {
@@ -990,12 +1121,14 @@ useEffect(() => {
     selectedCategory?.toLowerCase().includes("television") ||
     false;
   const hasTvFilters = Object.values(tvFilters).some((v) => v.length > 0);
-  const isCameraCategory = !!selectedCategory?.toLowerCase().includes("camera");
+  const isLensCategory = !!selectedCategory?.toLowerCase().includes("lens");
+  const isCameraCategory = !isLensCategory && !!selectedCategory?.toLowerCase().includes("camera");
   const hasCameraFilters = Object.values(cameraFilters).some((v) => v.length > 0);
+  const hasLensFilters = Object.values(lensFilters).some((v) => v.length > 0);
   // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
   // Pre-fetch detail for TVs as soon as the category is selected (small catalogue, needed for size/res/conn filters).
-  // Pre-fetch detail for cameras only when a filter is active.
-  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || (isCameraCategory && hasCameraFilters);
+  // Pre-fetch detail for cameras/lenses only when a filter is active.
+  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || (isCameraCategory && hasCameraFilters) || (isLensCategory && hasLensFilters);
 
   // When spec filters are active, pre-fetch detail for items not yet cached.
   useEffect(() => {
@@ -1024,6 +1157,8 @@ useEffect(() => {
     ? applyTvFilters(priceFilteredItems, tvFilters)
     : isCameraCategory
     ? applyCameraFilters(priceFilteredItems, cameraFilters)
+    : isLensCategory
+    ? applyLensFilters(priceFilteredItems, lensFilters)
     : priceFilteredItems;
   // Re-sort client-side by effective price (lowestVariantPrice ?? finalPrice) so products
   // with basePrice=0 (variant-only pricing) appear in the correct position.
@@ -1059,6 +1194,9 @@ useEffect(() => {
   };
   const setCameraFilter = (key: string, values: string[]) => {
     setCameraFiltersState((prev) => ({ ...prev, [key]: values }));
+  };
+  const setLensFilter = (key: string, values: string[]) => {
+    setLensFiltersState((prev) => ({ ...prev, [key]: values }));
   };
 
   const filterSidebar = (
@@ -1226,6 +1364,17 @@ useEffect(() => {
           options={group.options}
           selected={cameraFilters[group.key] ?? []}
           onChange={(vals) => setCameraFilter(group.key, vals)}
+        />
+      ))}
+
+      {/* Lens-specific filters — shown only for lens category */}
+      {isLensCategory && LENS_FILTER_GROUPS.map((group) => (
+        <FilterSection
+          key={group.key}
+          label={group.label}
+          options={group.options}
+          selected={lensFilters[group.key] ?? []}
+          onChange={(vals) => setLensFilter(group.key, vals)}
         />
       ))}
 

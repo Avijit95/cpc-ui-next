@@ -1113,11 +1113,14 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const catName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
               const isPhone = catSlug.includes("phone") || catName.includes("phone");
               const isTv = catSlug.includes("tv") || catName.includes("tv") || catName.includes("television");
-              const isCamera = catSlug.includes("camera") || catName.includes("camera");
+              const isLens = catSlug.includes("lens") || catName.includes("lens");
+              const isCamera = !isLens && (catSlug.includes("camera") || catName.includes("camera"));
               return isPhone ? (
                 <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} isIPhone={isIPhone} onIsIPhoneChange={setIsIPhone} />
               ) : isTv ? (
                 <TvSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+              ) : isLens ? (
+                <CameraLensSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isCamera ? (
                 <CameraSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : (
@@ -1700,7 +1703,7 @@ const CAMERA_SPEC_KEYS = new Set([
   // Sensor
   "Sensor Type", "Sensor Size", "Effective Resolution (MP)", "Image Processor", "ISO Range",
   // Lens
-  "Lens Mount", "Lens Included", "Lens Name", "Focal Length", "Aperture",
+  "Lens Mount", "Lens Included", "Lens Name", "Focal Length", "Aperture", "Autofocus",
   // Display
   "Screen Size", "Screen Type", "Touchscreen", "Vari-Angle Screen",
   // Flash
@@ -1763,6 +1766,7 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
       { key: "Lens Name", placeholder: "e.g. 28–70 mm F3.5–5.6 OSS" },
       { key: "Focal Length", placeholder: "e.g. 28–70 mm", unit: "mm" },
       { key: "Aperture", placeholder: "e.g. f/1.8 – f/22" },
+      { key: "Autofocus", placeholder: "e.g. Phase Detection, Contrast Detection" },
     ],
   },
   {
@@ -2080,6 +2084,160 @@ function CameraSpecsEditor({
               ))}
             </div>
           )}
+        </div>
+      ))}
+
+      {/* Additional free-form specs */}
+      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+      </div>
+    </div>
+  );
+}
+
+// ── Camera Lens–specific structured spec editor ───────────────────────────────
+
+const LENS_SPEC_KEYS = new Set([
+  // General
+  "Brand", "Model", "Lens Name", "Lens Series", "Lens Type", "Lens Mount",
+  "Compatible Camera", "Compatible Sensor Format", "Color",
+  // Optical
+  "Focal Length", "Maximum Aperture", "Minimum Aperture",
+  "Angle of View (Full Frame)", "Optical Construction", "Special Elements", "Aperture Blades",
+  // Focus
+  "Focus Type", "Focus Motor", "Minimum Focus Distance", "Maximum Magnification",
+  "Focus Limiter Switch", "Focus Hold Buttons",
+  // Recommended Usage
+  "Recommended Usage",
+]);
+
+const LENS_YES_NO_KEYS = new Set(["Focus Limiter Switch"]);
+
+type LensSpecGroup = { label: string; icon: string; fields: { key: string; placeholder?: string; unit?: string }[] };
+
+const LENS_SPEC_GROUPS: LensSpecGroup[] = [
+  {
+    label: "General",
+    icon: "📋",
+    fields: [
+      { key: "Brand",                    placeholder: "e.g. Sony, Canon, Nikon" },
+      { key: "Model",                    placeholder: "e.g. SEL200600G" },
+      { key: "Lens Name",                placeholder: "e.g. FE 200-600mm F5.6-6.3 G OSS" },
+      { key: "Lens Series",              placeholder: "e.g. G Lens, L-Mount, Art" },
+      { key: "Lens Type",                placeholder: "e.g. Super Telephoto Zoom" },
+      { key: "Lens Mount",               placeholder: "e.g. Sony E Mount" },
+      { key: "Compatible Camera",        placeholder: "e.g. Sony E-mount Mirrorless Cameras" },
+      { key: "Compatible Sensor Format", placeholder: "e.g. Full Frame (APS-C Compatible)" },
+      { key: "Color",                    placeholder: "e.g. White, Black" },
+    ],
+  },
+  {
+    label: "Optical Specifications",
+    icon: "🔭",
+    fields: [
+      { key: "Focal Length",              placeholder: "e.g. 200-600 mm", unit: "mm" },
+      { key: "Maximum Aperture",          placeholder: "e.g. f/5.6-6.3" },
+      { key: "Minimum Aperture",          placeholder: "e.g. f/32-36" },
+      { key: "Angle of View (Full Frame)", placeholder: "e.g. 12°30' - 4°10'" },
+      { key: "Optical Construction",      placeholder: "e.g. 24 Elements in 17 Groups" },
+      { key: "Special Elements",          placeholder: "e.g. 5 ED Elements, 1 Aspherical Element" },
+      { key: "Aperture Blades",           placeholder: "e.g. 11 (Circular)" },
+    ],
+  },
+  {
+    label: "Focus",
+    icon: "🎯",
+    fields: [
+      { key: "Focus Type",             placeholder: "e.g. Autofocus / Manual Focus" },
+      { key: "Focus Motor",            placeholder: "e.g. Direct Drive SSM (DDSSM)" },
+      { key: "Minimum Focus Distance", placeholder: "e.g. 2.4 m", unit: "m" },
+      { key: "Maximum Magnification",  placeholder: "e.g. 0.20×" },
+      { key: "Focus Limiter Switch",   placeholder: "" },
+      { key: "Focus Hold Buttons",     placeholder: "e.g. Yes (3)" },
+    ],
+  },
+  {
+    label: "Recommended Usage",
+    icon: "📌",
+    fields: [
+      { key: "Recommended Usage", placeholder: "e.g. Wildlife Photography, Bird Photography, Sports Photography" },
+    ],
+  },
+];
+
+function CameraLensSpecsEditor({
+  rows,
+  onChange,
+  disabled,
+}: {
+  rows: SpecRow[];
+  onChange: (rows: SpecRow[]) => void;
+  disabled: boolean;
+}) {
+  const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
+
+  const set = (key: string, value: string) => {
+    const existing = rows.find((r) => r.key === key);
+    if (existing) {
+      onChange(rows.map((r) => (r.id === existing.id ? { ...r, value } : r)));
+    } else {
+      onChange([...rows, { id: uid(), key, value }]);
+    }
+  };
+
+  const extraRows = rows.filter((r) => !LENS_SPEC_KEYS.has(r.key));
+  const setExtraRows = (next: SpecRow[]) => {
+    onChange([...rows.filter((r) => LENS_SPEC_KEYS.has(r.key)), ...next]);
+  };
+
+  return (
+    <div className="space-y-4">
+      {LENS_SPEC_GROUPS.map((group) => (
+        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+            <span className="text-base leading-none">{group.icon}</span>
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
+          </div>
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {group.fields.map((field) => (
+              <div
+                key={field.key}
+                className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
+              >
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  {field.key}
+                </label>
+                {LENS_YES_NO_KEYS.has(field.key) ? (
+                  <select
+                    value={get(field.key)}
+                    onChange={(e) => set(field.key, e.target.value)}
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">— Select —</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                ) : (
+                  <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                    <input
+                      value={get(field.key)}
+                      onChange={(e) => set(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      disabled={disabled}
+                      className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    {field.unit && (
+                      <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                        {field.unit}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       ))}
 

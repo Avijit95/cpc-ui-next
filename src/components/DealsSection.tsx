@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import ProductSectionSlider from "./ProductSectionSlider";
@@ -132,6 +132,9 @@ export default function DealsSection() {
   const [thumbStart, setThumbStart] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const THUMB_VISIBLE = 4;
+  const SWIPE_THRESHOLD = 50;
+  const dragStartX = useRef<number | null>(null);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,8 +185,7 @@ export default function DealsSection() {
   if (!loaded) return null;
 
   const liveDeals = deals
-    .filter((d) => new Date(d.endsAt).getTime() > now)
-    .slice(0, 4);
+    .filter((d) => new Date(d.endsAt).getTime() > now);
   const hasDeals = liveDeals.length > 0;
 
   if (!hasDeals && bestSellers.length === 0) return null;
@@ -201,6 +203,27 @@ export default function DealsSection() {
   const safeIdx = dealIdx % liveDeals.length;
   const deal = liveDeals[safeIdx];
   if (!deal) return null;
+
+  const prevDeal = () => setDealIdx((i) => (i - 1 + liveDeals.length) % liveDeals.length);
+  const nextDeal = () => setDealIdx((i) => (i + 1) % liveDeals.length);
+
+  const onDragStart = (clientX: number) => {
+    dragStartX.current = clientX;
+    isDragging.current = false;
+  };
+  const onDragMove = (clientX: number) => {
+    if (dragStartX.current !== null && Math.abs(clientX - dragStartX.current) > 5) {
+      isDragging.current = true;
+    }
+  };
+  const onDragEnd = (clientX: number) => {
+    if (dragStartX.current === null) return;
+    const delta = clientX - dragStartX.current;
+    dragStartX.current = null;
+    if (Math.abs(delta) >= SWIPE_THRESHOLD) {
+      delta < 0 ? nextDeal() : prevDeal();
+    }
+  };
 
   return (
     <section className="py-8 px-[10px] xs:px-4 bg-gray-50">
@@ -227,16 +250,21 @@ export default function DealsSection() {
               <Countdown endsAt={deal.endsAt} />
             </div>
 
-            <div className="pt-14 xs:p-5 xs:pt-14 flex flex-col xs:flex-row xs:items-center gap-3 relative">
+            <div
+              className="pt-14 xs:p-5 xs:pt-14 flex flex-col xs:flex-row xs:items-center gap-3 relative select-none"
+              onMouseDown={(e) => onDragStart(e.clientX)}
+              onMouseMove={(e) => onDragMove(e.clientX)}
+              onMouseUp={(e) => onDragEnd(e.clientX)}
+              onMouseLeave={() => { dragStartX.current = null; }}
+              onTouchStart={(e) => onDragStart(e.touches[0].clientX)}
+              onTouchMove={(e) => onDragMove(e.touches[0].clientX)}
+              onTouchEnd={(e) => onDragEnd(e.changedTouches[0].clientX)}
+            >
               {/* Image row: arrows flank the image on all sizes */}
               <div className="flex items-center justify-center gap-[5px] xs:gap-3 xs:contents">
                 {/* Prev Arrow */}
                 <button
-                  onClick={() =>
-                    setDealIdx(
-                      (i) => (i - 1 + liveDeals.length) % liveDeals.length,
-                    )
-                  }
+                  onClick={prevDeal}
                   className="flex-shrink-0 w-8 h-12 bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 flex items-center justify-center transition-colors"
                   aria-label="Previous deal"
                 >
@@ -247,6 +275,7 @@ export default function DealsSection() {
                 <Link
                   href={`/products/${deal.product.slug}`}
                   className="relative flex-shrink-0 w-[220px] h-[280px]"
+                  onClick={(e) => { if (isDragging.current) e.preventDefault(); }}
                 >
                   {dealImageUrl(dealDetails, deal.product.slug) ? (
                     <Image
@@ -266,7 +295,7 @@ export default function DealsSection() {
 
                 {/* Next Arrow */}
                 <button
-                  onClick={() => setDealIdx((i) => (i + 1) % liveDeals.length)}
+                  onClick={nextDeal}
                   className="flex-shrink-0 w-8 h-12 bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 flex items-center justify-center transition-colors"
                   aria-label="Next deal"
                 >
@@ -305,6 +334,7 @@ export default function DealsSection() {
                       { color: "bg-pink-50 border-pink-100",   dot: "bg-pink-500" },
                       { color: "bg-yellow-50 border-yellow-100", dot: "bg-yellow-500" },
                     ];
+                    // Phone highlights
                     const ram = s("RAM"), rom = s("ROM");
                     if (ram || rom) highlights.push({ label: "Memory", text: [ram && `${ram} RAM`, rom && `${rom} ROM`].filter(Boolean).join(" · "), ...colors[0] });
                     const proc = s("Processor");
@@ -313,10 +343,53 @@ export default function DealsSection() {
                     if (rear) highlights.push({ label: "Camera", text: `${rear} Rear`, ...colors[2] });
                     const bat = s("Battery");
                     if (bat) highlights.push({ label: "Battery", text: bat, ...colors[3] });
-                    const displayParts = [s("Display Size"), s("Screen Type")].filter(Boolean);
-                    if (displayParts.length) highlights.push({ label: "Display", text: displayParts.join(" · "), ...colors[4] });
+                    // Only add Display for phones if other phone specs already matched
+                    if (highlights.length > 0) {
+                      const displayParts = [s("Display Size"), s("Screen Type")].filter(Boolean);
+                      if (displayParts.length) highlights.push({ label: "Display", text: displayParts.join(" · "), ...colors[4] });
+                    }
+                    // Camera highlights — only trigger if a camera-unique key matches
                     if (highlights.length === 0) {
-                      Object.entries(detail.specs).forEach(([k, v], idx) => {
+                      const lensMount = s("Lens Mount");
+                      const memCard = s("Memory Card Type");
+                      const shutterSpeed = s("Shutter Speed");
+                      const isCameraProduct = !!(lensMount || memCard || shutterSpeed);
+                      if (isCameraProduct) {
+                        if (lensMount) highlights.push({ label: "Lens Mount", text: lensMount, ...colors[0] });
+                        if (memCard) highlights.push({ label: "Memory Card", text: memCard, ...colors[1] });
+                        if (shutterSpeed) highlights.push({ label: "Shutter Speed", text: shutterSpeed, ...colors[2] });
+                        const aspectRatio = s("Aspect Ratio");
+                        if (aspectRatio) highlights.push({ label: "Aspect Ratio", text: aspectRatio, ...colors[3] });
+                        const connParts: string[] = [];
+                        if (s("Wi-Fi") === "Yes") connParts.push("Wi-Fi");
+                        if (s("Bluetooth") === "Yes") connParts.push("Bluetooth");
+                        if (s("NFC") === "Yes") connParts.push("NFC");
+                        const usbType = s("USB Type");
+                        if (usbType) connParts.push(`USB ${usbType}`);
+                        if (s("HDMI") === "Yes") connParts.push("HDMI");
+                        if (connParts.length > 0) highlights.push({ label: "Connectivity", text: connParts.join(", "), ...colors[4] });
+                        const display = s("Display");
+                        if (display) highlights.push({ label: "Display", text: display, ...colors[5] });
+                      }
+                    }
+                    // TV highlights
+                    if (highlights.length === 0) {
+                      const tvKeys: { label: string; key: string; color: typeof colors[0] }[] = [
+                        { label: "Screen Size",        key: "Screen Size",         color: colors[0] },
+                        { label: "Resolution",         key: "Resolution",          color: colors[1] },
+                        { label: "Display Technology", key: "Display Technology",  color: colors[2] },
+                        { label: "Refresh Rate",       key: "Refresh Rate",        color: colors[3] },
+                        { label: "Operating System",   key: "Operating System",    color: colors[4] },
+                        { label: "Special Feature",    key: "Special Feature",     color: colors[5] },
+                      ];
+                      for (const { label, key, color } of tvKeys) {
+                        const val = s(key);
+                        if (val) highlights.push({ label, text: val, ...color });
+                      }
+                    }
+                    // Generic fallback — cap at 5
+                    if (highlights.length === 0) {
+                      Object.entries(detail.specs).slice(0, 5).forEach(([k, v], idx) => {
                         if (v && typeof v !== "object")
                           highlights.push({ label: k, text: String(v), ...colors[idx % colors.length] });
                       });
@@ -390,9 +463,7 @@ export default function DealsSection() {
               {/* Prev */}
               <button
                 onClick={() => {
-                  const next = Math.max(0, thumbStart - 1);
-                  setThumbStart(next);
-                  setDealIdx(next);
+                  setThumbStart((s) => Math.max(0, s - 1));
                 }}
                 disabled={thumbStart === 0}
                 className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
@@ -442,9 +513,7 @@ export default function DealsSection() {
               {/* Next */}
               <button
                 onClick={() => {
-                  const next = Math.min(liveDeals.length - THUMB_VISIBLE, thumbStart + 1);
-                  setThumbStart(next);
-                  setDealIdx(next);
+                  setThumbStart((s) => Math.min(liveDeals.length - THUMB_VISIBLE, s + 1));
                 }}
                 disabled={thumbStart + THUMB_VISIBLE >= liveDeals.length}
                 className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"

@@ -88,6 +88,10 @@ function isCameraCategory(slug?: string): boolean {
   return !!slug && slug.toLowerCase().includes("camera");
 }
 
+function isLensCategory(slug?: string): boolean {
+  return !!slug && slug.toLowerCase().includes("lens");
+}
+
 function isTvCategory(slug?: string): boolean {
   return !!slug && (slug.toLowerCase().includes("tv") || slug.toLowerCase().includes("television"));
 }
@@ -229,7 +233,8 @@ const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
   { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; hideRam?: boolean; draftRows?: unknown[] }
 >(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, hideRam = false, draftRows }, ref) {
-  const isCamera = isCameraCategory(categorySlug);
+  const isLens = isLensCategory(categorySlug);
+  const isCamera = !isLens && isCameraCategory(categorySlug);
   const isTV = isTvCategory(categorySlug);
   const [rows, setRows] = useState<VariantRow[]>(() => {
     if (draftRows && draftRows.length > 0) {
@@ -398,7 +403,7 @@ const ProductVariantsEditor = forwardRef<
           const key = comboKey(r, isCamera);
           if (seen.has(key)) {
             return isCamera
-              ? "Two variants have the same Model No. / Color / Launch Year / Lens combination."
+              ? (isLens ? "Two variants have the same Model No. / Color combination." : "Two variants have the same Model No. / Color / Launch Year / Lens combination.")
               : isTV
               ? "Two variants have the same Size / Model No. / Color combination."
               : "Two variants have the same RAM / ROM / Color combination.";
@@ -478,7 +483,9 @@ const ProductVariantsEditor = forwardRef<
       <div>
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
-          {isCamera
+          {isLens
+            ? "Add each Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price."
+            : isCamera
             ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images: Camera: [Color] sections for body-only variants per color, Lens sections for each included lens."
             : isTV
             ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
@@ -524,6 +531,8 @@ const ProductVariantsEditor = forwardRef<
             className={`grid grid-cols-2 gap-2 items-end border border-gray-100 rounded-lg p-2.5 ${
               isTV
                 ? "sm:grid-cols-[repeat(10,1fr)_auto]"
+                : isLens
+                ? "sm:grid-cols-[repeat(8,1fr)_auto]"
                 : isCamera
                 ? r.lensIncluded === "Yes" ? "sm:grid-cols-[repeat(11,1fr)_auto]" : "sm:grid-cols-[repeat(10,1fr)_auto]"
                 : !hideRam
@@ -531,7 +540,7 @@ const ProductVariantsEditor = forwardRef<
                 : "sm:grid-cols-[repeat(8,1fr)_auto]"
             }`}
           >
-            {isCamera ? (
+            {(isCamera || isLens) ? (
               <>
                 <Field label="Model No.">
                   <input
@@ -552,43 +561,47 @@ const ProductVariantsEditor = forwardRef<
                     className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                   />
                 </Field>
-                <Field label="Launch Year">
-                  <select
-                    value={r.launchYear}
-                    onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
-                  >
-                    <option value="">— Year —</option>
-                    {Array.from({ length: new Date().getFullYear() - 2018 }, (_, i) => 2019 + i).map((y) => (
-                      <option key={y} value={String(y)}>{y}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Lens Included">
-                  <select
-                    value={r.lensIncluded || "No"}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateRow(r.uid, { lensIncluded: val, storage: val === "No" ? "" : r.storage });
-                    }}
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
-                  >
-                    <option value="No">No</option>
-                    <option value="Yes">Yes</option>
-                  </select>
-                </Field>
-                {r.lensIncluded === "Yes" && (
-                  <Field label="Lens Name">
-                    <input
-                      value={r.storage}
-                      onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
-                      placeholder="e.g. 18-55mm f/3.5-5.6"
-                      disabled={disabled}
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-                    />
-                  </Field>
+                {!isLens && (
+                  <>
+                    <Field label="Launch Year">
+                      <select
+                        value={r.launchYear}
+                        onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
+                        disabled={disabled}
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                      >
+                        <option value="">— Year —</option>
+                        {Array.from({ length: new Date().getFullYear() - 2018 }, (_, i) => 2019 + i).map((y) => (
+                          <option key={y} value={String(y)}>{y}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Lens Included">
+                      <select
+                        value={r.lensIncluded || "No"}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateRow(r.uid, { lensIncluded: val, storage: val === "No" ? "" : r.storage });
+                        }}
+                        disabled={disabled}
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                      >
+                        <option value="No">No</option>
+                        <option value="Yes">Yes</option>
+                      </select>
+                    </Field>
+                    {r.lensIncluded === "Yes" && (
+                      <Field label="Lens Name">
+                        <input
+                          value={r.storage}
+                          onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
+                          placeholder="e.g. 18-55mm f/3.5-5.6"
+                          disabled={disabled}
+                          className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                        />
+                      </Field>
+                    )}
+                  </>
                 )}
               </>
             ) : isTV ? (
@@ -640,7 +653,7 @@ const ProductVariantsEditor = forwardRef<
                 </select>
               </Field>
             )}
-            {!isTV && !isCamera && (
+            {!isTV && !isCamera && !isLens && (
               <Field label="ROM">
                 <input
                   value={r.storage}
@@ -652,7 +665,7 @@ const ProductVariantsEditor = forwardRef<
                 />
               </Field>
             )}
-            {!isCamera && (
+            {!isCamera && !isLens && (
               <Field label="Color">
                 <input
                   value={r.color}
