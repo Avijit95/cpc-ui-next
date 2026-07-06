@@ -1447,7 +1447,11 @@ useEffect(() => {
               </button>
               {openSections["Specifications"] && (
                 <div className="px-5 py-5 border-t border-gray-100">
-                  <SpecsTable specs={product.specs} />
+                  <SpecsTable
+                    specs={product.specs}
+                    isLens={isLensProduct}
+                    lensModelIdx={isLensProduct ? getActiveLensModelIndex(product.specs, selectedVariant) : 0}
+                  />
                 </div>
               )}
             </div>
@@ -1759,6 +1763,38 @@ useEffect(() => {
 // products never render raw arrays like ["8GB","12GB"] in the spec table.
 const HIDDEN_SPEC_KEYS = new Set(["ramOptions", "storageOptions", "colorOptions"]);
 
+// ── Lens multi-model helpers ──────────────────────────────────────────────────
+const MAX_LENS_MODELS_DISPLAY = 5;
+
+function lensKeyForIdx(base: string, idx: number): string {
+  return idx === 0 ? base : `${base} ${idx + 1}`;
+}
+
+const LENS_PER_MODEL_SPEC_BASES = [
+  "Model",
+  "Lens Name", "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
+  "Focal Length", "Maximum Aperture", "Minimum Aperture", "Minimum Focus Distance", "Maximum Magnification",
+  "Angle of View (Full Frame)", "Optical Construction", "Special Elements", "Aperture Blades",
+  "Focus Type", "Focus Motor", "Focus Limiter Switch", "Focus Hold Buttons",
+  "Recommended Usage",
+];
+
+function getActiveLensModelIndex(
+  specs: Record<string, unknown>,
+  selectedVariant?: Variant,
+): number {
+  if (!selectedVariant) return 0;
+  const modelNo = selectedVariant.attributes?.ram != null
+    ? String(selectedVariant.attributes.ram).trim().toLowerCase()
+    : "";
+  if (!modelNo) return 0;
+  for (let i = 0; i < MAX_LENS_MODELS_DISPLAY; i++) {
+    const val = specs[lensKeyForIdx("Model", i)];
+    if (val && String(val).trim().toLowerCase() === modelNo) return i;
+  }
+  return 0;
+}
+
 function humanizeSpecKey(key: string): string {
   const spaced = key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -1787,8 +1823,43 @@ const SPEC_GROUP_DEFS: { label: string; patterns: string[] }[] = [
   { label: "Dimensions", patterns: ["height", "width", "thickness", "depth", "weight", "dimension", "size", "build", "material"] },
 ];
 
-function SpecsTable({ specs }: { specs: Record<string, unknown> }) {
-  const entries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
+function SpecsTable({
+  specs,
+  isLens = false,
+  lensModelIdx = 0,
+}: {
+  specs: Record<string, unknown>;
+  isLens?: boolean;
+  lensModelIdx?: number;
+}) {
+  let allEntries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
+
+  if (isLens) {
+    // Keys belonging to the active model
+    const activeKeys = new Set(
+      LENS_PER_MODEL_SPEC_BASES.map((b) => lensKeyForIdx(b, lensModelIdx)),
+    );
+    // Keys belonging to all OTHER models — must be excluded
+    const otherKeys = new Set<string>();
+    for (let i = 0; i < MAX_LENS_MODELS_DISPLAY; i++) {
+      if (i === lensModelIdx) continue;
+      for (const base of LENS_PER_MODEL_SPEC_BASES) {
+        otherKeys.add(lensKeyForIdx(base, i));
+      }
+    }
+    allEntries = allEntries
+      .filter(([key]) => !otherKeys.has(key))
+      .map(([key, value]) => {
+        // Strip the " 2" / " 3" suffix so the label reads cleanly
+        if (lensModelIdx > 0 && activeKeys.has(key)) {
+          const suffix = ` ${lensModelIdx + 1}`;
+          return [key.endsWith(suffix) ? key.slice(0, -suffix.length) : key, value] as [string, unknown];
+        }
+        return [key, value] as [string, unknown];
+      });
+  }
+
+  const entries = allEntries;
   if (entries.length === 0) {
     return <p className="text-sm text-gray-500">No specifications listed.</p>;
   }
@@ -1979,9 +2050,9 @@ function buildCameraHighlights(specs: Record<string, unknown>): HighlightRow[] {
   return rows;
 }
 
-function buildLensHighlights(specs: Record<string, unknown>): HighlightRow[] {
-  const s = (key: string) => {
-    const v = specs[key];
+function buildLensHighlights(specs: Record<string, unknown>, modelIdx = 0): HighlightRow[] {
+  const s = (base: string) => {
+    const v = specs[lensKeyForIdx(base, modelIdx)];
     return v ? String(v).trim() : "";
   };
   const rows: HighlightRow[] = [];
@@ -2006,8 +2077,9 @@ function buildLensHighlights(specs: Record<string, unknown>): HighlightRow[] {
 
 function ProductHighlights({ specs, isTv, isCamera, isLens, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; selectedVariant?: Variant }) {
   const [expanded, setExpanded] = useState(true);
+  const lensModelIdx = isLens ? getActiveLensModelIndex(specs, selectedVariant) : 0;
   const highlights = isLens
-    ? buildLensHighlights(specs)
+    ? buildLensHighlights(specs, lensModelIdx)
     : isCamera
     ? buildCameraHighlights(specs)
     : isTv

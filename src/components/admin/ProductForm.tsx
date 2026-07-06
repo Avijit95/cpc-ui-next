@@ -2101,33 +2101,42 @@ function CameraSpecsEditor({
 
 // ── Camera Lens–specific structured spec editor ───────────────────────────────
 
-const LENS_SPEC_KEYS = new Set([
-  // General
-  "Brand", "Model", "Lens Name", "Lens Series", "Lens Type", "Lens Mount",
-  "Compatible Camera", "Compatible Sensor Format", "Color",
-  // Optical
+const MAX_LENS_MODELS = 5;
+
+function lensModelKey(base: string, idx: number): string {
+  return idx === 0 ? base : `${base} ${idx + 1}`;
+}
+
+// Keys shared across all models of the series
+const LENS_GLOBAL_BASE_KEYS = ["Brand", "Lens Series"];
+
+// Keys that are per-model (suffixed with index for model 2+)
+const LENS_PER_MODEL_BASE_KEYS = [
+  "Model",
+  "Lens Name", "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
   "Focal Length", "Maximum Aperture", "Minimum Aperture",
+  "Minimum Focus Distance", "Maximum Magnification",
   "Angle of View (Full Frame)", "Optical Construction", "Special Elements", "Aperture Blades",
-  // Focus
-  "Focus Type", "Focus Motor", "Minimum Focus Distance", "Maximum Magnification",
-  "Focus Limiter Switch", "Focus Hold Buttons",
-  // Recommended Usage
+  "Focus Type", "Focus Motor", "Focus Limiter Switch", "Focus Hold Buttons",
   "Recommended Usage",
+];
+
+const LENS_SPEC_KEYS = new Set([
+  ...LENS_GLOBAL_BASE_KEYS,
+  ...LENS_PER_MODEL_BASE_KEYS.flatMap((k) =>
+    Array.from({ length: MAX_LENS_MODELS }, (_, i) => lensModelKey(k, i)),
+  ),
 ]);
 
-const LENS_YES_NO_KEYS = new Set(["Focus Limiter Switch"]);
+type LensPerModelField = { key: string; placeholder?: string; unit?: string };
+type LensPerModelGroup = { label: string; icon: string; fields: LensPerModelField[] };
 
-type LensSpecGroup = { label: string; icon: string; fields: { key: string; placeholder?: string; unit?: string }[] };
-
-const LENS_SPEC_GROUPS: LensSpecGroup[] = [
+const LENS_PER_MODEL_GROUPS: LensPerModelGroup[] = [
   {
     label: "General",
     icon: "📋",
     fields: [
-      { key: "Brand",                    placeholder: "e.g. Sony, Canon, Nikon" },
-      { key: "Model",                    placeholder: "e.g. SEL200600G" },
       { key: "Lens Name",                placeholder: "e.g. FE 200-600mm F5.6-6.3 G OSS" },
-      { key: "Lens Series",              placeholder: "e.g. G Lens, L-Mount, Art" },
       { key: "Lens Type",                placeholder: "e.g. Super Telephoto Zoom" },
       { key: "Lens Mount",               placeholder: "e.g. Sony E Mount" },
       { key: "Compatible Camera",        placeholder: "e.g. Sony E-mount Mirrorless Cameras" },
@@ -2139,9 +2148,11 @@ const LENS_SPEC_GROUPS: LensSpecGroup[] = [
     label: "Optical Specifications",
     icon: "🔭",
     fields: [
-      { key: "Focal Length",              placeholder: "e.g. 200-600 mm", unit: "mm" },
+      { key: "Focal Length",              placeholder: "e.g. 200-600", unit: "mm" },
       { key: "Maximum Aperture",          placeholder: "e.g. f/5.6-6.3" },
       { key: "Minimum Aperture",          placeholder: "e.g. f/32-36" },
+      { key: "Minimum Focus Distance",    placeholder: "e.g. 2.4", unit: "m" },
+      { key: "Maximum Magnification",     placeholder: "e.g. 0.20", unit: "×" },
       { key: "Angle of View (Full Frame)", placeholder: "e.g. 12°30' - 4°10'" },
       { key: "Optical Construction",      placeholder: "e.g. 24 Elements in 17 Groups" },
       { key: "Special Elements",          placeholder: "e.g. 5 ED Elements, 1 Aspherical Element" },
@@ -2152,12 +2163,10 @@ const LENS_SPEC_GROUPS: LensSpecGroup[] = [
     label: "Focus",
     icon: "🎯",
     fields: [
-      { key: "Focus Type",             placeholder: "e.g. Autofocus / Manual Focus" },
-      { key: "Focus Motor",            placeholder: "e.g. Direct Drive SSM (DDSSM)" },
-      { key: "Minimum Focus Distance", placeholder: "e.g. 2.4 m", unit: "m" },
-      { key: "Maximum Magnification",  placeholder: "e.g. 0.20×" },
-      { key: "Focus Limiter Switch",   placeholder: "" },
-      { key: "Focus Hold Buttons",     placeholder: "e.g. Yes (3)" },
+      { key: "Focus Type",           placeholder: "e.g. Autofocus / Manual Focus" },
+      { key: "Focus Motor",          placeholder: "e.g. Direct Drive SSM (DDSSM)" },
+      { key: "Focus Limiter Switch", placeholder: "" },
+      { key: "Focus Hold Buttons",   placeholder: "e.g. Yes (3)" },
     ],
   },
   {
@@ -2189,6 +2198,24 @@ function CameraLensSpecsEditor({
     }
   };
 
+  // Determine how many model sections to show based on existing data
+  const [modelCount, setModelCount] = useState(() => {
+    let count = 1;
+    for (let i = 1; i < MAX_LENS_MODELS; i++) {
+      if (rows.some((r) => r.key === lensModelKey("Model", i))) count = i + 1;
+    }
+    return count;
+  });
+
+  const removeModel = (i: number) => {
+    // Clear all per-model keys for this index
+    const keysToRemove = new Set(
+      LENS_PER_MODEL_BASE_KEYS.map((k) => lensModelKey(k, i)),
+    );
+    onChange(rows.filter((r) => !keysToRemove.has(r.key)));
+    setModelCount((c) => Math.max(1, c - 1));
+  };
+
   const extraRows = rows.filter((r) => !LENS_SPEC_KEYS.has(r.key));
   const setExtraRows = (next: SpecRow[]) => {
     onChange([...rows.filter((r) => LENS_SPEC_KEYS.has(r.key)), ...next]);
@@ -2196,53 +2223,135 @@ function CameraLensSpecsEditor({
 
   return (
     <div className="space-y-4">
-      {LENS_SPEC_GROUPS.map((group) => (
-        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
-          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
-            <span className="text-base leading-none">{group.icon}</span>
-            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
-          </div>
-          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {group.fields.map((field) => (
-              <div
-                key={field.key}
-                className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
-              >
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                  {field.key}
-                </label>
-                {LENS_YES_NO_KEYS.has(field.key) ? (
-                  <select
-                    value={get(field.key)}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    disabled={disabled}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                  >
-                    <option value="">— Select —</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                  </select>
-                ) : (
-                  <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                    <input
-                      value={get(field.key)}
-                      onChange={(e) => set(field.key, e.target.value)}
-                      placeholder={field.placeholder}
-                      disabled={disabled}
-                      className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                    />
-                    {field.unit && (
-                      <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
-                        {field.unit}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+      {/* Global: Brand + Lens Series */}
+      <div className="border border-gray-100 rounded-xl overflow-hidden">
+        <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+          <span className="text-base leading-none">📋</span>
+          <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">General</span>
         </div>
-      ))}
+        <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[
+            { key: "Brand",       placeholder: "e.g. Sony, Canon, Nikon" },
+            { key: "Lens Series", placeholder: "e.g. G Lens, L-Mount, Art" },
+          ].map((f) => (
+            <div key={f.key} className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{f.key}</label>
+              <input
+                value={get(f.key)}
+                onChange={(e) => set(f.key, e.target.value)}
+                placeholder={f.placeholder}
+                disabled={disabled}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Per-model sections */}
+      {Array.from({ length: modelCount }, (_, i) => {
+        const modelVal = get(lensModelKey("Model", i));
+        return (
+          <div key={i} className="border border-[#129cd3]/30 rounded-xl overflow-hidden">
+            {/* Model No. row */}
+            <div className="bg-[#e8f7fc] border-b border-[#129cd3]/20 px-4 py-2.5 flex items-center gap-3">
+              <span className="text-[11px] font-bold text-[#129cd3] uppercase tracking-wide whitespace-nowrap">
+                Model No.{i > 0 ? ` ${i + 1}` : ""}
+              </span>
+              <input
+                value={modelVal}
+                onChange={(e) => set(lensModelKey("Model", i), e.target.value)}
+                placeholder="Enter model no. to unlock spec fields…"
+                disabled={disabled}
+                className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+              />
+              {i > 0 && (
+                <button
+                  type="button"
+                  onClick={() => removeModel(i)}
+                  disabled={disabled}
+                  className="p-1 text-gray-400 hover:text-red-500 disabled:opacity-40"
+                  title="Remove this model"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {modelVal.trim() ? (
+              <div className="p-3 space-y-4">
+                {LENS_PER_MODEL_GROUPS.map((group) => (
+                  <div key={group.label}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-sm leading-none">{group.icon}</span>
+                      <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{group.label}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {group.fields.map((field) => {
+                        const k = lensModelKey(field.key, i);
+                        const isYesNo = field.key === "Focus Limiter Switch";
+                        return (
+                          <div
+                            key={k}
+                            className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
+                          >
+                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                              {field.key}
+                            </label>
+                            {isYesNo ? (
+                              <select
+                                value={get(k)}
+                                onChange={(e) => set(k, e.target.value)}
+                                disabled={disabled}
+                                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                              >
+                                <option value="">— Select —</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                              </select>
+                            ) : (
+                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                                <input
+                                  value={get(k)}
+                                  onChange={(e) => set(k, e.target.value)}
+                                  placeholder={field.placeholder}
+                                  disabled={disabled}
+                                  className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                                />
+                                {field.unit && (
+                                  <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                                    {field.unit}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="px-4 py-5 text-center text-xs text-gray-400">
+                Enter a Model No. above to unlock specification fields for this model.
+              </p>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Add another model */}
+      {modelCount < MAX_LENS_MODELS && (
+        <button
+          type="button"
+          onClick={() => setModelCount((c) => c + 1)}
+          disabled={disabled}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#129cd3] border border-[#129cd3]/40 px-3 py-2 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+        >
+          <Plus size={14} /> Add Another Model
+        </button>
+      )}
 
       {/* Additional free-form specs */}
       <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">

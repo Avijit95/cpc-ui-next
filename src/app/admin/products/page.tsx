@@ -395,6 +395,12 @@ export default function AdminProductsPage() {
     return m;
   }, [categories]);
 
+  const categorySlugById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of categories) m.set(c.id, c.slug);
+    return m;
+  }, [categories]);
+
   const onToggleStatus = useCallback(
     async (p: AdminProductListItem) => {
       if (p.status === "ARCHIVED") return; // archived must un-archive via edit
@@ -987,12 +993,15 @@ export default function AdminProductsPage() {
                                       </div>
                                       <div className="flex flex-wrap gap-2">
                                         {variants.map((v) => {
+                                          const catSlug = categorySlugById.get(p.categoryId) ?? "";
+                                          const isLensCat = catSlug.toLowerCase().includes("lens");
                                           const ram = v.attributes.ram != null ? String(v.attributes.ram) : null;
                                           const rom = v.attributes.storage != null ? String(v.attributes.storage) : null;
                                           const size = v.attributes.size != null ? String(v.attributes.size) : null;
                                           const model = v.attributes.model != null ? String(v.attributes.model) : null;
                                           const lens = v.attributes.lens != null ? String(v.attributes.lens) : null;
-                                          const label = [ram && `RAM: ${ram}`, rom && `ROM: ${rom}`, size && `Size: ${size}`, model && `Model: ${model}`, lens && `Lens: ${lens}`].filter(Boolean).join(" / ") || v.sku;
+                                          const ramLabel = isLensCat ? "Model No." : "RAM";
+                                          const label = [ram && `${ramLabel}: ${ram}`, rom && `ROM: ${rom}`, size && `Size: ${size}`, model && `Model: ${model}`, lens && `Lens: ${lens}`].filter(Boolean).join(" / ") || v.sku;
                                           const price = v.priceOverride ?? v.basePrice;
                                           return (
                                             <div key={v.id} className="flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs min-w-[130px]">
