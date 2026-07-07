@@ -1451,7 +1451,11 @@ useEffect(() => {
               {openSections["Specifications"] && (
                 <div className="px-5 py-5 border-t border-gray-100">
                   <SpecsTable
-                    specs={product.specs}
+                    specs={
+                      isTvProduct && selectedVariant?.attributes?.dimensions
+                        ? { ...product.specs, "Product Dimensions": selectedVariant.attributes.dimensions }
+                        : product.specs
+                    }
                     isLens={isLensProduct}
                     isSpeaker={isSpeakerProduct}
                     modelIdx={getActiveModelIndex(product.specs, selectedVariant)}
@@ -2027,7 +2031,9 @@ function buildTvHighlights(specs: Record<string, unknown>, selectedVariant?: Var
   const connectivity = s("Connectivity Technology");
   if (connectivity) rows.push({ icon: <Wifi size={18} />, label: "Connectivity", text: connectivity, accent: "bg-purple-100 text-purple-600" });
 
-  const dimensions = s("Product Dimensions");
+  const dimensions = selectedVariant?.attributes?.dimensions
+    ? String(selectedVariant.attributes.dimensions)
+    : s("Product Dimensions");
   if (dimensions) rows.push({ icon: <Ruler size={18} />, label: "Dimensions", text: dimensions, accent: "bg-gray-100 text-gray-500" });
 
   const power = s("Power Consumption");

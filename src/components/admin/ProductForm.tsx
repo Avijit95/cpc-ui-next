@@ -1080,24 +1080,31 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
               />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                Description
-              </label>
-              <textarea
-                rows={6}
-                value={form.description}
-                onChange={(e) =>
-                  onChange("description", e.target.value.slice(0, 10_000))
-                }
-                placeholder="Describe key features, specs and what makes this product great…"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] resize-none"
-              />
-              <p className="text-[11px] text-gray-400 mt-1">
-                Up to 10,000 characters. (
-                {form.description.length.toLocaleString("en-IN")}/10,000)
-              </p>
-            </div>
+            {(() => {
+              const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
+              const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
+              const _isLens = _cs.includes("lens") || _cn.includes("lens");
+              return !_isLens ? (
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+                    Description
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={form.description}
+                    onChange={(e) =>
+                      onChange("description", e.target.value.slice(0, 10_000))
+                    }
+                    placeholder="Describe key features, specs and what makes this product great…"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] resize-none"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Up to 10,000 characters. (
+                    {form.description.length.toLocaleString("en-IN")}/10,000)
+                  </p>
+                </div>
+              ) : null;
+            })()}
           </section>
 
           {/* ── Specifications ── */}
@@ -1492,7 +1499,7 @@ const TV_CONNECTIVITY_OPTIONS = ["HDMI", "Wi-Fi", "USB", "AV", "Bluetooth", "Eth
 
 const TV_SPEC_KEYS = new Set([
   "Screen Size", "Color", "Model Name", "Display Technology", "Resolution",
-  "Operating System", "Product Dimensions", "Aspect Ratio", "Refresh Rate",
+  "Operating System", "Aspect Ratio", "Refresh Rate",
   "Connectivity Technology", "Special Feature", "Included Components",
   "Country of Origin", "Launch Year",
   "Power Consumption", "Line Voltage",
@@ -1523,13 +1530,6 @@ const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
     icon: "🔌",
     fields: [
       { key: "Connectivity Technology", placeholder: "e.g. Wi-Fi, Bluetooth 5.0, HDMI, USB" },
-    ],
-  },
-  {
-    label: "Dimensions",
-    icon: "📐",
-    fields: [
-      { key: "Product Dimensions", placeholder: "e.g. 97.2 × 56.2 × 7.4 cm (without stand)", unit: "cm" },
     ],
   },
   {
@@ -2112,7 +2112,7 @@ const LENS_GLOBAL_BASE_KEYS = ["Brand", "Lens Series"];
 
 // Keys that are per-model (suffixed with index for model 2+)
 const LENS_PER_MODEL_BASE_KEYS = [
-  "Model",
+  "Model", "Description",
   "Lens Name", "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
   "Focal Length", "Maximum Aperture", "Minimum Aperture",
   "Minimum Focus Distance", "Maximum Magnification",
@@ -2280,6 +2280,18 @@ function CameraLensSpecsEditor({
 
             {modelVal.trim() ? (
               <div className="p-3 space-y-4">
+                {/* Description — shown first */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
+                  <textarea
+                    rows={4}
+                    value={get(lensModelKey("Description", i))}
+                    onChange={(e) => set(lensModelKey("Description", i), e.target.value)}
+                    placeholder="Describe key features and what makes this lens great…"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
                 {LENS_PER_MODEL_GROUPS.map((group) => (
                   <div key={group.label}>
                     <div className="flex items-center gap-1.5 mb-2">
@@ -2331,6 +2343,13 @@ function CameraLensSpecsEditor({
                     </div>
                   </div>
                 ))}
+                {/* Additional free-form specs — shown after Recommended Usage in the last model */}
+                {i === modelCount - 1 && (
+                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                    <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+                  </div>
+                )}
               </div>
             ) : (
               <p className="px-4 py-5 text-center text-xs text-gray-400">
@@ -2352,12 +2371,6 @@ function CameraLensSpecsEditor({
           <Plus size={14} /> Add Another Model
         </button>
       )}
-
-      {/* Additional free-form specs */}
-      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-      </div>
     </div>
   );
 }
@@ -2373,7 +2386,7 @@ function speakerModelKey(base: string, idx: number): string {
 const SPEAKER_GLOBAL_KEYS = ["Brand", "Series"];
 
 const SPEAKER_PER_MODEL_BASE_KEYS = [
-  "Model", "Speaker Type", "Color",
+  "Model", "Description", "Speaker Type", "Color",
   // Audio
   "Audio Output Power (RMS)", "Frequency Response", "Driver Size",
   "Number of Drivers", "Speaker Configuration", "Impedance", "Sensitivity", "Signal-to-Noise Ratio",
@@ -2607,6 +2620,18 @@ function SpeakerSpecsEditor({
 
             {modelVal.trim() ? (
               <div className="p-3 space-y-4">
+                {/* Description — shown first */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
+                  <textarea
+                    rows={4}
+                    value={get(speakerModelKey("Description", i))}
+                    onChange={(e) => set(speakerModelKey("Description", i), e.target.value)}
+                    placeholder="Describe key features and what makes this model great…"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
                 {SPEAKER_PER_MODEL_GROUPS.map((group) => (
                   <div key={group.label}>
                     <div className="flex items-center gap-1.5 mb-2">
@@ -2658,6 +2683,13 @@ function SpeakerSpecsEditor({
                     </div>
                   </div>
                 ))}
+                {/* Additional free-form specs — shown after Package Contents in the last model */}
+                {i === modelCount - 1 && (
+                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                    <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+                  </div>
+                )}
               </div>
             ) : (
               <p className="px-4 py-5 text-center text-xs text-gray-400">
@@ -2679,12 +2711,6 @@ function SpeakerSpecsEditor({
           <Plus size={14} /> Add Another Model
         </button>
       )}
-
-      {/* Additional free-form specs */}
-      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-      </div>
     </div>
   );
 }

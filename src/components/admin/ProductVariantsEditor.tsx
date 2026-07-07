@@ -42,6 +42,7 @@ type VariantRow = {
   color: string;
   launchYear: string;   // TV + Camera
   lensIncluded: string; // Camera only: "Yes" | "No"
+  dimensions: string;   // TV only: e.g. "97.2 × 56.2 × 7.4 cm"
   stock: string;
   base: string;      // MRP (struck price); blank = no separate MRP
   price: string;     // selling price (GST-inclusive); blank = use product base price
@@ -96,6 +97,10 @@ function isTvCategory(slug?: string): boolean {
   return !!slug && (slug.toLowerCase().includes("tv") || slug.toLowerCase().includes("television"));
 }
 
+function isSpeakerCategory(slug?: string): boolean {
+  return !!slug && slug.toLowerCase().includes("speaker");
+}
+
 const TV_SIZE_PRESETS = ["32\"", "43\"", "50\"", "55\"", "65\"", "75\"", "85\""];
 
 function makeSku(name: string, r: VariantRow, isCamera: boolean): string {
@@ -104,7 +109,8 @@ function makeSku(name: string, r: VariantRow, isCamera: boolean): string {
     ? [r.ram, r.color, r.launchYear, r.lensIncluded === "Yes" ? r.storage : ""]
     : [r.ram, r.storage, r.color];
   const tail = parts.map(slugifyPart).filter(Boolean).join("-");
-  return tail ? `${base}-${tail}` : base;
+  const full = tail ? `${base}-${tail}` : base;
+  return full.slice(0, 80);
 }
 
 function comboKey(r: VariantRow, isCamera: boolean): string {
@@ -132,7 +138,7 @@ function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens =
   return isTV ? r.ram.trim() : r.color.trim();
 }
 
-function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean): Record<string, unknown> {
+function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean): Record<string, unknown> {
   const a: Record<string, unknown> = {};
   if (isCamera) {
     if (r.ram.trim()) a.model = r.ram.trim();
@@ -143,6 +149,10 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean): Recor
     if (r.ram.trim()) a.size = r.ram.trim();
     if (r.storage.trim()) a.model = r.storage.trim();
     if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
+    if (r.dimensions.trim()) a.dimensions = r.dimensions.trim();
+  } else if (isSpeaker) {
+    if (r.ram.trim()) a.model = r.ram.trim();
+    if (r.storage.trim()) a.watt = r.storage.trim();
   } else {
     if (r.ram.trim()) a.ram = r.ram.trim();
     if (r.storage.trim()) a.storage = r.storage.trim();
@@ -162,22 +172,26 @@ function calcGstFields(selling: string, gst: string): { gstAmount: string; netBa
   return { gstAmount: gstAmount.toFixed(2), netBase: netBase.toFixed(2) };
 }
 
-function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): VariantRow[] {
+function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, isSpeaker: boolean): VariantRow[] {
   return variants.map((v) => {
     const base = v.basePrice != null ? String(v.basePrice) : "";
     const price = v.priceOverride != null ? String(v.priceOverride) : "";
     const gst = "18";
     const { gstAmount, netBase } = calcGstFields(price, gst);
-    // Camera → model/lens; TV → size/model; default → ram/storage.
+    // Camera → model/lens; TV → size/model; Speaker → model/watt; default → ram/storage.
     const ramVal = isCamera
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : isTV
       ? (v.attributes.size != null ? String(v.attributes.size) : "")
+      : isSpeaker
+      ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : (v.attributes.ram != null ? String(v.attributes.ram) : "");
     const storageVal = isCamera
       ? (v.attributes.lens != null ? String(v.attributes.lens) : "")
       : isTV
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
+      : isSpeaker
+      ? (v.attributes.watt != null ? String(v.attributes.watt) : "")
       : (v.attributes.storage != null ? String(v.attributes.storage) : "");
     const lensIncluded = isCamera
       ? (v.attributes.lensIncluded != null ? String(v.attributes.lensIncluded) : "No")
@@ -190,6 +204,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean): V
       color: v.attributes.color != null ? String(v.attributes.color) : "",
       launchYear: (isTV || isCamera) && v.attributes.launchYear != null ? String(v.attributes.launchYear) : "",
       lensIncluded,
+      dimensions: isTV && v.attributes.dimensions != null ? String(v.attributes.dimensions) : "",
       stock: String(v.stock ?? 0),
       base,
       price,
@@ -246,11 +261,12 @@ const ProductVariantsEditor = forwardRef<
   const isLens = isLensCategory(categorySlug);
   const isCamera = !isLens && isCameraCategory(categorySlug);
   const isTV = isTvCategory(categorySlug);
+  const isSpeaker = !isCamera && !isTV && !isLens && isSpeakerCategory(categorySlug);
   const [rows, setRows] = useState<VariantRow[]>(() => {
     if (draftRows && draftRows.length > 0) {
       return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined }));
     }
-    return initRows(initialVariants, isCamera, isTV);
+    return initRows(initialVariants, isCamera, isTV, isSpeaker);
   });
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
     () => initColorImages(initialVariants, isTV, isCamera, isLens),
@@ -293,6 +309,7 @@ const ProductVariantsEditor = forwardRef<
         color: "",
         launchYear: "",
         lensIncluded: isCamera ? "No" : "",
+        dimensions: "",
         stock: "0",
         base: "",
         price: "",
@@ -381,6 +398,8 @@ const ProductVariantsEditor = forwardRef<
               ? "Each variant needs at least one of Model No. or Color."
               : isTV
               ? "Each variant needs at least one of Size, Model No., or Color."
+              : isSpeaker
+              ? "Each variant needs at least one of Model No., Watt, or Color."
               : "Each variant needs at least one of RAM, ROM, or Color.";
           }
           const stockNum = Number(r.stock);
@@ -416,6 +435,8 @@ const ProductVariantsEditor = forwardRef<
               ? (isLens ? "Two variants have the same Model No. / Color combination." : "Two variants have the same Model No. / Color / Launch Year / Lens combination.")
               : isTV
               ? "Two variants have the same Size / Model No. / Color combination."
+              : isSpeaker
+              ? "Two variants have the same Model No. / Watt / Color combination."
               : "Two variants have the same RAM / ROM / Color combination.";
           }
           seen.add(key);
@@ -470,7 +491,7 @@ const ProductVariantsEditor = forwardRef<
         for (const r of rows) {
           const body = {
             sku: makeSku(productName, r, isCamera),
-            attributes: buildAttributes(r, isCamera, isTV),
+            attributes: buildAttributes(r, isCamera, isTV, isSpeaker),
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
@@ -492,7 +513,7 @@ const ProductVariantsEditor = forwardRef<
         }
       },
     }),
-    [rows, colors, colorImages, productName, initialVariants, isCamera, isTV],
+    [rows, colors, colorImages, productName, initialVariants, isCamera, isTV, isSpeaker],
   );
 
   return (
@@ -506,6 +527,8 @@ const ProductVariantsEditor = forwardRef<
             ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images: Camera: [Color] sections for body-only variants per color, Lens sections for each included lens."
             : isTV
             ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
+            : isSpeaker
+            ? "Add each Model No. / Watt / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : hideRam
             ? "Add each ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."}
@@ -547,7 +570,7 @@ const ProductVariantsEditor = forwardRef<
             key={r.uid}
             className={`grid grid-cols-2 gap-2 items-end border border-gray-100 rounded-lg p-2.5 ${
               isTV
-                ? "sm:grid-cols-[repeat(10,1fr)_auto]"
+                ? "sm:grid-cols-[repeat(11,1fr)_auto]"
                 : isLens
                 ? "sm:grid-cols-[repeat(8,1fr)_auto]"
                 : isCamera
@@ -622,23 +645,34 @@ const ProductVariantsEditor = forwardRef<
                 )}
               </>
             ) : isTV ? (
-              <Field label="Size (inch)">
-                <input
-                  value={r.ram}
-                  onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
-                  list="variant-tv-size-presets"
-                  placeholder='e.g. 43"'
-                  disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-                />
-              </Field>
+              <>
+                <Field label="Size (inch)">
+                  <input
+                    value={r.ram}
+                    onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                    list="variant-tv-size-presets"
+                    placeholder='e.g. 43"'
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="Dimensions">
+                  <input
+                    value={r.dimensions}
+                    onChange={(e) => updateRow(r.uid, { dimensions: e.target.value })}
+                    placeholder='e.g. 97.2×56.2×7.4 cm'
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+              </>
             ) : !hideRam ? (
-              <Field label="RAM">
+              <Field label={isSpeaker ? "Model No." : "RAM"}>
                 <input
                   value={r.ram}
                   onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
-                  list="variant-ram-presets"
-                  placeholder="8GB"
+                  list={isSpeaker ? undefined : "variant-ram-presets"}
+                  placeholder={isSpeaker ? "e.g. JBL Charge 5" : "8GB"}
                   disabled={disabled}
                   className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                 />
@@ -671,12 +705,12 @@ const ProductVariantsEditor = forwardRef<
               </Field>
             )}
             {!isTV && !isCamera && !isLens && (
-              <Field label="ROM">
+              <Field label={isSpeaker ? "Watt" : "ROM"}>
                 <input
                   value={r.storage}
                   onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
-                  list="variant-storage-presets"
-                  placeholder="128GB"
+                  list={isSpeaker ? undefined : "variant-storage-presets"}
+                  placeholder={isSpeaker ? "e.g. 30W" : "128GB"}
                   disabled={disabled}
                   className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                 />
