@@ -4,6 +4,7 @@ import {
   serverGetActiveBanners,
   serverGetCategories,
 } from "@/lib/api/server";
+import { imageUrlForKey } from "@/lib/image-url";
 import HeroSlider from "./HeroSlider";
 
 const HOME_HERO_SLOT = "home_hero";
@@ -28,7 +29,11 @@ export default async function HeroBanner() {
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .slice(0, SIDEBAR_CATEGORY_LIMIT)
-    .map((c) => ({ slug: c.slug.toLowerCase(), name: c.name, imageUrl: c.imageUrl }));
+    .map((c) => ({
+      slug: c.slug.toLowerCase(),
+      name: c.name,
+      imageUrl: c.imageUrl ?? imageUrlForKey(c.imageObjectKey ?? ""),
+    }));
   const cameraIdx = apiCategories.findIndex((c) => c.slug === "camera");
   const insertAt = cameraIdx >= 0 ? cameraIdx + 1 : apiCategories.length;
   const sidebarCategories = [

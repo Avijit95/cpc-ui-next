@@ -1,4 +1,5 @@
 import { serverGetCategories } from "@/lib/api/server";
+import { imageUrlForKey } from "@/lib/image-url";
 import CategorySlider from "./CategorySlider";
 
 const ITEM_LIMIT = 12;
@@ -6,6 +7,7 @@ const ITEM_LIMIT = 12;
 export default async function CategorySection() {
   const all = await serverGetCategories();
   const sorted = all
+    .map((c) => ({ ...c, imageUrl: c.imageUrl ?? imageUrlForKey(c.imageObjectKey ?? "") }))
     .filter((c) => c.imageUrl)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
