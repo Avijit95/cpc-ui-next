@@ -624,16 +624,35 @@ useEffect(() => {
     if (selectedVariant && selectedVariant.images.length > 0) {
       return selectedVariant.images.map((im, i) => ({ objectKey: im.objectKey, url: im.url, sortOrder: i }));
     }
-    // Fallback: when selected variant has no images, try same-color variant with images
+    // Fallback: when selected variant has no images, try a variant with the same model+color (lens/speaker) or same color (others)
     if (selectedVariant) {
       const colorKeys = [...new Set(product.variants.flatMap((v) => Object.keys(v.attributes)))].filter((k) => /^colou?r$/i.test(k));
       const selectedColorVal = colorKeys.map((k) => selectedAttrs[k]).find(Boolean);
+      // For lens/speaker: also match by model (ram attribute) so we don't pull images from a different model
+      const selectedModelVal = (isLensProduct || isSpeakerProduct) && lensModelKey
+        ? String(selectedVariant.attributes[lensModelKey] ?? "").trim()
+        : null;
       if (selectedColorVal) {
-        const colorVariant = product.variants.find(
-          (v) => colorKeys.some((k) => String(v.attributes[k] ?? "") === selectedColorVal) && v.images.length > 0
-        );
+        const colorVariant = product.variants.find((v) => {
+          if (!v.images.length) return false;
+          const colorMatch = colorKeys.some((k) => String(v.attributes[k] ?? "") === selectedColorVal);
+          if (!colorMatch) return false;
+          if (selectedModelVal && lensModelKey) {
+            return String(v.attributes[lensModelKey] ?? "").trim() === selectedModelVal;
+          }
+          return true;
+        });
         if (colorVariant) {
           return colorVariant.images.map((im, i) => ({ objectKey: im.objectKey, url: im.url, sortOrder: i }));
+        }
+      }
+      // For lens/speaker: fallback to any variant with the same model and images
+      if (selectedModelVal && lensModelKey) {
+        const modelVariant = product.variants.find(
+          (v) => String(v.attributes[lensModelKey] ?? "").trim() === selectedModelVal && v.images.length > 0
+        );
+        if (modelVariant) {
+          return modelVariant.images.map((im, i) => ({ objectKey: im.objectKey, url: im.url, sortOrder: i }));
         }
       }
     }
@@ -671,6 +690,7 @@ useEffect(() => {
   const nonColorGroups = variantGroups.filter((g) => {
     if (/^colou?r$/i.test(g.key)) return false;
     if (isTvProduct && TV_HIDDEN_ATTR_KEYS.has(g.key)) return false;
+    if (isSpeakerProduct && g.key === "watt") return false;
     return true;
   });
   // Filter to variants whose color (under any color key) matches the selection
@@ -1098,6 +1118,9 @@ useEffect(() => {
                                       }`}
                                     >
                                       <span className={`text-sm font-semibold mb-0.5 ${vOutOfStock ? "text-gray-400 line-through" : "text-gray-800"}`}>{val}</span>
+                                      {isSpeakerProduct && attrValue(cardVariant, "watt") && (
+                                        <span className="text-xs text-gray-500">{attrValue(cardVariant, "watt")}</span>
+                                      )}
                                       {vDiscount > 0 && (
                                         <span className="text-xs text-green-600 font-medium">
                                           ↓{vDiscount}%{" "}
@@ -1523,8 +1546,6 @@ useEffect(() => {
                 <div className="px-5 py-5 prose max-w-none text-gray-600 text-sm leading-relaxed whitespace-pre-line border-t border-gray-100">
                   {(isLensProduct || isSpeakerProduct)
                     ? (String(product.specs[multiModelKey("Description", getActiveModelIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
-                    : isTvProduct
-                    ? (String(product.specs[multiModelKey("Description", getTvSizeIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
                     : (product.description || "No description available.")}
                 </div>
               )}
@@ -1556,8 +1577,11 @@ useEffect(() => {
                     isLens={isLensProduct}
                     isSpeaker={isSpeakerProduct}
                     isTv={isTvProduct}
-                    modelIdx={getActiveModelIndex(product.specs, selectedVariant)}
-                    tvSizeIdx={getTvSizeIndex(product.specs, selectedVariant)}
+                    modelIdx={
+                      isTvProduct
+                        ? getTvSizeIndex(product.specs, selectedVariant)
+                        : getActiveModelIndex(product.specs, selectedVariant)
+                    }
                   />
                 </div>
               )}
@@ -1868,7 +1892,7 @@ useEffect(() => {
 
 // Legacy keys: RAM/ROM/Color now live on variants, not specs. Hide them so old
 // products never render raw arrays like ["8GB","12GB"] in the spec table.
-const HIDDEN_SPEC_KEYS = new Set(["ramOptions", "storageOptions", "colorOptions", "Description", "dimensions"]);
+const HIDDEN_SPEC_KEYS = new Set(["ramOptions", "storageOptions", "colorOptions", "Description", "dimensions", "Slug", "Product Name"]);
 
 // ── Multi-model spec helpers (shared by Lens and Speaker) ────────────────────
 const MAX_MULTIMODEL_DISPLAY = 5;
@@ -1898,8 +1922,8 @@ function getActiveModelIndex(
 
 // ── Lens per-model keys ───────────────────────────────────────────────────────
 const LENS_PER_MODEL_SPEC_BASES = [
-  "Model", "Description",
-  "Lens Name", "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
+  "Model", "Lens Name", "Slug", "Description",
+  "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
   "Focal Length", "Maximum Aperture", "Minimum Aperture", "Minimum Focus Distance", "Maximum Magnification",
   "Angle of View (Full Frame)", "Optical Construction", "Special Elements", "Aperture Blades",
   "Focus Type", "Focus Motor", "Focus Limiter Switch", "Focus Hold Buttons",
@@ -1908,7 +1932,7 @@ const LENS_PER_MODEL_SPEC_BASES = [
 
 // ── TV per-size keys ──────────────────────────────────────────────────────────
 const TV_PER_SIZE_SPEC_BASES = [
-  "Screen Size", "Description",
+  "Screen Size", "Product Name", "Slug", "Description",
   "Display Size", "Display Technology", "Resolution", "LED Arrangement",
   "Viewing Angle", "Aspect Ratio",
   "Refresh Rate", "Response Time", "Supported Video Formats",
@@ -1937,7 +1961,7 @@ function getTvSizeIndex(specs: Record<string, unknown>, selectedVariant?: Varian
 
 // ── Speaker per-model keys ────────────────────────────────────────────────────
 const SPEAKER_PER_MODEL_SPEC_BASES = [
-  "Model", "Description", "Speaker Type", "Color",
+  "Model", "Product Name", "Slug", "Description", "Speaker Type", "Color",
   "Audio Output Power (RMS)", "Frequency Response", "Driver Size",
   "Number of Drivers", "Speaker Configuration", "Impedance", "Sensitivity", "Signal-to-Noise Ratio",
   "Bluetooth", "Bluetooth Version", "Wi-Fi", "AUX Input", "USB Port",
@@ -2010,14 +2034,12 @@ function SpecsTable({
   isSpeaker = false,
   isTv = false,
   modelIdx = 0,
-  tvSizeIdx = 0,
 }: {
   specs: Record<string, unknown>;
   isLens?: boolean;
   isSpeaker?: boolean;
   isTv?: boolean;
   modelIdx?: number;
-  tvSizeIdx?: number;
 }) {
   let allEntries = Object.entries(specs);
 
@@ -2026,7 +2048,7 @@ function SpecsTable({
   } else if (isSpeaker) {
     allEntries = filterMultiModelEntries(allEntries, SPEAKER_PER_MODEL_SPEC_BASES, modelIdx);
   } else if (isTv) {
-    allEntries = filterMultiModelEntries(allEntries, TV_PER_SIZE_SPEC_BASES, tvSizeIdx);
+    allEntries = filterMultiModelEntries(allEntries, TV_PER_SIZE_SPEC_BASES, modelIdx);
   }
 
   allEntries = allEntries.filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
@@ -2153,11 +2175,8 @@ function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
 
 function buildTvHighlights(specs: Record<string, unknown>, selectedVariant?: Variant): HighlightRow[] {
   const sizeIdx = getTvSizeIndex(specs, selectedVariant);
-  // Look up per-size key first, fall back to flat key for old products
-  const s = (key: string) => {
-    const perSizeVal = specs[multiModelKey(key, sizeIdx)];
-    if (perSizeVal) return String(perSizeVal).trim();
-    const v = specs[key];
+  const s = (base: string) => {
+    const v = specs[multiModelKey(base, sizeIdx)];
     return v ? String(v).trim() : "";
   };
   const rows: HighlightRow[] = [];

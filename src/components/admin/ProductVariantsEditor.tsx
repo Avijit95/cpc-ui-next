@@ -249,7 +249,9 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
         groupKey = color ? `Camera: ${color}` : "Camera";
       }
     } else if (isLens) {
-      const model = v.attributes.ram != null ? String(v.attributes.ram).trim() : "";
+      const model = (v.attributes.model ?? v.attributes.ram) != null
+        ? String(v.attributes.model ?? v.attributes.ram).trim()
+        : "";
       const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
       groupKey = model && color ? `${model} / ${color}` : model || color || "";
     } else if (isTV) {

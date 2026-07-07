@@ -690,7 +690,13 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     status: ProductStatus,
   ): CreateProductBody | { error: string } => {
     const name = form.name.trim();
-    if (!name) return { error: "Product name is required." };
+    const _bCatSlug = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
+    const _bCatName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
+    const _bIsLens    = _bCatSlug.includes("lens") || _bCatName.includes("lens");
+    const _bIsSpeaker = _bCatSlug.includes("speaker") || _bCatName.includes("speaker");
+    const _bIsTv      = _bCatSlug.includes("tv") || _bCatName.includes("tv") || _bCatName.includes("television");
+    const _bNameOptional = _bIsLens || _bIsSpeaker || _bIsTv;
+    if (!name && !_bNameOptional) return { error: "Product name is required." };
     if (!form.categoryId) return { error: "Pick a category." };
 
     const description = form.description;
@@ -1073,6 +1079,14 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             </section>
           )}
 
+          {(() => {
+            const _siCatSlug = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
+            const _siCatName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
+            const _siIsLens    = _siCatSlug.includes("lens") || _siCatName.includes("lens");
+            const _siIsSpeaker = _siCatSlug.includes("speaker") || _siCatName.includes("speaker");
+            const _siIsTv      = _siCatSlug.includes("tv") || _siCatName.includes("tv") || _siCatName.includes("television");
+            if (_siIsLens || _siIsSpeaker || _siIsTv) return null;
+            return (
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Basic Information</h3>
             <div>
@@ -1086,17 +1100,26 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
               />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                Slug
-              </label>
-              <input
-                value={form.slug}
-                onChange={(e) => onChange("slug", e.target.value)}
-                placeholder={`auto-generated from name if empty · ${catPlaceholders.slugHint}`}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
-              />
-            </div>
+            {(() => {
+              const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
+              const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
+              const _isLens = _cs.includes("lens") || _cn.includes("lens");
+              const _isSpeaker = _cs.includes("speaker") || _cn.includes("speaker");
+              const _isTv = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
+              const _isCamera = !_isLens && (_cs.includes("camera") || _cn.includes("camera"));
+              const _hideSlug = _isLens || _isSpeaker || _isTv || _isCamera;
+              return _hideSlug ? null : (
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Slug</label>
+                  <input
+                    value={form.slug}
+                    onChange={(e) => onChange("slug", e.target.value)}
+                    placeholder={`auto-generated from name if empty · ${catPlaceholders.slugHint}`}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
+                  />
+                </div>
+              );
+            })()}
             {(() => {
               const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
               const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
@@ -1115,7 +1138,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                       onChange("description", e.target.value.slice(0, 10_000))
                     }
                     placeholder="Describe key features, specs and what makes this product great…"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] resize-none"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] resize-y"
                   />
                   <p className="text-[11px] text-gray-400 mt-1">
                     Up to 10,000 characters. (
@@ -1125,6 +1148,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               ) : null;
             })()}
           </section>
+            );
+          })()}
 
           {/* ── Specifications ── */}
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
@@ -1525,7 +1550,7 @@ type TvSpecGroup = { label: string; icon: string; fields: TvSpecField[] };
 
 // Keys that differ per screen size
 const TV_PER_SIZE_BASE_KEYS = [
-  "Screen Size", "Description",
+  "Screen Size", "Product Name", "Slug", "Description",
   // Display
   "Display Size", "Display Technology", "Resolution", "LED Arrangement",
   "Viewing Angle", "Aspect Ratio",
@@ -1703,6 +1728,28 @@ function TvSpecsEditor({
 
             {sizeVal.trim() ? (
               <div className="p-3 space-y-4">
+                {/* Product Name */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
+                  <input
+                    value={get(tvSizeKey("Product Name", i))}
+                    onChange={(e) => set(tvSizeKey("Product Name", i), e.target.value)}
+                    placeholder='e.g. Samsung 43" 4K QLED Smart TV'
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Slug */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Slug</label>
+                  <input
+                    value={get(tvSizeKey("Slug", i))}
+                    onChange={(e) => set(tvSizeKey("Slug", i), e.target.value)}
+                    placeholder="e.g. samsung-43-4k-qled-smart-tv (auto-generated if empty)"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] font-mono bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
                 {/* Description */}
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
@@ -1749,19 +1796,19 @@ function TvSpecsEditor({
                     </div>
                   </div>
                 ))}
-                {/* Additional free-form specs — shown inside the last size section */}
-                {i === sizeCount - 1 && (
-                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-                    <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-                  </div>
-                )}
               </div>
             ) : (
               <p className="px-4 py-5 text-center text-xs text-gray-400">
                 Enter a screen size above to unlock specification fields.
               </p>
             )}
+            {/* Additional free-form specs — always visible at the bottom of each size card */}
+            <div className="border-t border-gray-100 p-3">
+              <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+              </div>
+            </div>
           </div>
         );
       })}
@@ -1777,7 +1824,6 @@ function TvSpecsEditor({
           <Plus size={14} /> Add Another Size
         </button>
       )}
-
     </div>
   );
 }
@@ -2196,8 +2242,8 @@ const LENS_GLOBAL_BASE_KEYS = ["Brand", "Lens Series"];
 
 // Keys that are per-model (suffixed with index for model 2+)
 const LENS_PER_MODEL_BASE_KEYS = [
-  "Model", "Description",
-  "Lens Name", "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
+  "Model", "Lens Name", "Slug", "Description",
+  "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
   "Focal Length", "Maximum Aperture", "Minimum Aperture",
   "Minimum Focus Distance", "Maximum Magnification",
   "Angle of View (Full Frame)", "Optical Construction", "Special Elements", "Aperture Blades",
@@ -2220,7 +2266,6 @@ const LENS_PER_MODEL_GROUPS: LensPerModelGroup[] = [
     label: "General",
     icon: "📋",
     fields: [
-      { key: "Lens Name",                placeholder: "e.g. FE 200-600mm F5.6-6.3 G OSS" },
       { key: "Lens Type",                placeholder: "e.g. Super Telephoto Zoom" },
       { key: "Lens Mount",               placeholder: "e.g. Sony E Mount" },
       { key: "Compatible Camera",        placeholder: "e.g. Sony E-mount Mirrorless Cameras" },
@@ -2363,7 +2408,29 @@ function CameraLensSpecsEditor({
 
             {modelVal.trim() ? (
               <div className="p-3 space-y-4">
-                {/* Description — shown first */}
+                {/* Lens Name (Product Name) */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Lens Name (Product Name)</label>
+                  <input
+                    value={get(lensModelKey("Lens Name", i))}
+                    onChange={(e) => set(lensModelKey("Lens Name", i), e.target.value)}
+                    placeholder="e.g. FE 200-600mm F5.6-6.3 G OSS"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Slug */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Slug</label>
+                  <input
+                    value={get(lensModelKey("Slug", i))}
+                    onChange={(e) => set(lensModelKey("Slug", i), e.target.value)}
+                    placeholder="e.g. sony-fe-200-600mm-f5-6-6-3-g-oss (auto-generated if empty)"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] font-mono bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Description */}
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
                   <textarea
@@ -2372,7 +2439,7 @@ function CameraLensSpecsEditor({
                     onChange={(e) => set(lensModelKey("Description", i), e.target.value)}
                     placeholder="Describe key features and what makes this lens great…"
                     disabled={disabled}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-y bg-white disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </div>
                 {LENS_PER_MODEL_GROUPS.map((group) => (
@@ -2426,19 +2493,19 @@ function CameraLensSpecsEditor({
                     </div>
                   </div>
                 ))}
-                {/* Additional free-form specs — shown after Recommended Usage in the last model */}
-                {i === modelCount - 1 && (
-                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-                    <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-                  </div>
-                )}
               </div>
             ) : (
               <p className="px-4 py-5 text-center text-xs text-gray-400">
                 Enter a Model No. above to unlock specification fields for this model.
               </p>
             )}
+            {/* Additional free-form specs — always visible at the bottom of each model card */}
+            <div className="border-t border-gray-100 p-3">
+              <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+              </div>
+            </div>
           </div>
         );
       })}
@@ -2469,7 +2536,7 @@ function speakerModelKey(base: string, idx: number): string {
 const SPEAKER_GLOBAL_KEYS = ["Brand", "Series"];
 
 const SPEAKER_PER_MODEL_BASE_KEYS = [
-  "Model", "Description", "Speaker Type", "Color",
+  "Model", "Product Name", "Slug", "Description", "Speaker Type", "Color",
   // Audio
   "Audio Output Power (RMS)", "Frequency Response", "Driver Size",
   "Number of Drivers", "Speaker Configuration", "Impedance", "Sensitivity", "Signal-to-Noise Ratio",
@@ -2702,7 +2769,29 @@ function SpeakerSpecsEditor({
 
             {modelVal.trim() ? (
               <div className="p-3 space-y-4">
-                {/* Description — shown first */}
+                {/* Product Name */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
+                  <input
+                    value={get(speakerModelKey("Product Name", i))}
+                    onChange={(e) => set(speakerModelKey("Product Name", i), e.target.value)}
+                    placeholder="e.g. JBL Charge 5 Portable Bluetooth Speaker"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Slug */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Slug</label>
+                  <input
+                    value={get(speakerModelKey("Slug", i))}
+                    onChange={(e) => set(speakerModelKey("Slug", i), e.target.value)}
+                    placeholder="e.g. jbl-charge-5-portable-bluetooth-speaker (auto-generated if empty)"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] font-mono bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Description */}
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
                   <textarea
@@ -2711,7 +2800,7 @@ function SpeakerSpecsEditor({
                     onChange={(e) => set(speakerModelKey("Description", i), e.target.value)}
                     placeholder="Describe key features and what makes this model great…"
                     disabled={disabled}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-y bg-white disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </div>
                 {SPEAKER_PER_MODEL_GROUPS.map((group) => (
@@ -2765,19 +2854,19 @@ function SpeakerSpecsEditor({
                     </div>
                   </div>
                 ))}
-                {/* Additional free-form specs — shown after Package Contents in the last model */}
-                {i === modelCount - 1 && (
-                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-                    <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-                  </div>
-                )}
               </div>
             ) : (
               <p className="px-4 py-5 text-center text-xs text-gray-400">
                 Enter a Model No. above to unlock specification fields for this model.
               </p>
             )}
+            {/* Additional free-form specs — always visible at the bottom of each model card */}
+            <div className="border-t border-gray-100 p-3">
+              <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+              </div>
+            </div>
           </div>
         );
       })}
