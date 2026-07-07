@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
         hostname: "placehold.co",
       },
       {
+        protocol: "http",
+        hostname: "localhost",
+      },
+      {
         protocol: "https",
         hostname: "cpn-uploads.s3.ap-south-1.amazonaws.com",
       },

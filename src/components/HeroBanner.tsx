@@ -50,19 +50,19 @@ export default async function HeroBanner() {
               <li key={cat.slug}>
                 <a
                   href={`/products?category=${encodeURIComponent(cat.slug)}`}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:text-[#129cd3] hover:bg-[#e8f7fc] border-b border-gray-100 transition-colors"
+                  className="flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:text-[#129cd3] hover:bg-[#e8f7fc] border-b border-gray-100 transition-colors"
                 >
-                  <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                  <span className="w-10 h-10 flex items-center justify-center flex-shrink-0 rounded overflow-hidden bg-gray-50 border border-gray-100">
                     {cat.imageUrl ? (
                       <Image
                         src={cat.imageUrl}
-                        alt=""
-                        width={20}
-                        height={20}
-                        className="w-5 h-5 object-cover rounded"
+                        alt={cat.name}
+                        width={40}
+                        height={40}
+                        className="w-10 h-10 object-contain"
                       />
                     ) : (
-                      <Tag size={14} className="text-gray-400" />
+                      <Tag size={16} className="text-gray-400" />
                     )}
                   </span>
                   {cat.name}

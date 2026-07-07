@@ -114,6 +114,7 @@ export type CategoryNode = {
   id: string;
   name: string;
   slug: string;
+  imageObjectKey: string | null;
   imageUrl: string | null;
   sortOrder: number;
   children: CategoryNode[];

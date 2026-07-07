@@ -9,6 +9,7 @@ const BASE = (process.env.NEXT_PUBLIC_S3_PUBLIC_BASE_URL ?? "").replace(
 export function imageUrlForKey(key: string): string | null {
   if (!key) return null;
   if (/^https?:\/\//i.test(key)) return key; // already an absolute URL
+  if (key.startsWith("/")) return key;        // site-relative path (e.g. /categories/img.jpg)
   if (!BASE) return null;
   return `${BASE}/${key}`;
 }

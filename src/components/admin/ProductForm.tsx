@@ -453,6 +453,23 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     };
   }, [categories]);
 
+  const catPlaceholders = useMemo(() => {
+    const cat = categories.find((c) => c.id === form.categoryId);
+    const slug = cat?.slug?.toLowerCase() ?? "";
+    const name = cat?.name?.toLowerCase() ?? "";
+    const isPhone   = slug.includes("phone")    || name.includes("phone");
+    const isTv      = slug.includes("tv")       || name.includes("tv")       || name.includes("television");
+    const isLens    = slug.includes("lens")      || name.includes("lens");
+    const isCamera  = !isLens && (slug.includes("camera") || name.includes("camera"));
+    const isSpeaker = slug.includes("speaker")  || name.includes("speaker");
+    if (isPhone)   return { productName: "e.g. Samsung Galaxy S24 Ultra", slugHint: "e.g. samsung-galaxy-s24-ultra", brand: "e.g. Apple, Samsung, OnePlus" };
+    if (isTv)      return { productName: 'e.g. Samsung 55" 4K QLED Smart TV', slugHint: "e.g. samsung-55-4k-qled-smart-tv", brand: "e.g. Samsung, LG, Sony" };
+    if (isLens)    return { productName: "e.g. Sony FE 200-600mm F5.6-6.3 G OSS", slugHint: "e.g. sony-fe-200-600mm-f5-6", brand: "e.g. Sony, Canon, Sigma" };
+    if (isCamera)  return { productName: "e.g. Sony Alpha A7 IV Mirrorless Camera", slugHint: "e.g. sony-alpha-a7-iv", brand: "e.g. Sony, Canon, Nikon" };
+    if (isSpeaker) return { productName: "e.g. JBL Charge 5 Portable Bluetooth Speaker", slugHint: "e.g. jbl-charge-5", brand: "e.g. JBL, Sony, Bose" };
+    return { productName: "e.g. Product Name", slugHint: "e.g. product-name", brand: "e.g. Brand Name" };
+  }, [categories, form.categoryId]);
+
   const selectedScrapedCount = scrapedImages.filter((i) => i.selected).length;
   const totalImageCount = images.length + selectedScrapedCount;
   const remainingSlots = Math.max(0, MAX_IMAGES - totalImageCount);
@@ -1065,7 +1082,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               <input
                 value={form.name}
                 onChange={(e) => onChange("name", e.target.value)}
-                placeholder="e.g. iPhone 15 Pro Max"
+                placeholder={catPlaceholders.productName}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
               />
             </div>
@@ -1076,7 +1093,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               <input
                 value={form.slug}
                 onChange={(e) => onChange("slug", e.target.value)}
-                placeholder="auto-generated from name if empty (kebab-case, globally unique)"
+                placeholder={`auto-generated from name if empty · ${catPlaceholders.slugHint}`}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
               />
             </div>
@@ -1084,7 +1101,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
               const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
               const _isLens = _cs.includes("lens") || _cn.includes("lens");
-              return !_isLens ? (
+              const _isSpeaker = _cs.includes("speaker") || _cn.includes("speaker");
+              return !_isLens && !_isSpeaker ? (
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
                     Description
@@ -1224,7 +1242,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               <input
                 value={form.brand}
                 onChange={(e) => onChange("brand", e.target.value)}
-                placeholder="e.g. Apple"
+                placeholder={catPlaceholders.brand}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
               />
             </div>

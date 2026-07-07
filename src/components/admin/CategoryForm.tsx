@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, ImagePlus, Link2, Loader2, X } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
+import { imageUrlForKey } from "@/lib/image-url";
 import type {
   AdminCategoryListItem,
   CreateCategoryBody,
   UpdateCategoryBody,
 } from "@/lib/api";
+
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 type Mode =
   | { kind: "create" }
@@ -60,6 +63,14 @@ export default function CategoryForm({ mode }: { mode: Mode }) {
   const [loadingParents, setLoadingParents] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(() =>
+    imageUrlForKey(initial?.imageObjectKey ?? ""),
+  );
+  const [imageTab, setImageTab] = useState<"upload" | "url">("upload");
+  const [urlInput, setUrlInput] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load all categories for the parent dropdown.
   useEffect(() => {
@@ -88,6 +99,34 @@ export default function CategoryForm({ mode }: { mode: Mode }) {
 
   const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setUploadError("Only JPEG, PNG, WebP, or AVIF images are allowed.");
+      return;
+    }
+    setUploadError(null);
+    // Show local preview immediately
+    const local = URL.createObjectURL(file);
+    setPreviewUrl(local);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/upload-category-image", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json();
+      onChange("imageObjectKey", url);
+      setPreviewUrl(url);
+    } catch {
+      setUploadError("Image upload failed. You can still enter the object key manually.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,17 +252,112 @@ export default function CategoryForm({ mode }: { mode: Mode }) {
 
         <div>
           <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-            Image object key
+            Category Image
           </label>
-          <input
-            value={form.imageObjectKey}
-            onChange={(e) => onChange("imageObjectKey", e.target.value)}
-            placeholder="e.g. categories/smartphones.jpg"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
-          />
-          <p className="text-[11px] text-gray-400 mt-1">
-            Optional. Upload to S3 separately, then paste the resulting key here.
-          </p>
+
+          {/* Preview */}
+          {previewUrl && (
+            <div className="relative w-40 h-32 mb-3 rounded-xl overflow-hidden border border-gray-200 bg-gray-50 group">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={previewUrl} alt="Category preview" className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewUrl(null);
+                  setUrlInput("");
+                  onChange("imageObjectKey", "");
+                }}
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 text-gray-600 hover:text-red-500 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Remove image"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-3">
+            <button
+              type="button"
+              onClick={() => setImageTab("upload")}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${imageTab === "upload" ? "bg-[#129cd3] text-white border-[#129cd3]" : "border-gray-200 text-gray-500 hover:border-[#129cd3] hover:text-[#129cd3]"}`}
+            >
+              <ImagePlus size={12} /> Upload from device
+            </button>
+            <button
+              type="button"
+              onClick={() => setImageTab("url")}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${imageTab === "url" ? "bg-[#129cd3] text-white border-[#129cd3]" : "border-gray-200 text-gray-500 hover:border-[#129cd3] hover:text-[#129cd3]"}`}
+            >
+              <Link2 size={12} /> Use image link
+            </button>
+          </div>
+
+          {imageTab === "upload" ? (
+            <>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || busy}
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-[#129cd3] border border-[#129cd3]/40 px-3 py-2 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+                >
+                  {uploading ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+                  {uploading ? "Uploading…" : previewUrl ? "Change image" : "Choose file"}
+                </button>
+                <span className="text-[11px] text-gray-400">JPEG, PNG, WebP or AVIF</span>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ALLOWED_TYPES.join(",")}
+                className="hidden"
+                onChange={handleImagePick}
+              />
+              {uploadError && (
+                <p className="text-[11px] text-red-500 mt-1.5">{uploadError}</p>
+              )}
+            </>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3]"
+              />
+              <button
+                type="button"
+                disabled={!urlInput.trim()}
+                onClick={() => {
+                  const url = urlInput.trim();
+                  if (!url) return;
+                  onChange("imageObjectKey", url);
+                  setPreviewUrl(url);
+                }}
+                className="px-3 py-2 text-sm font-semibold bg-[#129cd3] text-white rounded-lg hover:bg-[#0e87b5] disabled:opacity-40"
+              >
+                Use
+              </button>
+            </div>
+          )}
+
+          {/* Manual S3 key override */}
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+              Or enter S3 object key manually
+            </label>
+            <input
+              value={/^https?:\/\//i.test(form.imageObjectKey) ? "" : form.imageObjectKey}
+              onChange={(e) => {
+                onChange("imageObjectKey", e.target.value);
+                setPreviewUrl(imageUrlForKey(e.target.value));
+              }}
+              placeholder="e.g. categories/camera-lens.jpg"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 pt-2">
