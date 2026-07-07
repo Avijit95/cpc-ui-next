@@ -57,9 +57,9 @@ type DraftPayload = {
   savedAt: number; // Date.now()
 };
 
-function loadDraft(): DraftPayload | null {
+function loadDraft(key: string): DraftPayload | null {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw) as DraftPayload;
   } catch {
@@ -67,14 +67,14 @@ function loadDraft(): DraftPayload | null {
   }
 }
 
-function saveDraft(payload: DraftPayload) {
+function saveDraft(key: string, payload: DraftPayload) {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+    localStorage.setItem(key, JSON.stringify(payload));
   } catch { /* storage full or disabled */ }
 }
 
-function clearDraft() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+function clearDraft(key: string) {
+  try { localStorage.removeItem(key); } catch { /* ignore */ }
 }
 
 function draftAge(savedAt: number): string {
@@ -294,6 +294,8 @@ function fileSizeLabel(bytes: number) {
 export default function ProductForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const initial = mode.kind === "edit" ? mode.initial : undefined;
+  // Per-page draft key: create mode shares one key; edit mode is per product.
+  const draftKey = mode.kind === "create" ? DRAFT_KEY : `${DRAFT_KEY}-edit-${mode.productId}`;
 
   const [form, setForm] = useState<FormState>(buildInitialForm(initial));
   const [categories, setCategories] = useState<AdminCategoryListItem[]>([]);
@@ -345,9 +347,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   // ── Draft auto-save (create mode only) ────────────────────────────────────
   // Load draft once on mount via lazy initialiser — avoids setState-in-effect lint error.
   const [pendingDraft, setPendingDraft] = useState<DraftPayload | null>(() => {
-    if (mode.kind !== "create") return null;
-    const draft = loadDraft();
-    return draft && draft.form.name ? draft : null;
+    const draft = loadDraft(draftKey);
+    if (!draft) return null;
+    // For create mode, skip empty drafts (no name yet means nothing meaningful was typed).
+    if (mode.kind === "create" && !draft.form.name) return null;
+    return draft;
   });
   // Draft variant rows passed directly to the editor as an initialisation prop.
   // Set on restore, cleared after 3 s so future category changes start fresh.
@@ -357,9 +361,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
   // Auto-save whenever form, specRows, or images change (debounced 1 s).
   useEffect(() => {
-    if (mode.kind !== "create") return;
     const id = setTimeout(() => {
-      saveDraft({
+      saveDraft(draftKey, {
         form,
         specRows: specRows.map(({ key, value }) => ({ key, value })),
         variantRows: variantsRef.current?.getRows() ?? [],
@@ -375,9 +378,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
   // Also save variant rows every 20 s (covers variant-only changes between form saves).
   useEffect(() => {
-    if (mode.kind !== "create") return;
     const id = setInterval(() => {
-      saveDraft({
+      saveDraft(draftKey, {
         form,
         specRows: specRows.map(({ key, value }) => ({ key, value })),
         variantRows: variantsRef.current?.getRows() ?? [],
@@ -905,7 +907,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
         }
       }
 
-      clearDraft();
+      clearDraft(draftKey);
       router.replace("/admin/products");
       router.refresh();
     } catch (err) {
@@ -1014,7 +1016,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             </button>
             <button
               type="button"
-              onClick={() => { clearDraft(); setPendingDraft(null); }}
+              onClick={() => { clearDraft(draftKey); setPendingDraft(null); }}
               className="px-3 py-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900 border border-amber-300 rounded-lg transition-colors"
             >
               Discard
@@ -1552,7 +1554,7 @@ type TvSpecGroup = { label: string; icon: string; fields: TvSpecField[] };
 const TV_PER_SIZE_BASE_KEYS = [
   "Screen Size", "Product Name", "Slug", "Description",
   // Display
-  "Display Size", "Display Technology", "Resolution", "LED Arrangement",
+  "Display Technology", "Resolution", "LED Arrangement",
   "Viewing Angle", "Aspect Ratio",
   // Video
   "Refresh Rate", "Response Time", "Supported Video Formats",
@@ -1581,7 +1583,6 @@ const TV_PER_SIZE_GROUPS: TvSpecGroup[] = [
     label: "Display Features",
     icon: "📺",
     fields: [
-      { key: "Display Size",        placeholder: 'e.g. 43" (108 cm)' },
       { key: "Display Technology",  placeholder: "e.g. LED, QLED, OLED" },
       { key: "Resolution",          placeholder: "e.g. 3840 × 2160 (4K Ultra HD)" },
       { key: "LED Arrangement",     placeholder: "e.g. Direct Lit" },

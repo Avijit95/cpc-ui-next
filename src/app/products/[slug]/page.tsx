@@ -114,7 +114,7 @@ type AddState = "idle" | "busy" | "added" | "error";
 
 // ── Variant selection helpers ─────────────────────────────────────────────
 // Attribute keys match the admin variant editor (ROM is stored as `storage`).
-const VARIANT_ATTR_ORDER = ["size", "launchYear", "model", "ram", "storage", "color"];
+const VARIANT_ATTR_ORDER = ["launchYear", "model", "size", "ram", "storage", "color"];
 const VARIANT_ATTR_LABELS: Record<string, string> = {
   ram: "RAM",
   storage: "ROM",
@@ -619,6 +619,16 @@ useEffect(() => {
   const lensModelKey = (isLensProduct || isSpeakerProduct)
     ? variantGroups.find((g) => g.key === "model" || g.key === "ram")?.key
     : undefined;
+  // For lens/speaker: model index = position of selected model value in the variant group.
+  // Position-based is more reliable than text-matching against spec "Model" keys.
+  const lensOrSpeakerModelIdx = (() => {
+    if ((!isLensProduct && !isSpeakerProduct) || !lensModelKey || !selectedVariant) return 0;
+    const modelGroup = variantGroups.find((g) => g.key === lensModelKey);
+    if (!modelGroup) return 0;
+    const selectedVal = attrValue(selectedVariant, lensModelKey);
+    const pos = modelGroup.values.indexOf(selectedVal);
+    return pos >= 0 ? pos : 0;
+  })();
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
   const galleryImages = (() => {
     if (selectedVariant && selectedVariant.images.length > 0) {
@@ -686,7 +696,7 @@ useEffect(() => {
   // The currently selected color, looked up across all color keys
   const selectedColor = colorAttrKeys.map((k) => selectedAttrs[k]).find(Boolean) ?? null;
   // Informational TV variant attributes — stored per-variant but not selectable UI groups
-  const TV_HIDDEN_ATTR_KEYS = new Set(["model", "launchYear", "dimensions", "dimWithStand", "dimWithoutStand", "weight"]);
+  const TV_HIDDEN_ATTR_KEYS = new Set(["dimensions", "dimWithStand", "dimWithoutStand", "weight"]);
   const nonColorGroups = variantGroups.filter((g) => {
     if (/^colou?r$/i.test(g.key)) return false;
     if (isTvProduct && TV_HIDDEN_ATTR_KEYS.has(g.key)) return false;
@@ -913,7 +923,7 @@ useEffect(() => {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} selectedVariant={selectedVariant} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} selectedVariant={selectedVariant} modelIdx={(isLensProduct || isSpeakerProduct) ? lensOrSpeakerModelIdx : undefined} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1545,7 +1555,9 @@ useEffect(() => {
               {openSections["Description"] && (
                 <div className="px-5 py-5 prose max-w-none text-gray-600 text-sm leading-relaxed whitespace-pre-line border-t border-gray-100">
                   {(isLensProduct || isSpeakerProduct)
-                    ? (String(product.specs[multiModelKey("Description", getActiveModelIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
+                    ? (String(product.specs[multiModelKey("Description", lensOrSpeakerModelIdx)] ?? "").trim() || product.description || "No description available.")
+                    : isTvProduct
+                    ? (String(product.specs[multiModelKey("Description", getTvSizeIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
                     : (product.description || "No description available.")}
                 </div>
               )}
@@ -1580,7 +1592,9 @@ useEffect(() => {
                     modelIdx={
                       isTvProduct
                         ? getTvSizeIndex(product.specs, selectedVariant)
-                        : getActiveModelIndex(product.specs, selectedVariant)
+                        : (isLensProduct || isSpeakerProduct)
+                        ? lensOrSpeakerModelIdx
+                        : 0
                     }
                   />
                 </div>
@@ -1933,7 +1947,7 @@ const LENS_PER_MODEL_SPEC_BASES = [
 // ── TV per-size keys ──────────────────────────────────────────────────────────
 const TV_PER_SIZE_SPEC_BASES = [
   "Screen Size", "Product Name", "Slug", "Description",
-  "Display Size", "Display Technology", "Resolution", "LED Arrangement",
+  "Display Technology", "Resolution", "LED Arrangement",
   "Viewing Angle", "Aspect Ratio",
   "Refresh Rate", "Response Time", "Supported Video Formats",
   "Power Supply", "Power Consumption", "BEE Star Rating",
@@ -2309,9 +2323,9 @@ function buildSpeakerHighlights(specs: Record<string, unknown>, modelIdx = 0): H
   return rows;
 }
 
-function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, selectedVariant }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; isSpeaker?: boolean; selectedVariant?: Variant }) {
+function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, selectedVariant, modelIdx: modelIdxProp }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; isSpeaker?: boolean; selectedVariant?: Variant; modelIdx?: number }) {
   const [expanded, setExpanded] = useState(true);
-  const activeModelIdx = (isLens || isSpeaker) ? getActiveModelIndex(specs, selectedVariant) : 0;
+  const activeModelIdx = modelIdxProp !== undefined ? modelIdxProp : (isLens || isSpeaker) ? getActiveModelIndex(specs, selectedVariant) : 0;
   const highlights = isLens
     ? buildLensHighlights(specs, activeModelIdx)
     : isSpeaker

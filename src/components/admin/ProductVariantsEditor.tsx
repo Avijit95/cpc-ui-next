@@ -106,10 +106,12 @@ function isSpeakerCategory(slug?: string): boolean {
 
 const TV_SIZE_PRESETS = ["32\"", "43\"", "50\"", "55\"", "65\"", "75\"", "85\""];
 
-function makeSku(name: string, r: VariantRow, isCamera: boolean): string {
+function makeSku(name: string, r: VariantRow, isCamera: boolean, isTV = false): string {
   const base = slugifyPart(name) || "variant";
   const parts = isCamera
     ? [r.ram, r.color, r.launchYear, r.lensIncluded === "Yes" ? r.storage : ""]
+    : isTV
+    ? [r.ram, r.storage, r.launchYear, r.color]
     : [r.ram, r.storage, r.color];
   const tail = parts.map(slugifyPart).filter(Boolean).join("-");
   const full = tail ? `${base}-${tail}` : base;
@@ -125,7 +127,7 @@ function comboKey(r: VariantRow, isCamera: boolean): string {
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-// For cameras images are grouped by body color / lens; for TVs by size+color; lens by model+color; all others by color.
+// For cameras images are grouped by body color / lens; for TVs by size+color+launchYear+model; lens by model+color; all others by color.
 function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false): string {
   if (isCamera) {
     if (r.lensIncluded === "Yes" && r.storage.trim()) return `Lens: ${r.storage.trim()}`;
@@ -139,10 +141,8 @@ function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens =
     return model || color || "Lens";
   }
   if (isTV) {
-    const size = r.ram.trim();
-    const color = r.color.trim();
-    if (size && color) return `${size} / ${color}`;
-    return size || color || "";
+    const parts = [r.ram.trim(), r.color.trim(), r.launchYear.trim(), r.storage.trim()].filter(Boolean);
+    return parts.join(" / ") || "";
   }
   return r.color.trim();
 }
@@ -257,7 +257,10 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
     } else if (isTV) {
       const size = v.attributes.size != null ? String(v.attributes.size).trim() : "";
       const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
-      groupKey = size && color ? `${size} / ${color}` : size || color || "";
+      const launchYear = v.attributes.launchYear != null ? String(v.attributes.launchYear).trim() : "";
+      const model = v.attributes.model != null ? String(v.attributes.model).trim() : "";
+      const parts = [size, color, launchYear, model].filter(Boolean);
+      groupKey = parts.join(" / ") || "";
     } else {
       groupKey = v.attributes.color != null ? String(v.attributes.color).trim() : "";
     }
@@ -455,17 +458,17 @@ const ProductVariantsEditor = forwardRef<
               return "MRP must be greater than or equal to the selling price.";
             }
           }
-          const key = comboKey(r, isCamera);
-          if (seen.has(key)) {
-            return isCamera
-              ? (isLens ? "Two variants have the same Model No. / Color combination." : "Two variants have the same Model No. / Color / Launch Year / Lens combination.")
-              : isTV
-              ? "Two variants have the same Size / Model No. / Color combination."
-              : isSpeaker
-              ? "Two variants have the same Model No. / Watt / Color combination."
-              : "Two variants have the same RAM / ROM / Color combination.";
+          if (!isTV) {
+            const key = comboKey(r, isCamera);
+            if (seen.has(key)) {
+              return isCamera
+                ? (isLens ? "Two variants have the same Model No. / Color combination." : "Two variants have the same Model No. / Color / Launch Year / Lens combination.")
+                : isSpeaker
+                ? "Two variants have the same Model No. / Watt / Color combination."
+                : "Two variants have the same RAM / ROM / Color combination.";
+            }
+            seen.add(key);
           }
-          seen.add(key);
         }
         return null;
       },
@@ -516,7 +519,7 @@ const ProductVariantsEditor = forwardRef<
         const keptIds = new Set<string>();
         for (const r of rows) {
           const body = {
-            sku: makeSku(productName, r, isCamera),
+            sku: makeSku(productName, r, isCamera, isTV),
             attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens),
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
@@ -939,7 +942,7 @@ const ProductVariantsEditor = forwardRef<
       {colors.length > 0 && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
           <p className="text-xs font-semibold text-gray-700">
-            {isCamera ? "Images by body / lens" : isTV ? "Images by size & color" : "Images by color"}
+            {isCamera ? "Images by body / lens" : isTV ? "Images by size, color, year & model" : "Images by color"}
           </p>
           {colors.map((color) => {
             const ci = colorImages[color] ?? { items: [], defaultId: null };
