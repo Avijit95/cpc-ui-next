@@ -1523,6 +1523,8 @@ useEffect(() => {
                 <div className="px-5 py-5 prose max-w-none text-gray-600 text-sm leading-relaxed whitespace-pre-line border-t border-gray-100">
                   {(isLensProduct || isSpeakerProduct)
                     ? (String(product.specs[multiModelKey("Description", getActiveModelIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
+                    : isTvProduct
+                    ? (String(product.specs[multiModelKey("Description", getTvSizeIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
                     : (product.description || "No description available.")}
                 </div>
               )}
@@ -1553,7 +1555,9 @@ useEffect(() => {
                     }
                     isLens={isLensProduct}
                     isSpeaker={isSpeakerProduct}
+                    isTv={isTvProduct}
                     modelIdx={getActiveModelIndex(product.specs, selectedVariant)}
+                    tvSizeIdx={getTvSizeIndex(product.specs, selectedVariant)}
                   />
                 </div>
               )}
@@ -1902,6 +1906,35 @@ const LENS_PER_MODEL_SPEC_BASES = [
   "Recommended Usage",
 ];
 
+// ── TV per-size keys ──────────────────────────────────────────────────────────
+const TV_PER_SIZE_SPEC_BASES = [
+  "Screen Size", "Description",
+  "Display Size", "Display Technology", "Resolution", "LED Arrangement",
+  "Viewing Angle", "Aspect Ratio",
+  "Refresh Rate", "Response Time", "Supported Video Formats",
+  "Power Supply", "Power Consumption", "BEE Star Rating",
+  "Supported Apps", "Other Apps Supported", "Other Convenience Features",
+  "Number of Speakers", "Speaker Output RMS", "Sound Mode", "Supported Audio Formats",
+  "Battery Requirement",
+  "HDMI Ports", "USB Ports", "Wi-Fi", "Wi-Fi Type", "Supported Devices for Casting",
+  "RAM Capacity", "Storage Memory",
+];
+
+function getTvSizeIndex(specs: Record<string, unknown>, selectedVariant?: Variant): number {
+  if (!selectedVariant) return 0;
+  const sizeAttr = selectedVariant.attributes?.size;
+  if (!sizeAttr) return 0;
+  const sizeStr = String(sizeAttr).trim().toLowerCase().replace(/['"]/g, "");
+  for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
+    const val = specs[multiModelKey("Screen Size", i)];
+    if (val) {
+      const specStr = String(val).trim().toLowerCase().replace(/['"]/g, "");
+      if (specStr === sizeStr || specStr.includes(sizeStr) || sizeStr.includes(specStr)) return i;
+    }
+  }
+  return 0;
+}
+
 // ── Speaker per-model keys ────────────────────────────────────────────────────
 const SPEAKER_PER_MODEL_SPEC_BASES = [
   "Model", "Description", "Speaker Type", "Color",
@@ -1975,12 +2008,16 @@ function SpecsTable({
   specs,
   isLens = false,
   isSpeaker = false,
+  isTv = false,
   modelIdx = 0,
+  tvSizeIdx = 0,
 }: {
   specs: Record<string, unknown>;
   isLens?: boolean;
   isSpeaker?: boolean;
+  isTv?: boolean;
   modelIdx?: number;
+  tvSizeIdx?: number;
 }) {
   let allEntries = Object.entries(specs);
 
@@ -1988,6 +2025,8 @@ function SpecsTable({
     allEntries = filterMultiModelEntries(allEntries, LENS_PER_MODEL_SPEC_BASES, modelIdx);
   } else if (isSpeaker) {
     allEntries = filterMultiModelEntries(allEntries, SPEAKER_PER_MODEL_SPEC_BASES, modelIdx);
+  } else if (isTv) {
+    allEntries = filterMultiModelEntries(allEntries, TV_PER_SIZE_SPEC_BASES, tvSizeIdx);
   }
 
   allEntries = allEntries.filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
@@ -2113,7 +2152,11 @@ function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
 }
 
 function buildTvHighlights(specs: Record<string, unknown>, selectedVariant?: Variant): HighlightRow[] {
+  const sizeIdx = getTvSizeIndex(specs, selectedVariant);
+  // Look up per-size key first, fall back to flat key for old products
   const s = (key: string) => {
+    const perSizeVal = specs[multiModelKey(key, sizeIdx)];
+    if (perSizeVal) return String(perSizeVal).trim();
     const v = specs[key];
     return v ? String(v).trim() : "";
   };

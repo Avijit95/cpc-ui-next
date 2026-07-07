@@ -1102,7 +1102,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
               const _isLens = _cs.includes("lens") || _cn.includes("lens");
               const _isSpeaker = _cs.includes("speaker") || _cn.includes("speaker");
-              return !_isLens && !_isSpeaker ? (
+              const _isTv = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
+              return !_isLens && !_isSpeaker && !_isTv ? (
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
                     Description
@@ -1513,56 +1514,117 @@ function PhoneSpecsEditor({
 
 // ── TV-specific structured spec editor ───────────────────────────────────────
 
-const TV_CONNECTIVITY_OPTIONS = ["HDMI", "Wi-Fi", "USB", "AV", "Bluetooth", "Ethernet", "RF"] as const;
+const MAX_TV_SIZES = 5;
 
-const TV_SPEC_KEYS = new Set([
-  "Screen Size", "Color", "Model Name", "Display Technology", "Resolution",
-  "Operating System", "Aspect Ratio", "Refresh Rate",
-  "Connectivity Technology", "Special Feature", "Included Components",
-  "Country of Origin", "Launch Year",
-  "Power Consumption", "Line Voltage",
-]);
+function tvSizeKey(base: string, idx: number): string {
+  return idx === 0 ? base : `${base} ${idx + 1}`;
+}
 
-const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
+type TvSpecField = { key: string; placeholder?: string; unit?: string; wide?: boolean };
+type TvSpecGroup = { label: string; icon: string; fields: TvSpecField[] };
+
+// Keys that differ per screen size
+const TV_PER_SIZE_BASE_KEYS = [
+  "Screen Size", "Description",
+  // Display
+  "Display Size", "Display Technology", "Resolution", "LED Arrangement",
+  "Viewing Angle", "Aspect Ratio",
+  // Video
+  "Refresh Rate", "Response Time", "Supported Video Formats",
+  // Power
+  "Power Supply", "Power Consumption", "BEE Star Rating",
+  // Convenience
+  "Supported Apps", "Other Apps Supported", "Other Convenience Features",
+  // Audio
+  "Number of Speakers", "Speaker Output RMS", "Sound Mode", "Supported Audio Formats",
+  // Remote
+  "Battery Requirement",
+  // Connectivity
+  "HDMI Ports", "USB Ports", "Wi-Fi", "Wi-Fi Type", "Supported Devices for Casting",
+  // Memory
+  "RAM Capacity", "Storage Memory",
+];
+
+const TV_SPEC_KEYS = new Set(
+  TV_PER_SIZE_BASE_KEYS.flatMap((k) =>
+    Array.from({ length: MAX_TV_SIZES }, (_, i) => tvSizeKey(k, i)),
+  ),
+);
+
+const TV_PER_SIZE_GROUPS: TvSpecGroup[] = [
   {
-    label: "Display",
+    label: "Display Features",
     icon: "📺",
     fields: [
-      { key: "Display Technology", placeholder: "e.g. LED, QLED, OLED" },
-      { key: "Resolution", placeholder: "e.g. 3840 × 2160 (4K Ultra HD)" },
-      { key: "Aspect Ratio", placeholder: "e.g. 16:9" },
-      { key: "Refresh Rate", placeholder: "e.g. 60 Hz", unit: "Hz" },
+      { key: "Display Size",        placeholder: 'e.g. 43" (108 cm)' },
+      { key: "Display Technology",  placeholder: "e.g. LED, QLED, OLED" },
+      { key: "Resolution",          placeholder: "e.g. 3840 × 2160 (4K Ultra HD)" },
+      { key: "LED Arrangement",     placeholder: "e.g. Direct Lit" },
+      { key: "Viewing Angle",       placeholder: "e.g. 178°" },
+      { key: "Aspect Ratio",        placeholder: "e.g. 16:9" },
     ],
   },
   {
-    label: "General",
-    icon: "📋",
+    label: "Video Features",
+    icon: "🎬",
     fields: [
-      { key: "Operating System", placeholder: "e.g. Tizen OS 8.0, Android TV 11" },
-      { key: "Country of Origin", placeholder: "e.g. India" },
+      { key: "Refresh Rate",            placeholder: "e.g. 60 Hz", unit: "Hz" },
+      { key: "Response Time",           placeholder: "e.g. 8 ms", unit: "ms" },
+      { key: "Supported Video Formats", placeholder: "e.g. H.265, H.264, VP9", wide: true },
     ],
   },
   {
-    label: "Connectivity",
-    icon: "🔌",
-    fields: [
-      { key: "Connectivity Technology", placeholder: "e.g. Wi-Fi, Bluetooth 5.0, HDMI, USB" },
-    ],
-  },
-  {
-    label: "Features & Contents",
-    icon: "⭐",
-    fields: [
-      { key: "Special Feature", placeholder: "e.g. Dolby Atmos, HDR10+, Voice Remote" },
-      { key: "Included Components", placeholder: "e.g. TV, Remote Control, Power Cable, Stand" },
-    ],
-  },
-  {
-    label: "Power",
+    label: "Power Features",
     icon: "⚡",
     fields: [
-      { key: "Power Consumption", placeholder: "e.g. 289.08 Watts", unit: "Watts" },
-      { key: "Line Voltage", placeholder: "e.g. 100-240 VAC 50-60 Hz" },
+      { key: "Power Supply",    placeholder: "e.g. AC 100-240V, 50/60Hz" },
+      { key: "Power Consumption", placeholder: "e.g. 75 W", unit: "W" },
+      { key: "BEE Star Rating", placeholder: "e.g. 3 Star" },
+    ],
+  },
+  {
+    label: "Convenience Features",
+    icon: "⭐",
+    fields: [
+      { key: "Supported Apps",             placeholder: "e.g. Netflix, Prime Video, YouTube", wide: true },
+      { key: "Other Apps Supported",       placeholder: "e.g. Disney+, SonyLIV, Zee5", wide: true },
+      { key: "Other Convenience Features", placeholder: "e.g. Wi-Fi | Bluetooth | 2 HDMI Ports | 1 x USB-A Port", wide: true },
+    ],
+  },
+  {
+    label: "Audio Features",
+    icon: "🔊",
+    fields: [
+      { key: "Number of Speakers",     placeholder: "e.g. 2" },
+      { key: "Speaker Output RMS",     placeholder: "e.g. 20 W", unit: "W" },
+      { key: "Sound Mode",             placeholder: "e.g. Dolby Atmos, DTS:X" },
+      { key: "Supported Audio Formats", placeholder: "e.g. Dolby Digital, PCM", wide: true },
+    ],
+  },
+  {
+    label: "Remote Controller",
+    icon: "🎮",
+    fields: [
+      { key: "Battery Requirement", placeholder: "e.g. 2 × AAA" },
+    ],
+  },
+  {
+    label: "Connectivity Features",
+    icon: "🔌",
+    fields: [
+      { key: "HDMI Ports",                  placeholder: "e.g. 2 (HDMI 2.0, eARC)" },
+      { key: "USB Ports",                   placeholder: "e.g. 1 × USB-A" },
+      { key: "Wi-Fi",                       placeholder: "e.g. Yes" },
+      { key: "Wi-Fi Type",                  placeholder: "e.g. 802.11 a/b/g/n/ac (2.4 GHz + 5 GHz)" },
+      { key: "Supported Devices for Casting", placeholder: "e.g. Android, iOS, Chromecast", wide: true },
+    ],
+  },
+  {
+    label: "Memory",
+    icon: "💾",
+    fields: [
+      { key: "RAM Capacity",   placeholder: "e.g. 1.5 GB", unit: "GB" },
+      { key: "Storage Memory", placeholder: "e.g. 8 GB", unit: "GB" },
     ],
   },
 ];
@@ -1587,130 +1649,135 @@ function TvSpecsEditor({
     }
   };
 
+  // Determine how many size sections to show based on existing data
+  const [sizeCount, setSizeCount] = useState(() => {
+    let count = 1;
+    for (let i = 1; i < MAX_TV_SIZES; i++) {
+      if (rows.some((r) => r.key === tvSizeKey("Screen Size", i))) count = i + 1;
+    }
+    return count;
+  });
+
+  const removeSize = (i: number) => {
+    const keysToRemove = new Set(TV_PER_SIZE_BASE_KEYS.map((k) => tvSizeKey(k, i)));
+    onChange(rows.filter((r) => !keysToRemove.has(r.key)));
+    setSizeCount((c) => Math.max(1, c - 1));
+  };
+
   const extraRows = rows.filter((r) => !TV_SPEC_KEYS.has(r.key));
   const setExtraRows = (next: SpecRow[]) => {
     onChange([...rows.filter((r) => TV_SPEC_KEYS.has(r.key)), ...next]);
   };
 
-  // Parse "Connectivity Technology" value into a Set of checked options
-  const connRaw = get("Connectivity Technology");
-  const connChecked = new Set<string>(
-    TV_CONNECTIVITY_OPTIONS.filter((opt) => {
-      const v = connRaw.toLowerCase();
-      if (opt === "HDMI") return v.includes("hdmi");
-      if (opt === "Wi-Fi") return v.includes("wi-fi") || v.includes("wifi");
-      if (opt === "USB") return v.includes("usb");
-      if (opt === "AV") return v.includes(" av") || v.startsWith("av");
-      if (opt === "Bluetooth") return v.includes("bluetooth");
-      if (opt === "Ethernet") return v.includes("ethernet") || v.includes("lan");
-      if (opt === "RF") return v.includes(" rf") || v.startsWith("rf") || v.includes("coaxial") || v.includes("antenna");
-      return false;
-    })
-  );
-
-  const toggleConnectivity = (opt: string) => {
-    const next = new Set<string>(connChecked);
-    if (next.has(opt)) next.delete(opt); else next.add(opt);
-    // Rebuild value in fixed order, then append any leftover text not in our known options
-    const known = TV_CONNECTIVITY_OPTIONS.filter((o) => next.has(o));
-    // Preserve any extra tokens from the existing value that aren't covered by our checkboxes
-    const extras = connRaw.split(",").map((s) => s.trim()).filter((s) => {
-      if (!s) return false;
-      const sl = s.toLowerCase();
-      return !TV_CONNECTIVITY_OPTIONS.some((o) => {
-        if (o === "HDMI") return sl.includes("hdmi");
-        if (o === "Wi-Fi") return sl.includes("wi-fi") || sl.includes("wifi");
-        if (o === "USB") return sl.includes("usb");
-        if (o === "AV") return sl.includes("av");
-        if (o === "Bluetooth") return sl.includes("bluetooth");
-        if (o === "Ethernet") return sl.includes("ethernet") || sl.includes("lan");
-        if (o === "RF") return sl.includes("rf") || sl.includes("coaxial") || sl.includes("antenna");
-        return false;
-      });
-    });
-    set("Connectivity Technology", [...known, ...extras].join(", "));
-  };
-
   return (
     <div className="space-y-4">
-      {TV_SPEC_GROUPS.map((group) => (
-        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
-          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
-            <span className="text-base leading-none">{group.icon}</span>
-            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
-          </div>
-          {group.label === "Connectivity" ? (
-            <div className="p-3 sm:col-span-2 space-y-3">
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block">
-                Connectivity Technology
-              </label>
-              {/* Checkbox grid */}
-              <div className="flex flex-wrap gap-2">
-                {TV_CONNECTIVITY_OPTIONS.map((opt) => (
-                  <label
-                    key={opt}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium cursor-pointer select-none transition-colors ${
-                      connChecked.has(opt)
-                        ? "border-[#129cd3] bg-[#e8f7fc] text-[#129cd3]"
-                        : "border-gray-200 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
-                    } ${disabled ? "opacity-50 pointer-events-none" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={connChecked.has(opt)}
-                      onChange={() => toggleConnectivity(opt)}
-                      disabled={disabled}
-                      className="sr-only"
-                    />
-                    {opt}
-                  </label>
-                ))}
-              </div>
-              {/* Also show/allow free-text for additional details */}
-              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                <input
-                  value={connRaw}
-                  onChange={(e) => set("Connectivity Technology", e.target.value)}
-                  placeholder="e.g. Wi-Fi, Bluetooth 5.0, HDMI, USB"
+      {/* Per-size sections */}
+      {Array.from({ length: sizeCount }, (_, i) => {
+        const sizeVal = get(tvSizeKey("Screen Size", i));
+        return (
+          <div key={i} className="border border-[#129cd3]/30 rounded-xl overflow-hidden">
+            {/* Screen Size header row */}
+            <div className="bg-[#e8f7fc] border-b border-[#129cd3]/20 px-4 py-2.5 flex items-center gap-3">
+              <span className="text-[11px] font-bold text-[#129cd3] uppercase tracking-wide whitespace-nowrap">
+                Screen Size{i > 0 ? ` ${i + 1}` : ""}
+              </span>
+              <input
+                value={sizeVal}
+                onChange={(e) => set(tvSizeKey("Screen Size", i), e.target.value)}
+                placeholder='Enter screen size to unlock spec fields… e.g. 43"'
+                disabled={disabled}
+                className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+              />
+              {i > 0 && (
+                <button
+                  type="button"
+                  onClick={() => removeSize(i)}
                   disabled={disabled}
-                  className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                />
-              </div>
-              <p className="text-[11px] text-gray-400">Checkboxes auto-fill the field. You can also type additional details above.</p>
+                  className="p-1 text-gray-400 hover:text-red-500 disabled:opacity-40"
+                  title="Remove this size"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-          ) : (
-          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {group.fields.map((field) => (
-              <div key={field.key} className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}>
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                  {field.key}
-                </label>
-                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                  <input
-                    value={get(field.key)}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    placeholder={field.placeholder}
-                    disabled={disabled}
-                    className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                  />
-                  {field.unit && (
-                    <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
-                      {field.unit}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          )}
-        </div>
-      ))}
 
-      {/* Additional free-form specs */}
-      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-      </div>
+            {sizeVal.trim() ? (
+              <div className="p-3 space-y-4">
+                {/* Description */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
+                  <textarea
+                    rows={4}
+                    value={get(tvSizeKey("Description", i))}
+                    onChange={(e) => set(tvSizeKey("Description", i), e.target.value)}
+                    placeholder="Describe key features and what makes this TV great…"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-y bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {TV_PER_SIZE_GROUPS.map((group) => (
+                  <div key={group.label}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-sm leading-none">{group.icon}</span>
+                      <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{group.label}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {group.fields.map((field) => {
+                        const k = tvSizeKey(field.key, i);
+                        return (
+                          <div key={k} className={`flex flex-col gap-1 ${field.wide ? "sm:col-span-2" : ""}`}>
+                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                              {field.key}
+                            </label>
+                            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                              <input
+                                value={get(k)}
+                                onChange={(e) => set(k, e.target.value)}
+                                placeholder={field.placeholder}
+                                disabled={disabled}
+                                className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                              />
+                              {field.unit && (
+                                <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
+                                  {field.unit}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {/* Additional free-form specs — shown inside the last size section */}
+                {i === sizeCount - 1 && (
+                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                    <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="px-4 py-5 text-center text-xs text-gray-400">
+                Enter a screen size above to unlock specification fields.
+              </p>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Add another size */}
+      {sizeCount < MAX_TV_SIZES && (
+        <button
+          type="button"
+          onClick={() => setSizeCount((c) => c + 1)}
+          disabled={disabled}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#129cd3] border border-[#129cd3]/40 px-3 py-2 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+        >
+          <Plus size={14} /> Add Another Size
+        </button>
+      )}
+
     </div>
   );
 }

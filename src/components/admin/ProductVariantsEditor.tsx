@@ -125,7 +125,7 @@ function comboKey(r: VariantRow, isCamera: boolean): string {
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-// For cameras images are grouped by body color / lens; for TVs by size; lens by model+color; all others by color.
+// For cameras images are grouped by body color / lens; for TVs by size+color; lens by model+color; all others by color.
 function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false): string {
   if (isCamera) {
     if (r.lensIncluded === "Yes" && r.storage.trim()) return `Lens: ${r.storage.trim()}`;
@@ -138,7 +138,13 @@ function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens =
     if (model && color) return `${model} / ${color}`;
     return model || color || "Lens";
   }
-  return isTV ? r.ram.trim() : r.color.trim();
+  if (isTV) {
+    const size = r.ram.trim();
+    const color = r.color.trim();
+    if (size && color) return `${size} / ${color}`;
+    return size || color || "";
+  }
+  return r.color.trim();
 }
 
 function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false): Record<string, unknown> {
@@ -229,7 +235,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
 }
 
 // Variants sharing the same group key share one image set — take the first non-empty.
-// Camera: grouped by body/lens; TV: grouped by size; lens by model+color; all others: grouped by color.
+// Camera: grouped by body/lens; TV: grouped by size+color; lens by model+color; all others: grouped by color.
 function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean, isLens = false): Record<string, ColorImages> {
   const map: Record<string, ColorImages> = {};
   for (const v of variants) {
@@ -246,10 +252,12 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
       const model = v.attributes.ram != null ? String(v.attributes.ram).trim() : "";
       const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
       groupKey = model && color ? `${model} / ${color}` : model || color || "";
+    } else if (isTV) {
+      const size = v.attributes.size != null ? String(v.attributes.size).trim() : "";
+      const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
+      groupKey = size && color ? `${size} / ${color}` : size || color || "";
     } else {
-      groupKey = isTV
-        ? (v.attributes.size != null ? String(v.attributes.size).trim() : "")
-        : (v.attributes.color != null ? String(v.attributes.color).trim() : "");
+      groupKey = v.attributes.color != null ? String(v.attributes.color).trim() : "";
     }
     if (!groupKey) continue;
     if (!map[groupKey]) map[groupKey] = { items: [], defaultId: null };
@@ -929,7 +937,7 @@ const ProductVariantsEditor = forwardRef<
       {colors.length > 0 && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
           <p className="text-xs font-semibold text-gray-700">
-            {isCamera ? "Images by body / lens" : isTV ? "Images by size" : "Images by color"}
+            {isCamera ? "Images by body / lens" : isTV ? "Images by size & color" : "Images by color"}
           </p>
           {colors.map((color) => {
             const ci = colorImages[color] ?? { items: [], defaultId: null };
