@@ -1528,7 +1528,6 @@ const TV_SPEC_GROUPS: PhoneSpecGroup[] = [
     label: "Display",
     icon: "📺",
     fields: [
-      { key: "Screen Size", placeholder: "e.g. 43 inches / 108 cm", unit: "inch" },
       { key: "Display Technology", placeholder: "e.g. LED, QLED, OLED" },
       { key: "Resolution", placeholder: "e.g. 3840 × 2160 (4K Ultra HD)" },
       { key: "Aspect Ratio", placeholder: "e.g. 16:9" },
@@ -2159,7 +2158,6 @@ const LENS_PER_MODEL_GROUPS: LensPerModelGroup[] = [
       { key: "Lens Mount",               placeholder: "e.g. Sony E Mount" },
       { key: "Compatible Camera",        placeholder: "e.g. Sony E-mount Mirrorless Cameras" },
       { key: "Compatible Sensor Format", placeholder: "e.g. Full Frame (APS-C Compatible)" },
-      { key: "Color",                    placeholder: "e.g. White, Black" },
     ],
   },
   {
@@ -2447,7 +2445,6 @@ const SPEAKER_PER_MODEL_GROUPS: SpeakerPerModelGroup[] = [
     icon: "📋",
     fields: [
       { key: "Speaker Type", placeholder: "e.g. Portable Bluetooth Speaker" },
-      { key: "Color",        placeholder: "e.g. Black, White, Blue" },
     ],
   },
   {

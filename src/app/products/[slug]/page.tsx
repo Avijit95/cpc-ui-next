@@ -615,6 +615,10 @@ useEffect(() => {
   const isCameraProduct = !isLensProduct && product.breadcrumbs.some(
     (b) => b.slug?.toLowerCase().includes("camera") || b.name?.toLowerCase().includes("camera")
   );
+  // For lens/speaker: the attribute key used for model (may be "model" for new variants or "ram" for old)
+  const lensModelKey = (isLensProduct || isSpeakerProduct)
+    ? variantGroups.find((g) => g.key === "model" || g.key === "ram")?.key
+    : undefined;
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
   const galleryImages = (() => {
     if (selectedVariant && selectedVariant.images.length > 0) {
@@ -648,19 +652,25 @@ useEffect(() => {
   const allAttrKeys = [...new Set(product.variants.flatMap((v) => Object.keys(v.attributes)))];
   const colorAttrKeys = allAttrKeys.filter((k) => /^colou?r$/i.test(k));
   // All unique color values from every color-like key
+  // For lens/speaker: filter color options to only show colors for the selected model
+  const colorSourceVariants =
+    (isLensProduct || isSpeakerProduct) && lensModelKey && selectedAttrs[lensModelKey]
+      ? product.variants.filter((v) => attrValue(v, lensModelKey) === selectedAttrs[lensModelKey])
+      : product.variants;
   const colorValues = [
     ...new Set(
-      product.variants.flatMap((v) =>
+      colorSourceVariants.flatMap((v) =>
         colorAttrKeys.map((k) => String(v.attributes[k] ?? "")).filter(Boolean)
       )
     ),
   ];
   // The currently selected color, looked up across all color keys
   const selectedColor = colorAttrKeys.map((k) => selectedAttrs[k]).find(Boolean) ?? null;
+  // Informational TV variant attributes — stored per-variant but not selectable UI groups
+  const TV_HIDDEN_ATTR_KEYS = new Set(["model", "launchYear", "dimensions", "dimWithStand", "dimWithoutStand", "weight"]);
   const nonColorGroups = variantGroups.filter((g) => {
     if (/^colou?r$/i.test(g.key)) return false;
-    // For TV: hide model (shown in highlights), keep size and launchYear
-    if (isTvProduct && g.key === "model") return false;
+    if (isTvProduct && TV_HIDDEN_ATTR_KEYS.has(g.key)) return false;
     return true;
   });
   // Filter to variants whose color (under any color key) matches the selection
@@ -905,12 +915,11 @@ useEffect(() => {
 {/* Flipkart-style variant selectors */}
               {hasVariants && (
                 <div className="mb-5">
-                  {/* Color — image thumbnails with name label */}
-                  {colorValues.length > 0 && (
+                  {/* Color — image thumbnails (phones/cameras first) */}
+                  {colorValues.length > 0 && !(isLensProduct || isSpeakerProduct) && (
                     <div className="mb-4">
                       <div className="flex flex-wrap gap-4">
                         {colorValues.map((color) => {
-                          // Find a variant with this color under any color key
                           const colorVariant = product.variants.find((v) =>
                             colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color)
                           );
@@ -924,50 +933,66 @@ useEffect(() => {
                               key={color}
                               type="button"
                               onClick={() => {
-                                // Find the variant for this color and snap to it
                                 const target =
                                   product.variants.find((v) =>
-                                    colorAttrKeys.some(
-                                      (k) => String(v.attributes[k] ?? "") === color
-                                    ) && v.stock > 0
+                                    colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color) && v.stock > 0
                                   ) ??
                                   product.variants.find((v) =>
-                                    colorAttrKeys.some(
-                                      (k) => String(v.attributes[k] ?? "") === color
-                                    )
+                                    colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color)
                                   );
-                                if (target) {
-                                  setSelectedAttrs(attrsOf(target));
-                                  setActiveImageIdx(0);
-                                }
+                                if (target) { setSelectedAttrs(attrsOf(target)); setActiveImageIdx(0); }
                               }}
                               className="flex flex-col items-center gap-1 group focus:outline-none"
                             >
-                              <span
-                                className={`rounded-lg border-2 transition-colors overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50 ${
-                                  active
-                                    ? "border-[#129cd3] shadow-sm"
-                                    : "border-gray-300 group-hover:border-gray-500"
-                                }`}
-                                style={{ width: 64, height: 64 }}
-                              >
-                                {imgUrl ? (
-                                  <img src={imgUrl} alt={color} className="w-full h-full object-cover" />
-                                ) : (
-                                  <span className="text-xs text-gray-400 p-1 text-center leading-tight">
-                                    {color}
-                                  </span>
-                                )}
+                              <span className={`rounded-lg border-2 transition-colors overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50 ${active ? "border-[#129cd3] shadow-sm" : "border-gray-300 group-hover:border-gray-500"}`} style={{ width: 64, height: 64 }}>
+                                {imgUrl ? <img src={imgUrl} alt={color} className="w-full h-full object-cover" /> : <span className="text-xs text-gray-400 p-1 text-center leading-tight">{color}</span>}
                               </span>
-                              <span
-                                className={`text-xs text-center leading-tight max-w-[72px] truncate transition-colors ${
-                                  active
-                                    ? "font-semibold text-[#129cd3]"
-                                    : "font-medium text-gray-600 group-hover:text-gray-800"
-                                }`}
-                              >
-                                {color}
+                              <span className={`text-xs text-center leading-tight max-w-[72px] truncate transition-colors ${active ? "font-semibold text-[#129cd3]" : "font-medium text-gray-600 group-hover:text-gray-800"}`}>{color}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lens / Speaker: color thumbnails FIRST, model-aware */}
+                  {colorValues.length > 0 && (isLensProduct || isSpeakerProduct) && (
+                    <div className="mb-4">
+                      <div className="flex flex-wrap gap-4">
+                        {colorValues.map((color) => {
+                          const currentModelVal = lensModelKey ? selectedAttrs[lensModelKey] : undefined;
+                          const colorVariant =
+                            (currentModelVal && lensModelKey
+                              ? product.variants.find((v) =>
+                                  attrValue(v, lensModelKey) === currentModelVal &&
+                                  colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color)
+                                )
+                              : undefined) ??
+                            product.variants.find((v) =>
+                              colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color)
+                            );
+                          const imgUrl = colorVariant?.images?.[0]?.url ?? productImages[0]?.url ?? null;
+                          const active = selectedColor === color;
+                          return (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => {
+                                const currentModel = lensModelKey ? selectedAttrs[lensModelKey] : undefined;
+                                const pool = currentModel && lensModelKey
+                                  ? product.variants.filter((v) => attrValue(v, lensModelKey) === currentModel)
+                                  : product.variants;
+                                const target =
+                                  pool.find((v) => colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color) && v.stock > 0) ??
+                                  pool.find((v) => colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color));
+                                if (target) { setSelectedAttrs(attrsOf(target)); setActiveImageIdx(0); }
+                              }}
+                              className="flex flex-col items-center gap-1 group focus:outline-none"
+                            >
+                              <span className={`rounded-lg border-2 transition-colors overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50 ${active ? "border-[#129cd3] shadow-sm" : "border-gray-300 group-hover:border-gray-500"}`} style={{ width: 64, height: 64 }}>
+                                {imgUrl ? <img src={imgUrl} alt={color} className="w-full h-full object-cover" /> : <span className="text-xs text-gray-400 p-1 text-center leading-tight">{color}</span>}
                               </span>
+                              <span className={`text-xs text-center leading-tight max-w-[72px] truncate transition-colors ${active ? "font-semibold text-[#129cd3]" : "font-medium text-gray-600 group-hover:text-gray-800"}`}>{color}</span>
                             </button>
                           );
                         })}
@@ -979,7 +1004,7 @@ useEffect(() => {
                   {nonColorGroups.length > 0 && (
                     <div className="mb-4 space-y-4">
                       {isTvProduct ? (
-                        /* TV: per-attribute pill rows (size, model, etc.) */
+                        /* TV: per-attribute pill rows */
                         nonColorGroups.map((g) => {
                           const selectedVal = selectedAttrs[g.key] ?? "";
                           return (
@@ -994,7 +1019,6 @@ useEffect(() => {
                                   return !isNaN(na) && !isNaN(nb) ? na - nb : a.localeCompare(b);
                                 }).map((val) => {
                                   const isActive = selectedVal === val;
-                                  // Find the variant that would be selected
                                   const pillVariant =
                                     findVariant(product.variants, { ...selectedAttrs, [g.key]: val }, variantGroups) ??
                                     colorFilteredVariants.find((v) => attrValue(v, g.key) === val);
@@ -1031,8 +1055,72 @@ useEffect(() => {
                             </div>
                           );
                         })
+                      ) : (isLensProduct || isSpeakerProduct) ? (
+                        /* Lens / Speaker: model variant cards with pricing */
+                        <>
+                          {selectedVariantLabel && (
+                            <p className="text-sm font-bold text-gray-800 mb-3">
+                              Variant: <span className="font-semibold">{selectedVariantLabel}</span>
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-3">
+                            {nonColorGroups.flatMap((g) =>
+                              [...g.values].map((val) => {
+                                const pool = selectedColor
+                                  ? product.variants.filter((v) =>
+                                      colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === selectedColor)
+                                    )
+                                  : product.variants;
+                                const cardVariant =
+                                  pool.find((v) => attrValue(v, g.key) === val && v.stock > 0) ??
+                                  pool.find((v) => attrValue(v, g.key) === val) ??
+                                  product.variants.find((v) => attrValue(v, g.key) === val);
+                                if (!cardVariant) return null;
+                                const isActive = selectedAttrs[g.key] === val;
+                                const vBase = cardVariant.deal ? cardVariant.deal.basePrice : cardVariant.pricing.basePrice;
+                                const vFinal = cardVariant.deal ? cardVariant.deal.dealPrice : cardVariant.pricing.finalPrice;
+                                const vDiscount = vBase > vFinal ? Math.round(((vBase - vFinal) / vBase) * 100) : 0;
+                                const vStockKey = `v:${cardVariant.id}`;
+                                const vStock = stocks[vStockKey] ?? cardVariant.stock ?? 0;
+                                const vOutOfStock = vStock === 0;
+                                return (
+                                  <div key={val} className="flex flex-col items-center gap-0.5 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      disabled={vOutOfStock}
+                                      onClick={() => selectVariantValue(g.key, val)}
+                                      className={`flex flex-col items-start text-left px-3 py-2 rounded-lg border-2 transition-colors min-w-[110px] ${
+                                        isActive
+                                          ? "border-[#129cd3] bg-blue-50"
+                                          : vOutOfStock
+                                          ? "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                                          : "border-gray-200 bg-white hover:border-gray-400"
+                                      }`}
+                                    >
+                                      <span className={`text-sm font-semibold mb-0.5 ${vOutOfStock ? "text-gray-400 line-through" : "text-gray-800"}`}>{val}</span>
+                                      {vDiscount > 0 && (
+                                        <span className="text-xs text-green-600 font-medium">
+                                          ↓{vDiscount}%{" "}
+                                          <span className="line-through text-gray-400">{formatPrice(vBase)}</span>
+                                        </span>
+                                      )}
+                                      <span className="text-sm font-bold text-gray-900">{formatPrice(vFinal)}</span>
+                                    </button>
+                                    {vOutOfStock ? (
+                                      <span className="text-[10px] font-semibold text-red-400">Out of stock</span>
+                                    ) : vStock <= 9 ? (
+                                      <span className={`text-[10px] font-semibold ${vStock <= 4 ? "text-red-500" : "text-orange-500"}`}>
+                                        {vStock <= 4 ? `${vStock} left` : "Few left"}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </>
                       ) : (
-                        /* Non-TV: combined variant cards with pricing */
+                        /* Phone / Camera: combined variant cards with pricing */
                         <>
                           {selectedVariantLabel && (
                             <p className="text-sm font-bold text-gray-800 mb-3">
@@ -1433,7 +1521,9 @@ useEffect(() => {
               </button>
               {openSections["Description"] && (
                 <div className="px-5 py-5 prose max-w-none text-gray-600 text-sm leading-relaxed whitespace-pre-line border-t border-gray-100">
-                  {product.description || "No description available."}
+                  {(isLensProduct || isSpeakerProduct)
+                    ? (String(product.specs[multiModelKey("Description", getActiveModelIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
+                    : (product.description || "No description available.")}
                 </div>
               )}
             </div>
@@ -1452,8 +1542,13 @@ useEffect(() => {
                 <div className="px-5 py-5 border-t border-gray-100">
                   <SpecsTable
                     specs={
-                      isTvProduct && selectedVariant?.attributes?.dimensions
-                        ? { ...product.specs, "Product Dimensions": selectedVariant.attributes.dimensions }
+                      isTvProduct && selectedVariant
+                        ? {
+                            ...product.specs,
+                            ...(selectedVariant.attributes.dimWithoutStand ? { "W×H×D (without stand)": selectedVariant.attributes.dimWithoutStand } : {}),
+                            ...(selectedVariant.attributes.dimWithStand ? { "W×H×D (with stand)": selectedVariant.attributes.dimWithStand } : {}),
+                            ...(selectedVariant.attributes.weight ? { "Weight": selectedVariant.attributes.weight } : {}),
+                          }
                         : product.specs
                     }
                     isLens={isLensProduct}
@@ -1769,7 +1864,7 @@ useEffect(() => {
 
 // Legacy keys: RAM/ROM/Color now live on variants, not specs. Hide them so old
 // products never render raw arrays like ["8GB","12GB"] in the spec table.
-const HIDDEN_SPEC_KEYS = new Set(["ramOptions", "storageOptions", "colorOptions"]);
+const HIDDEN_SPEC_KEYS = new Set(["ramOptions", "storageOptions", "colorOptions", "Description", "dimensions"]);
 
 // ── Multi-model spec helpers (shared by Lens and Speaker) ────────────────────
 const MAX_MULTIMODEL_DISPLAY = 5;
@@ -1783,7 +1878,10 @@ function getActiveModelIndex(
   selectedVariant?: Variant,
 ): number {
   if (!selectedVariant) return 0;
-  const modelNo = selectedVariant.attributes?.ram != null
+  // Try "model" first (new schema), fall back to "ram" (old lens variants stored model under ram)
+  const modelNo = selectedVariant.attributes?.model != null
+    ? String(selectedVariant.attributes.model).trim().toLowerCase()
+    : selectedVariant.attributes?.ram != null
     ? String(selectedVariant.attributes.ram).trim().toLowerCase()
     : "";
   if (!modelNo) return 0;
@@ -1796,7 +1894,7 @@ function getActiveModelIndex(
 
 // ── Lens per-model keys ───────────────────────────────────────────────────────
 const LENS_PER_MODEL_SPEC_BASES = [
-  "Model",
+  "Model", "Description",
   "Lens Name", "Lens Type", "Lens Mount", "Compatible Camera", "Compatible Sensor Format", "Color",
   "Focal Length", "Maximum Aperture", "Minimum Aperture", "Minimum Focus Distance", "Maximum Magnification",
   "Angle of View (Full Frame)", "Optical Construction", "Special Elements", "Aperture Blades",
@@ -1806,7 +1904,7 @@ const LENS_PER_MODEL_SPEC_BASES = [
 
 // ── Speaker per-model keys ────────────────────────────────────────────────────
 const SPEAKER_PER_MODEL_SPEC_BASES = [
-  "Model", "Speaker Type", "Color",
+  "Model", "Description", "Speaker Type", "Color",
   "Audio Output Power (RMS)", "Frequency Response", "Driver Size",
   "Number of Drivers", "Speaker Configuration", "Impedance", "Sensitivity", "Signal-to-Noise Ratio",
   "Bluetooth", "Bluetooth Version", "Wi-Fi", "AUX Input", "USB Port",
@@ -1884,13 +1982,15 @@ function SpecsTable({
   isSpeaker?: boolean;
   modelIdx?: number;
 }) {
-  let allEntries = Object.entries(specs).filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
+  let allEntries = Object.entries(specs);
 
   if (isLens) {
     allEntries = filterMultiModelEntries(allEntries, LENS_PER_MODEL_SPEC_BASES, modelIdx);
   } else if (isSpeaker) {
     allEntries = filterMultiModelEntries(allEntries, SPEAKER_PER_MODEL_SPEC_BASES, modelIdx);
   }
+
+  allEntries = allEntries.filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
 
   const entries = allEntries;
   if (entries.length === 0) {
@@ -2031,10 +2131,17 @@ function buildTvHighlights(specs: Record<string, unknown>, selectedVariant?: Var
   const connectivity = s("Connectivity Technology");
   if (connectivity) rows.push({ icon: <Wifi size={18} />, label: "Connectivity", text: connectivity, accent: "bg-purple-100 text-purple-600" });
 
-  const dimensions = selectedVariant?.attributes?.dimensions
+  const dimWithout = selectedVariant?.attributes?.dimWithoutStand
+    ? String(selectedVariant.attributes.dimWithoutStand)
+    : selectedVariant?.attributes?.dimensions
     ? String(selectedVariant.attributes.dimensions)
     : s("Product Dimensions");
-  if (dimensions) rows.push({ icon: <Ruler size={18} />, label: "Dimensions", text: dimensions, accent: "bg-gray-100 text-gray-500" });
+  if (dimWithout) rows.push({ icon: <Ruler size={18} />, label: "Dimensions (without stand)", text: dimWithout, accent: "bg-gray-100 text-gray-500" });
+
+  const tvWeight = selectedVariant?.attributes?.weight
+    ? String(selectedVariant.attributes.weight)
+    : s("Weight");
+  if (tvWeight) rows.push({ icon: <HardDrive size={18} />, label: "Weight", text: tvWeight, accent: "bg-gray-100 text-gray-500" });
 
   const power = s("Power Consumption");
   if (power) rows.push({ icon: <Zap size={18} />, label: "Power Consumption", text: power, accent: "bg-orange-100 text-orange-500" });

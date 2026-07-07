@@ -42,7 +42,10 @@ type VariantRow = {
   color: string;
   launchYear: string;   // TV + Camera
   lensIncluded: string; // Camera only: "Yes" | "No"
-  dimensions: string;   // TV only: e.g. "97.2 × 56.2 × 7.4 cm"
+  dimensions: string;       // TV only: legacy single-dimension field
+  weight: string;           // TV only: e.g. "4.5 kg"
+  dimWithStand: string;     // TV only: W×H×D with stand, e.g. "97.2 × 62.5 × 21.3 cm"
+  dimWithoutStand: string;  // TV only: W×H×D without stand, e.g. "97.2 × 56.2 × 7.4 cm"
   stock: string;
   base: string;      // MRP (struck price); blank = no separate MRP
   price: string;     // selling price (GST-inclusive); blank = use product base price
@@ -138,7 +141,7 @@ function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens =
   return isTV ? r.ram.trim() : r.color.trim();
 }
 
-function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean): Record<string, unknown> {
+function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false): Record<string, unknown> {
   const a: Record<string, unknown> = {};
   if (isCamera) {
     if (r.ram.trim()) a.model = r.ram.trim();
@@ -150,9 +153,14 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     if (r.storage.trim()) a.model = r.storage.trim();
     if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
     if (r.dimensions.trim()) a.dimensions = r.dimensions.trim();
+    if (r.weight.trim()) a.weight = r.weight.trim();
+    if (r.dimWithStand.trim()) a.dimWithStand = r.dimWithStand.trim();
+    if (r.dimWithoutStand.trim()) a.dimWithoutStand = r.dimWithoutStand.trim();
   } else if (isSpeaker) {
     if (r.ram.trim()) a.model = r.ram.trim();
     if (r.storage.trim()) a.watt = r.storage.trim();
+  } else if (isLens) {
+    if (r.ram.trim()) a.model = r.ram.trim();
   } else {
     if (r.ram.trim()) a.ram = r.ram.trim();
     if (r.storage.trim()) a.storage = r.storage.trim();
@@ -172,19 +180,21 @@ function calcGstFields(selling: string, gst: string): { gstAmount: string; netBa
   return { gstAmount: gstAmount.toFixed(2), netBase: netBase.toFixed(2) };
 }
 
-function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, isSpeaker: boolean): VariantRow[] {
+function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false): VariantRow[] {
   return variants.map((v) => {
     const base = v.basePrice != null ? String(v.basePrice) : "";
     const price = v.priceOverride != null ? String(v.priceOverride) : "";
     const gst = "18";
     const { gstAmount, netBase } = calcGstFields(price, gst);
-    // Camera → model/lens; TV → size/model; Speaker → model/watt; default → ram/storage.
+    // Camera → model/lens; TV → size/model; Speaker → model/watt; Lens → model (fallback ram); default → ram/storage.
     const ramVal = isCamera
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : isTV
       ? (v.attributes.size != null ? String(v.attributes.size) : "")
       : isSpeaker
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
+      : isLens
+      ? (v.attributes.model != null ? String(v.attributes.model) : v.attributes.ram != null ? String(v.attributes.ram) : "")
       : (v.attributes.ram != null ? String(v.attributes.ram) : "");
     const storageVal = isCamera
       ? (v.attributes.lens != null ? String(v.attributes.lens) : "")
@@ -205,6 +215,9 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
       launchYear: (isTV || isCamera) && v.attributes.launchYear != null ? String(v.attributes.launchYear) : "",
       lensIncluded,
       dimensions: isTV && v.attributes.dimensions != null ? String(v.attributes.dimensions) : "",
+      weight: isTV && v.attributes.weight != null ? String(v.attributes.weight) : "",
+      dimWithStand: isTV && v.attributes.dimWithStand != null ? String(v.attributes.dimWithStand) : "",
+      dimWithoutStand: isTV && v.attributes.dimWithoutStand != null ? String(v.attributes.dimWithoutStand) : "",
       stock: String(v.stock ?? 0),
       base,
       price,
@@ -266,7 +279,7 @@ const ProductVariantsEditor = forwardRef<
     if (draftRows && draftRows.length > 0) {
       return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined }));
     }
-    return initRows(initialVariants, isCamera, isTV, isSpeaker);
+    return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens);
   });
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
     () => initColorImages(initialVariants, isTV, isCamera, isLens),
@@ -310,6 +323,9 @@ const ProductVariantsEditor = forwardRef<
         launchYear: "",
         lensIncluded: isCamera ? "No" : "",
         dimensions: "",
+        weight: "",
+        dimWithStand: "",
+        dimWithoutStand: "",
         stock: "0",
         base: "",
         price: "",
@@ -491,7 +507,7 @@ const ProductVariantsEditor = forwardRef<
         for (const r of rows) {
           const body = {
             sku: makeSku(productName, r, isCamera),
-            attributes: buildAttributes(r, isCamera, isTV, isSpeaker),
+            attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens),
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
@@ -565,13 +581,164 @@ const ProductVariantsEditor = forwardRef<
         {rows.length === 0 && (
           <p className="text-[12px] text-gray-400">No variants yet. Add one below.</p>
         )}
-        {rows.map((r) => (
+        {rows.map((r) => isTV ? (
+          /* ── TV: multi-row card ───────────────────────────────── */
+          <div key={r.uid} className="border border-gray-200 rounded-xl p-3 bg-white space-y-3">
+            {/* Row 1: Size + Model No. + delete */}
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
+              <Field label="Size (inch)">
+                <input
+                  value={r.ram}
+                  onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                  list="variant-tv-size-presets"
+                  placeholder='e.g. 43'
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
+              </Field>
+              <Field label="Model No.">
+                <input
+                  value={r.storage}
+                  onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
+                  placeholder="e.g. UA43CUE60BKLXL"
+                  disabled={disabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                />
+              </Field>
+              <button
+                type="button"
+                onClick={() => removeRow(r.uid)}
+                disabled={disabled}
+                className="h-9 w-9 flex items-center justify-center text-gray-400 hover:text-red-500 disabled:opacity-40"
+                aria-label="Remove variant"
+                title="Remove variant"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+            {/* Row 2: Dimensions + Weight + Launch Year (shown once size or model is entered) */}
+            {(r.ram.trim() || r.storage.trim()) && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Field label="W×H×D (without stand)">
+                  <input
+                    value={r.dimWithoutStand}
+                    onChange={(e) => updateRow(r.uid, { dimWithoutStand: e.target.value })}
+                    placeholder='e.g. 972.4 × 562.8 × 74.2 mm'
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="W×H×D (with stand)">
+                  <input
+                    value={r.dimWithStand}
+                    onChange={(e) => updateRow(r.uid, { dimWithStand: e.target.value })}
+                    placeholder='e.g. 972.4 × 625.0 × 213.3 mm'
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="Weight">
+                  <input
+                    value={r.weight}
+                    onChange={(e) => updateRow(r.uid, { weight: e.target.value })}
+                    placeholder='e.g. 4.5 kg'
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="Launch Year">
+                  <select
+                    value={r.launchYear}
+                    onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                  >
+                    <option value="">— Year —</option>
+                    {Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i).map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            )}
+            {/* Row 3: Color + Stock + MRP + Selling + GST% + GST Amt + Base */}
+            {(r.ram.trim() || r.storage.trim()) && (
+              <div className="grid grid-cols-2 sm:grid-cols-7 gap-3">
+                <Field label="Color">
+                  <input
+                    value={r.color}
+                    onChange={(e) => updateRow(r.uid, { color: e.target.value })}
+                    list="variant-color-presets"
+                    placeholder="e.g. Black"
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="Stock">
+                  <input
+                    type="number" min={0} step={1}
+                    value={r.stock}
+                    onChange={(e) => updateRow(r.uid, { stock: e.target.value })}
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="MRP (₹)">
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={r.base}
+                    onChange={(e) => updateRow(r.uid, { base: e.target.value })}
+                    placeholder="0"
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="Selling (₹)">
+                  <input
+                    type="number" min={0} step="0.01"
+                    value={r.price}
+                    onChange={(e) => {
+                      const price = e.target.value;
+                      updateRow(r.uid, { price, ...calcGstFields(price, r.gst) });
+                    }}
+                    placeholder="= MRP"
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="GST (%)">
+                  <input
+                    type="number" min={0} max={100} step="0.1"
+                    value={r.gst}
+                    onChange={(e) => {
+                      const gst = e.target.value;
+                      updateRow(r.uid, { gst, ...calcGstFields(r.price, gst) });
+                    }}
+                    disabled={disabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                <Field label="GST Amt (₹)">
+                  <input
+                    type="number" value={r.gstAmount} readOnly tabIndex={-1} placeholder="auto"
+                    className="w-full border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm text-gray-500 cursor-default outline-none"
+                  />
+                </Field>
+                <Field label="Base (₹)">
+                  <input
+                    type="number" value={r.netBase} readOnly tabIndex={-1} placeholder="auto"
+                    className="w-full border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm text-gray-500 cursor-default outline-none"
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ── non-TV: existing compact grid ───────────────────── */
           <div
             key={r.uid}
             className={`grid grid-cols-2 gap-2 items-end border border-gray-100 rounded-lg p-2.5 ${
-              isTV
-                ? "sm:grid-cols-[repeat(11,1fr)_auto]"
-                : isLens
+              isLens
                 ? "sm:grid-cols-[repeat(8,1fr)_auto]"
                 : isCamera
                 ? r.lensIncluded === "Yes" ? "sm:grid-cols-[repeat(11,1fr)_auto]" : "sm:grid-cols-[repeat(10,1fr)_auto]"
@@ -644,28 +811,6 @@ const ProductVariantsEditor = forwardRef<
                   </>
                 )}
               </>
-            ) : isTV ? (
-              <>
-                <Field label="Size (inch)">
-                  <input
-                    value={r.ram}
-                    onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
-                    list="variant-tv-size-presets"
-                    placeholder='e.g. 43"'
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-                  />
-                </Field>
-                <Field label="Dimensions">
-                  <input
-                    value={r.dimensions}
-                    onChange={(e) => updateRow(r.uid, { dimensions: e.target.value })}
-                    placeholder='e.g. 97.2×56.2×7.4 cm'
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-                  />
-                </Field>
-              </>
             ) : !hideRam ? (
               <Field label={isSpeaker ? "Model No." : "RAM"}>
                 <input
@@ -678,33 +823,7 @@ const ProductVariantsEditor = forwardRef<
                 />
               </Field>
             ) : null}
-            {isTV ? (
-              <Field label="Model No.">
-                <input
-                  value={r.storage}
-                  onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
-                  placeholder="e.g. UA43CUE60BKLXL"
-                  disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
-                />
-              </Field>
-            ) : null}
-            {isTV && (
-              <Field label="Launch Year">
-                <select
-                  value={r.launchYear}
-                  onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
-                  disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
-                >
-                  <option value="">— Year —</option>
-                  {Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i).map((y) => (
-                    <option key={y} value={String(y)}>{y}</option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {!isTV && !isCamera && !isLens && (
+            {!isCamera && !isLens && (
               <Field label={isSpeaker ? "Watt" : "ROM"}>
                 <input
                   value={r.storage}
@@ -730,9 +849,7 @@ const ProductVariantsEditor = forwardRef<
             )}
             <Field label="Stock">
               <input
-                type="number"
-                min={0}
-                step={1}
+                type="number" min={0} step={1}
                 value={r.stock}
                 onChange={(e) => updateRow(r.uid, { stock: e.target.value })}
                 disabled={disabled}
@@ -741,9 +858,7 @@ const ProductVariantsEditor = forwardRef<
             </Field>
             <Field label="MRP (₹)">
               <input
-                type="number"
-                min={0}
-                step="0.01"
+                type="number" min={0} step="0.01"
                 value={r.base}
                 onChange={(e) => updateRow(r.uid, { base: e.target.value })}
                 placeholder="0"
@@ -753,9 +868,7 @@ const ProductVariantsEditor = forwardRef<
             </Field>
             <Field label="Selling (₹)">
               <input
-                type="number"
-                min={0}
-                step="0.01"
+                type="number" min={0} step="0.01"
                 value={r.price}
                 onChange={(e) => {
                   const price = e.target.value;
@@ -768,10 +881,7 @@ const ProductVariantsEditor = forwardRef<
             </Field>
             <Field label="GST (%)">
               <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.1"
+                type="number" min={0} max={100} step="0.1"
                 value={r.gst}
                 onChange={(e) => {
                   const gst = e.target.value;
@@ -783,21 +893,13 @@ const ProductVariantsEditor = forwardRef<
             </Field>
             <Field label="GST Amt (₹)">
               <input
-                type="number"
-                value={r.gstAmount}
-                readOnly
-                tabIndex={-1}
-                placeholder="auto"
+                type="number" value={r.gstAmount} readOnly tabIndex={-1} placeholder="auto"
                 className="w-full border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm text-gray-500 cursor-default outline-none"
               />
             </Field>
             <Field label="Base (₹)">
               <input
-                type="number"
-                value={r.netBase}
-                readOnly
-                tabIndex={-1}
-                placeholder="auto"
+                type="number" value={r.netBase} readOnly tabIndex={-1} placeholder="auto"
                 className="w-full border border-gray-100 bg-gray-50 rounded-lg px-2.5 py-2 text-sm text-gray-500 cursor-default outline-none"
               />
             </Field>

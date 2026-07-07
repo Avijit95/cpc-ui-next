@@ -193,7 +193,7 @@ export default function ProductCard({
               }`}
             />
           ) : (
-            <div className="w-full h-44 max-[499px]:h-32 bg-gray-100 col-start-1 row-start-1 " />
+            <div className="w-full h-44 max-[499px]:h-32 bg-gray-100 animate-pulse col-start-1 row-start-1" />
           )}
           {badge && !isOutOfStock && (
             <span
