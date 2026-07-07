@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -56,13 +55,12 @@ export default function CategorySlider({ items }: { items: Category[] }) {
               href={`/products?category=${encodeURIComponent(cat.slug.toLowerCase())}`}
               className="group flex-shrink-0 w-[calc(50%-8px)] sm:w-[calc(33.333%-11px)] lg:w-[calc(16.667%-14px)] flex flex-col items-center gap-2 hover:opacity-90 transition-opacity"
             >
-              <div className="relative w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded max-[1023px]:max-h-[260px] max-[639px]:max-h-[230px] bg-white">
-                <Image
+              <div className="w-full aspect-square overflow-hidden border border-gray-100 group-hover:border-[#8dd4ee] transition-colors rounded max-[1023px]:max-h-[260px] max-[639px]:max-h-[230px] bg-white flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
                   src={cat.imageUrl}
                   alt={cat.name}
-                  fill
-                  sizes="(min-width: 1024px) 16vw, (min-width: 640px) 33vw, 50vw"
-                  className="object-contain group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                 />
               </div>
               <p className="text-xs font-semibold text-gray-700 group-hover:text-[#129cd3] transition-colors text-center">

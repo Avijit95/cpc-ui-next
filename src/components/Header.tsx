@@ -40,7 +40,7 @@ const DEALS_LINK: NavLink = {
   hasDropdown: false,
   badge: "hot",
 };
-const CATEGORY_SLOTS = 5;
+const CATEGORY_SLOTS = 6;
 
 function NavBar({ navLinks }: { navLinks: NavLink[] }) {
   const pathname = usePathname();
@@ -146,18 +146,22 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
             href: `/products?category=${encodeURIComponent(c.slug.toLowerCase())}`,
             hasDropdown: c.children.length > 0,
           }));
-        const cameraLensLink: NavLink = {
-          name: "CAMERA LENS",
-          href: "/products?category=camera-lens",
-          hasDropdown: false,
-        };
-        const cameraIdx = categoryLinks.findIndex((l) => l.href.includes("category=camera"));
-        const insertAt = cameraIdx >= 0 ? cameraIdx + 1 : categoryLinks.length;
-        const withLens = [
-          ...categoryLinks.slice(0, insertAt),
-          cameraLensLink,
-          ...categoryLinks.slice(insertAt),
-        ];
+        const alreadyHasLens = categoryLinks.some((l) => l.href.includes("camera-lens"));
+        let withLens = categoryLinks;
+        if (!alreadyHasLens) {
+          const cameraLensLink: NavLink = {
+            name: "CAMERA LENS",
+            href: "/products?category=camera-lens",
+            hasDropdown: false,
+          };
+          const cameraIdx = categoryLinks.findIndex((l) => l.href.includes("category=camera"));
+          const insertAt = cameraIdx >= 0 ? cameraIdx + 1 : categoryLinks.length;
+          withLens = [
+            ...categoryLinks.slice(0, insertAt),
+            cameraLensLink,
+            ...categoryLinks.slice(insertAt),
+          ];
+        }
         setNavLinks([HOME_LINK, ...withLens, DEALS_LINK]);
       })
       .catch(() => {

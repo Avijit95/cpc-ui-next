@@ -12,7 +12,7 @@ import type {
   UpdateCategoryBody,
 } from "@/lib/api";
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 type Mode =
   | { kind: "create" }
@@ -108,18 +108,14 @@ export default function CategoryForm({ mode }: { mode: Mode }) {
       return;
     }
     setUploadError(null);
-    // Show local preview immediately
+    // Show local preview immediately while uploading
     const local = URL.createObjectURL(file);
     setPreviewUrl(local);
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/admin/upload-category-image", { method: "POST", body: fd });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json();
-      onChange("imageObjectKey", url);
-      setPreviewUrl(url);
+      const result = await adminApi.uploadBannerImage(file);
+      onChange("imageObjectKey", result.objectKey);
+      setPreviewUrl(result.publicUrl ?? imageUrlForKey(result.objectKey));
     } catch {
       setUploadError("Image upload failed. You can still enter the object key manually.");
     } finally {
@@ -305,7 +301,7 @@ export default function CategoryForm({ mode }: { mode: Mode }) {
                   {uploading ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
                   {uploading ? "Uploading…" : previewUrl ? "Change image" : "Choose file"}
                 </button>
-                <span className="text-[11px] text-gray-400">JPEG, PNG, WebP or AVIF</span>
+                <span className="text-[11px] text-gray-400">JPEG, PNG or WebP</span>
               </div>
               <input
                 ref={fileInputRef}

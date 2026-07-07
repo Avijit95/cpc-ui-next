@@ -9,7 +9,7 @@ import HeroSlider from "./HeroSlider";
 
 const HOME_HERO_SLOT = "home_hero";
 const HOME_SIDE_SLOT = "home_side";
-const SIDEBAR_CATEGORY_LIMIT = 5;
+const SIDEBAR_CATEGORY_LIMIT = 10;
 
 export default async function HeroBanner() {
   const [banners, categories] = await Promise.all([
@@ -25,22 +25,42 @@ export default async function HeroBanner() {
     .filter((b) => b.position === HOME_SIDE_SLOT)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const apiCategories = categories
+  const allMapped = categories
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .slice(0, SIDEBAR_CATEGORY_LIMIT)
     .map((c) => ({
       slug: c.slug.toLowerCase(),
       name: c.name,
-      imageUrl: c.imageUrl ?? imageUrlForKey(c.imageObjectKey ?? ""),
+      imageUrl: imageUrlForKey(c.imageObjectKey ?? "") ?? c.imageUrl,
     }));
-  const cameraIdx = apiCategories.findIndex((c) => c.slug === "camera");
-  const insertAt = cameraIdx >= 0 ? cameraIdx + 1 : apiCategories.length;
-  const sidebarCategories = [
-    ...apiCategories.slice(0, insertAt),
-    { slug: "camera-lens", name: "Camera Lens", imageUrl: "/Sony Alpha ZV-E10.jpeg" },
-    ...apiCategories.slice(insertAt),
-  ];
+
+  // Move Camera Lens to immediately after Camera, then slice.
+  function moveItem<T>(arr: T[], from: number, to: number): T[] {
+    if (from === -1 || from === to) return arr;
+    const r = [...arr];
+    const [item] = r.splice(from, 1);
+    r.splice(from < to ? to - 1 : to, 0, item);
+    return r;
+  }
+  const cameraPos = allMapped.findIndex((c) => c.slug === "camera");
+  const lensPos = allMapped.findIndex((c) => c.name.toLowerCase().includes("lens"));
+  const reordered = (cameraPos !== -1 && lensPos !== -1)
+    ? moveItem(allMapped, lensPos, cameraPos + 1)
+    : allMapped;
+
+  let sidebarCategories = reordered.slice(0, SIDEBAR_CATEGORY_LIMIT);
+
+  // If Camera Lens still not in the slice, inject fallback after Camera.
+  const hasLens = sidebarCategories.some((c) => c.name.toLowerCase().includes("lens"));
+  if (!hasLens) {
+    const camIdx = sidebarCategories.findIndex((c) => c.slug === "camera");
+    const insertAt = camIdx >= 0 ? camIdx + 1 : sidebarCategories.length;
+    sidebarCategories = [
+      ...sidebarCategories.slice(0, insertAt),
+      { slug: "camera-lens", name: "Camera Lens", imageUrl: "/Sony Alpha ZV-E10.jpeg" },
+      ...sidebarCategories.slice(insertAt),
+    ];
+  }
 
   return (
     <section className="bg-gray-100">
@@ -59,11 +79,10 @@ export default async function HeroBanner() {
                 >
                   <span className="w-10 h-10 flex items-center justify-center flex-shrink-0 rounded overflow-hidden bg-gray-50 border border-gray-100">
                     {cat.imageUrl ? (
-                      <Image
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
                         src={cat.imageUrl}
                         alt={cat.name}
-                        width={40}
-                        height={40}
                         className="w-10 h-10 object-contain"
                       />
                     ) : (

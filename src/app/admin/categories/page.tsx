@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import DateRangeFilter, {
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import { adminApi, isApiError } from "@/lib/api";
 import type { AdminCategoryListItem } from "@/lib/api";
+import { imageUrlForKey } from "@/lib/image-url";
 import {
   DateTimeCell,
   UpdatedDateTimeCell,
@@ -431,17 +431,15 @@ export default function AdminCategoriesPage() {
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-lg bg-[#e8f7fc] flex items-center justify-center overflow-hidden flex-shrink-0">
-                              {c.imageUrl ? (
-                                <Image
-                                  src={c.imageUrl}
-                                  alt={c.name}
-                                  width={36}
-                                  height={36}
-                                  className="w-full h-full object-contain"
-                                />
-                              ) : (
-                                <FolderTree size={16} className="text-[#129cd3]" />
-                              )}
+                              {(() => {
+                                const src = c.imageUrl ?? imageUrlForKey(c.imageObjectKey ?? "");
+                                return src ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={src} alt={c.name} className="w-full h-full object-contain" />
+                                ) : (
+                                  <FolderTree size={16} className="text-[#129cd3]" />
+                                );
+                              })()}
                             </div>
                             <p className="font-semibold text-gray-800">
                               {c.name}
