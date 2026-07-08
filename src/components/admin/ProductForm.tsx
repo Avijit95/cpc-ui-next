@@ -1281,8 +1281,9 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               </label>
               <input
                 value={form.hsnCode}
-                onChange={(e) => onChange("hsnCode", e.target.value)}
+                onChange={(e) => onChange("hsnCode", e.target.value.replace(/[^0-9]/g, ""))}
                 placeholder="e.g. 8517"
+                inputMode="numeric"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
               />
               <p className="text-[11px] text-gray-400 mt-1">
@@ -1391,7 +1392,7 @@ const PHONE_SPEC_KEYS = new Set([
 type PhoneSpecGroup = {
   label: string;
   icon: string;
-  fields: { key: string; placeholder: string; unit?: string }[];
+  fields: { key: string; placeholder: string; unit?: string; numeric?: boolean; numericList?: boolean }[];
 };
 
 const PHONE_SPEC_GROUPS: PhoneSpecGroup[] = [
@@ -1399,7 +1400,7 @@ const PHONE_SPEC_GROUPS: PhoneSpecGroup[] = [
     label: "Display",
     icon: "📱",
     fields: [
-      { key: "Display Size", placeholder: "e.g. 6.8 inches", unit: "inches" },
+      { key: "Display Size", placeholder: "e.g. 6.8", unit: "inches", numeric: true },
       { key: "Resolution", placeholder: "e.g. 2400 × 1080 px" },
       { key: "Screen Type", placeholder: "e.g. AMOLED, 120Hz" },
     ],
@@ -1408,18 +1409,18 @@ const PHONE_SPEC_GROUPS: PhoneSpecGroup[] = [
     label: "Memory",
     icon: "💾",
     fields: [
-      { key: "RAM", placeholder: "e.g. 8 GB", unit: "GB" },
-      { key: "ROM", placeholder: "e.g. 128 GB", unit: "GB" },
+      { key: "RAM", placeholder: "e.g. 8", unit: "GB", numeric: true },
+      { key: "ROM", placeholder: "e.g. 128", unit: "GB", numeric: true },
     ],
   },
   {
     label: "Dimensions",
     icon: "📐",
     fields: [
-      { key: "Height", placeholder: "e.g. 163.4 mm", unit: "mm" },
-      { key: "Width", placeholder: "e.g. 77.8 mm", unit: "mm" },
-      { key: "Depth", placeholder: "e.g. 8.2 mm", unit: "mm" },
-      { key: "Weight", placeholder: "e.g. 214 g", unit: "g" },
+      { key: "Height", placeholder: "e.g. 163.4", unit: "mm", numeric: true },
+      { key: "Width", placeholder: "e.g. 77.8", unit: "mm", numeric: true },
+      { key: "Depth", placeholder: "e.g. 8.2", unit: "mm", numeric: true },
+      { key: "Weight", placeholder: "e.g. 214", unit: "g", numeric: true },
     ],
   },
   {
@@ -1433,8 +1434,8 @@ const PHONE_SPEC_GROUPS: PhoneSpecGroup[] = [
     label: "Camera",
     icon: "📷",
     fields: [
-      { key: "Rear Camera", placeholder: "e.g. 50 MP + 8 MP + 2 MP" },
-      { key: "Front Camera", placeholder: "e.g. 32 MP" },
+      { key: "Rear Camera", placeholder: "e.g. 50 + 20 + 8", unit: "MP", numericList: true },
+      { key: "Front Camera", placeholder: "e.g. 32", unit: "MP", numeric: true },
     ],
   },
   {
@@ -1512,9 +1513,15 @@ function PhoneSpecsEditor({
                 <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
                   <input
                     value={get(field.key)}
-                    onChange={(e) => set(field.key, e.target.value)}
+                    onChange={(e) => set(field.key, field.numericList
+                      ? e.target.value.replace(/[^0-9+. ]/g, "")
+                      : e.target.value)}
                     placeholder={field.placeholder}
                     disabled={disabled}
+                    type={field.numeric ? "number" : "text"}
+                    inputMode={field.numeric ? "decimal" : field.numericList ? "decimal" : undefined}
+                    min={field.numeric ? "0" : undefined}
+                    step={field.numeric ? "any" : undefined}
                     className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
                   />
                   {field.unit && (
@@ -1547,7 +1554,7 @@ function tvSizeKey(base: string, idx: number): string {
   return idx === 0 ? base : `${base} ${idx + 1}`;
 }
 
-type TvSpecField = { key: string; placeholder?: string; unit?: string; wide?: boolean };
+type TvSpecField = { key: string; placeholder?: string; unit?: string; wide?: boolean; numeric?: boolean };
 type TvSpecGroup = { label: string; icon: string; fields: TvSpecField[] };
 
 // Keys that differ per screen size
@@ -1594,8 +1601,8 @@ const TV_PER_SIZE_GROUPS: TvSpecGroup[] = [
     label: "Video Features",
     icon: "🎬",
     fields: [
-      { key: "Refresh Rate",            placeholder: "e.g. 60 Hz", unit: "Hz" },
-      { key: "Response Time",           placeholder: "e.g. 8 ms", unit: "ms" },
+      { key: "Refresh Rate",            placeholder: "e.g. 60", unit: "Hz", numeric: true },
+      { key: "Response Time",           placeholder: "e.g. 8", unit: "ms", numeric: true },
       { key: "Supported Video Formats", placeholder: "e.g. H.265, H.264, VP9", wide: true },
     ],
   },
@@ -1604,7 +1611,7 @@ const TV_PER_SIZE_GROUPS: TvSpecGroup[] = [
     icon: "⚡",
     fields: [
       { key: "Power Supply",    placeholder: "e.g. AC 100-240V, 50/60Hz" },
-      { key: "Power Consumption", placeholder: "e.g. 75 W", unit: "W" },
+      { key: "Power Consumption", placeholder: "e.g. 75", unit: "W", numeric: true },
       { key: "BEE Star Rating", placeholder: "e.g. 3 Star" },
     ],
   },
@@ -1621,8 +1628,8 @@ const TV_PER_SIZE_GROUPS: TvSpecGroup[] = [
     label: "Audio Features",
     icon: "🔊",
     fields: [
-      { key: "Number of Speakers",     placeholder: "e.g. 2" },
-      { key: "Speaker Output RMS",     placeholder: "e.g. 20 W", unit: "W" },
+      { key: "Number of Speakers",     placeholder: "e.g. 2", numeric: true },
+      { key: "Speaker Output RMS",     placeholder: "e.g. 20", unit: "W", numeric: true },
       { key: "Sound Mode",             placeholder: "e.g. Dolby Atmos, DTS:X" },
       { key: "Supported Audio Formats", placeholder: "e.g. Dolby Digital, PCM", wide: true },
     ],
@@ -1649,8 +1656,8 @@ const TV_PER_SIZE_GROUPS: TvSpecGroup[] = [
     label: "Memory",
     icon: "💾",
     fields: [
-      { key: "RAM Capacity",   placeholder: "e.g. 1.5 GB", unit: "GB" },
-      { key: "Storage Memory", placeholder: "e.g. 8 GB", unit: "GB" },
+      { key: "RAM Capacity",   placeholder: "e.g. 1.5", unit: "GB", numeric: true },
+      { key: "Storage Memory", placeholder: "e.g. 8", unit: "GB", numeric: true },
     ],
   },
 ];
@@ -1783,6 +1790,10 @@ function TvSpecsEditor({
                                 onChange={(e) => set(k, e.target.value)}
                                 placeholder={field.placeholder}
                                 disabled={disabled}
+                                type={field.numeric ? "number" : "text"}
+                                inputMode={field.numeric ? "decimal" : undefined}
+                                min={field.numeric ? "0" : undefined}
+                                step={field.numeric ? "any" : undefined}
                                 className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
                               />
                               {field.unit && (
@@ -1864,7 +1875,7 @@ const YES_NO_KEYS = new Set([
 type CameraSpecGroup = {
   label: string;
   icon: string;
-  fields: { key: string; placeholder?: string; unit?: string }[];
+  fields: { key: string; placeholder?: string; unit?: string; numeric?: boolean; wide?: boolean }[];
 };
 
 const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
@@ -1877,7 +1888,7 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
       { key: "Series", placeholder: "e.g. Alpha, EOS, Z" },
       { key: "Camera Type", placeholder: "e.g. Mirrorless, DSLR, Compact, Bridge" },
       { key: "Color", placeholder: "e.g. Black, Silver" },
-      { key: "Launch Year", placeholder: "e.g. 2024" },
+      { key: "Launch Year", placeholder: "e.g. 2024", numeric: true },
     ],
   },
   {
@@ -1885,8 +1896,8 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
     icon: "🔬",
     fields: [
       { key: "Sensor Type", placeholder: "e.g. Full-Frame BSI CMOS" },
-      { key: "Sensor Size", placeholder: "e.g. 35.9 × 23.9 mm" },
-      { key: "Effective Resolution (MP)", placeholder: "e.g. 33", unit: "MP" },
+      { key: "Sensor Size" },
+      { key: "Effective Resolution (MP)", placeholder: "e.g. 33", unit: "MP", numeric: true },
       { key: "Image Processor", placeholder: "e.g. BIONZ XR" },
       { key: "ISO Range", placeholder: "e.g. 100 – 51200 (expandable to 204800)" },
     ],
@@ -1907,7 +1918,7 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
     label: "Display",
     icon: "🖥️",
     fields: [
-      { key: "Screen Size", placeholder: "e.g. 3.0 inches", unit: "inches" },
+      { key: "Screen Size", placeholder: "e.g. 3.0", unit: "inches", numeric: true },
       { key: "Screen Type", placeholder: "e.g. TFT LCD, OLED" },
       { key: "Touchscreen", placeholder: "" },
       { key: "Vari-Angle Screen", placeholder: "" },
@@ -1945,7 +1956,7 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
     icon: "🔋",
     fields: [
       { key: "Battery Model", placeholder: "e.g. NP-FZ100" },
-      { key: "Battery Life (Shots)", placeholder: "e.g. 520 shots (LCD)", unit: "shots" },
+      { key: "Battery Life (Shots)", placeholder: "e.g. 520", unit: "shots", numeric: true },
     ],
   },
   {
@@ -1968,10 +1979,10 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
     label: "Dimensions",
     icon: "📐",
     fields: [
-      { key: "Width", placeholder: "e.g. 131.3 mm", unit: "mm" },
-      { key: "Depth", placeholder: "e.g. 79.8 mm", unit: "mm" },
-      { key: "Height", placeholder: "e.g. 96.4 mm", unit: "mm" },
-      { key: "Weight", placeholder: "e.g. 658 g", unit: "g" },
+      { key: "Width", placeholder: "e.g. 131.3", unit: "mm", numeric: true },
+      { key: "Depth", placeholder: "e.g. 79.8", unit: "mm", numeric: true },
+      { key: "Height", placeholder: "e.g. 96.4", unit: "mm", numeric: true },
+      { key: "Weight", placeholder: "e.g. 658", unit: "g", numeric: true },
     ],
   },
 ];
@@ -2104,6 +2115,10 @@ function CameraSpecsEditor({
                             onChange={(e) => set(field.key, e.target.value)}
                             placeholder={field.placeholder}
                             disabled={disabled}
+                            type={field.numeric ? "number" : "text"}
+                            inputMode={field.numeric ? "decimal" : undefined}
+                            min={field.numeric ? "0" : undefined}
+                            step={field.numeric ? "any" : undefined}
                             className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
                           />
                           {field.unit && (
@@ -2182,12 +2197,47 @@ function CameraSpecsEditor({
               {group.fields.map((field) => (
                 <div
                   key={field.key}
-                  className={`flex flex-col gap-1 ${group.fields.length === 1 ? "sm:col-span-2" : ""}`}
+                  className={`flex flex-col gap-1 ${(group.fields.length === 1 || field.wide) ? "sm:col-span-2" : ""}`}
                 >
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
                     {field.key}
                   </label>
-                  {YES_NO_KEYS.has(field.key) ? (
+                  {field.key === "Sensor Size" ? (() => {
+                    const raw = get("Sensor Size");
+                    const m = raw.match(/^([\d.]*)\s*[×x]\s*([\d.]*)/);
+                    const wVal = m ? m[1] : (raw && !/[×x]/.test(raw) ? raw : "");
+                    const hVal = m ? m[2] : "";
+                    const compose = (w: string, h: string) =>
+                      w || h ? `${w} × ${h} mm` : "";
+                    return (
+                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="any"
+                          value={wVal}
+                          onChange={(e) => set("Sensor Size", compose(e.target.value, hVal))}
+                          placeholder="e.g. 35.9"
+                          disabled={disabled}
+                          className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                        />
+                        <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-r border-gray-200 font-medium select-none">×</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="any"
+                          value={hVal}
+                          onChange={(e) => set("Sensor Size", compose(wVal, e.target.value))}
+                          placeholder="e.g. 23.9"
+                          disabled={disabled}
+                          className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                        />
+                        <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">mm</span>
+                      </div>
+                    );
+                  })() : YES_NO_KEYS.has(field.key) ? (
                     <select
                       value={get(field.key)}
                       onChange={(e) => set(field.key, e.target.value)}
@@ -2205,6 +2255,10 @@ function CameraSpecsEditor({
                         onChange={(e) => set(field.key, e.target.value)}
                         placeholder={field.placeholder}
                         disabled={disabled}
+                        type={field.numeric ? "number" : "text"}
+                        inputMode={field.numeric ? "decimal" : undefined}
+                        min={field.numeric ? "0" : undefined}
+                        step={field.numeric ? "any" : undefined}
                         className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
                       />
                       {field.unit && (
@@ -2259,7 +2313,7 @@ const LENS_SPEC_KEYS = new Set([
   ),
 ]);
 
-type LensPerModelField = { key: string; placeholder?: string; unit?: string };
+type LensPerModelField = { key: string; placeholder?: string; unit?: string; numeric?: boolean; numericRange?: boolean };
 type LensPerModelGroup = { label: string; icon: string; fields: LensPerModelField[] };
 
 const LENS_PER_MODEL_GROUPS: LensPerModelGroup[] = [
@@ -2277,15 +2331,15 @@ const LENS_PER_MODEL_GROUPS: LensPerModelGroup[] = [
     label: "Optical Specifications",
     icon: "🔭",
     fields: [
-      { key: "Focal Length",              placeholder: "e.g. 200-600", unit: "mm" },
+      { key: "Focal Length",              placeholder: "e.g. 200-600", unit: "mm", numericRange: true },
       { key: "Maximum Aperture",          placeholder: "e.g. f/5.6-6.3" },
       { key: "Minimum Aperture",          placeholder: "e.g. f/32-36" },
-      { key: "Minimum Focus Distance",    placeholder: "e.g. 2.4", unit: "m" },
-      { key: "Maximum Magnification",     placeholder: "e.g. 0.20", unit: "×" },
+      { key: "Minimum Focus Distance",    placeholder: "e.g. 2.4", unit: "m", numeric: true },
+      { key: "Maximum Magnification",     placeholder: "e.g. 0.20", unit: "×", numeric: true },
       { key: "Angle of View (Full Frame)", placeholder: "e.g. 12°30' - 4°10'" },
       { key: "Optical Construction",      placeholder: "e.g. 24 Elements in 17 Groups" },
       { key: "Special Elements",          placeholder: "e.g. 5 ED Elements, 1 Aspherical Element" },
-      { key: "Aperture Blades",           placeholder: "e.g. 11 (Circular)" },
+      { key: "Aperture Blades",           placeholder: "e.g. 11", numeric: true },
     ],
   },
   {
@@ -2345,10 +2399,10 @@ function CameraLensSpecsEditor({
     setModelCount((c) => Math.max(1, c - 1));
   };
 
-  const extraRows = rows.filter((r) => !LENS_SPEC_KEYS.has(r.key));
-  const setExtraRows = (next: SpecRow[]) => {
-    onChange([...rows.filter((r) => LENS_SPEC_KEYS.has(r.key)), ...next]);
-  };
+  // All per-model extra-row suffixes: "" for model 0, " 2" for model 1, etc.
+  const lensExtraSuffix = (idx: number) => (idx === 0 ? "" : ` ${idx + 1}`);
+  // Suffixes used by OTHER models (to exclude from model 0's extras)
+  const otherLensSuffixes = Array.from({ length: MAX_LENS_MODELS - 1 }, (_, j) => ` ${j + 2}`);
 
   return (
     <div className="space-y-4">
@@ -2476,9 +2530,15 @@ function CameraLensSpecsEditor({
                               <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
                                 <input
                                   value={get(k)}
-                                  onChange={(e) => set(k, e.target.value)}
+                                  onChange={(e) => set(k, field.numericRange
+                                    ? e.target.value.replace(/[^0-9.\-–\s]/g, "")
+                                    : e.target.value)}
                                   placeholder={field.placeholder}
                                   disabled={disabled}
+                                  type={field.numeric ? "number" : "text"}
+                                  inputMode={field.numeric || field.numericRange ? "decimal" : undefined}
+                                  min={field.numeric ? "0" : undefined}
+                                  step={field.numeric ? "any" : undefined}
                                   className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
                                 />
                                 {field.unit && (
@@ -2500,13 +2560,34 @@ function CameraLensSpecsEditor({
                 Enter a Model No. above to unlock specification fields for this model.
               </p>
             )}
-            {/* Additional free-form specs — always visible at the bottom of each model card */}
-            <div className="border-t border-gray-100 p-3">
-              <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-                <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-              </div>
-            </div>
+            {/* Additional free-form specs — scoped to this model */}
+            {(() => {
+              const sfx = lensExtraSuffix(i);
+              const modelExtraRows = rows
+                .filter((r) => {
+                  if (LENS_SPEC_KEYS.has(r.key)) return false;
+                  if (i === 0) return !otherLensSuffixes.some((s) => r.key.endsWith(s));
+                  return r.key.endsWith(sfx) && !LENS_SPEC_KEYS.has(r.key.slice(0, -sfx.length));
+                })
+                .map((r) => (sfx ? { ...r, key: r.key.slice(0, -sfx.length) } : r));
+              const setModelExtraRows = (next: SpecRow[]) => {
+                const withSuffix = next.map((r) => ({ ...r, key: sfx ? `${r.key}${sfx}` : r.key }));
+                const kept = rows.filter((r) => {
+                  if (LENS_SPEC_KEYS.has(r.key)) return true;
+                  if (i === 0) return otherLensSuffixes.some((s) => r.key.endsWith(s));
+                  return !(r.key.endsWith(sfx) && !LENS_SPEC_KEYS.has(r.key.slice(0, -sfx.length)));
+                });
+                onChange([...kept, ...withSuffix]);
+              };
+              return (
+                <div className="border-t border-gray-100 p-3">
+                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                    <SpecsEditor rows={modelExtraRows} onChange={setModelExtraRows} disabled={disabled} />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })}
@@ -2571,7 +2652,7 @@ const SPEAKER_YES_NO_BASE_KEYS = new Set([
   "Volume Control", "Playback Controls", "Built-in Microphone", "Hands-Free Calling",
 ]);
 
-type SpeakerPerModelField = { key: string; placeholder?: string; unit?: string };
+type SpeakerPerModelField = { key: string; placeholder?: string; unit?: string; numeric?: boolean };
 type SpeakerPerModelGroup = { label: string; icon: string; fields: SpeakerPerModelField[] };
 
 const SPEAKER_PER_MODEL_GROUPS: SpeakerPerModelGroup[] = [
@@ -2586,14 +2667,14 @@ const SPEAKER_PER_MODEL_GROUPS: SpeakerPerModelGroup[] = [
     label: "Audio",
     icon: "🔊",
     fields: [
-      { key: "Audio Output Power (RMS)", placeholder: "e.g. 40",    unit: "W" },
+      { key: "Audio Output Power (RMS)", placeholder: "e.g. 40",    unit: "W",  numeric: true },
       { key: "Frequency Response",       placeholder: "e.g. 60 Hz – 20 kHz" },
-      { key: "Driver Size",              placeholder: "e.g. 45",    unit: "mm" },
-      { key: "Number of Drivers",        placeholder: "e.g. 2" },
+      { key: "Driver Size",              placeholder: "e.g. 45",    unit: "mm", numeric: true },
+      { key: "Number of Drivers",        placeholder: "e.g. 2",                numeric: true },
       { key: "Speaker Configuration",    placeholder: "e.g. Stereo" },
-      { key: "Impedance",                placeholder: "e.g. 4",     unit: "Ω" },
-      { key: "Sensitivity",              placeholder: "e.g. 85",    unit: "dB" },
-      { key: "Signal-to-Noise Ratio",    placeholder: "e.g. 80",    unit: "dB" },
+      { key: "Impedance",                placeholder: "e.g. 4",     unit: "Ω",  numeric: true },
+      { key: "Sensitivity",              placeholder: "e.g. 85",    unit: "dB", numeric: true },
+      { key: "Signal-to-Noise Ratio",    placeholder: "e.g. 80",    unit: "dB", numeric: true },
     ],
   },
   {
@@ -2626,7 +2707,7 @@ const SPEAKER_PER_MODEL_GROUPS: SpeakerPerModelGroup[] = [
     label: "Battery",
     icon: "🔋",
     fields: [
-      { key: "Battery Capacity", placeholder: "e.g. 4800", unit: "mAh" },
+      { key: "Battery Capacity", placeholder: "e.g. 4800", unit: "mAh", numeric: true },
       { key: "Battery Life",     placeholder: "e.g. Up to 20 Hours" },
       { key: "Charging Time",    placeholder: "e.g. 2.5 Hours" },
       { key: "Charging Port",    placeholder: "e.g. USB Type-C" },
@@ -2640,7 +2721,7 @@ const SPEAKER_PER_MODEL_GROUPS: SpeakerPerModelGroup[] = [
       { key: "Water Resistance Rating", placeholder: "e.g. IP67" },
       { key: "Dust Resistance",         placeholder: "" },
       { key: "Dimensions",              placeholder: "e.g. 182 × 69 × 71 mm" },
-      { key: "Weight",                  placeholder: "e.g. 550", unit: "g" },
+      { key: "Weight",                  placeholder: "e.g. 550", unit: "g", numeric: true },
     ],
   },
   {
@@ -2840,6 +2921,10 @@ function SpeakerSpecsEditor({
                                   onChange={(e) => set(k, e.target.value)}
                                   placeholder={field.placeholder}
                                   disabled={disabled}
+                                  type={field.numeric ? "number" : "text"}
+                                  inputMode={field.numeric ? "decimal" : undefined}
+                                  min={field.numeric ? "0" : undefined}
+                                  step={field.numeric ? "any" : undefined}
                                   className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
                                 />
                                 {field.unit && (

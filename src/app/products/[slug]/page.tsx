@@ -719,6 +719,54 @@ useEffect(() => {
         .filter(Boolean)
         .join(" + ");
 
+  // For TV: resolve the spec section index for the selected variant.
+  // This index is used for title, description, and specifications table.
+  // Strategies (in priority order):
+  //   1 – Model number: find "Product Name N" whose text contains the variant's model
+  //   2 – Variant position: variant at index N → spec section N (most reliable fallback)
+  //   3 – Screen Size spec matching (getTvSizeIndex)
+  //   4 – Size number word-boundary match in "Product Name N" text
+  const tvModelStr = isTvProduct && selectedVariant
+    ? String(selectedVariant.attributes?.model ?? "").trim().toLowerCase()
+    : "";
+  const tvSizeNum = isTvProduct && selectedVariant
+    ? String(selectedVariant.attributes?.size ?? "").replace(/[^0-9]/g, "")
+    : "";
+  const tvSpecIdx = (() => {
+    if (!isTvProduct || !selectedVariant) return 0;
+    // Strategy 1: match by model number in "Product Name N"
+    if (tvModelStr) {
+      for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
+        const n = String(product.specs[multiModelKey("Product Name", i)] ?? "").trim();
+        if (n && n.toLowerCase().includes(tvModelStr)) return i;
+      }
+    }
+    // Strategy 2: variant position in product.variants → spec section index
+    const variantPos = product.variants.findIndex((v) => v.id === selectedVariant.id);
+    if (variantPos >= 0 && variantPos < MAX_MULTIMODEL_DISPLAY) {
+      const n = String(product.specs[multiModelKey("Product Name", variantPos)] ?? "").trim();
+      if (n) return variantPos;
+    }
+    // Strategy 3: Screen Size spec matching
+    const sizeIdx = getTvSizeIndex(product.specs, selectedVariant);
+    if (sizeIdx > 0) return sizeIdx;
+    // Strategy 4: size number in "Product Name N" text
+    if (tvSizeNum) {
+      const re = new RegExp(`(?<![0-9])${tvSizeNum}(?![0-9])`);
+      for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
+        const n = String(product.specs[multiModelKey("Product Name", i)] ?? "").trim();
+        if (n && re.test(n)) return i;
+      }
+    }
+    return 0;
+  })();
+  const tvSpecName = String(product.specs[multiModelKey("Product Name", tvSpecIdx)] ?? "").trim();
+  const displayTitle = isTvProduct && selectedVariant?.attributes.name
+    ? String(selectedVariant.attributes.name)
+    : isTvProduct && tvSpecName
+    ? tvSpecName
+    : product.name;
+
   return (
     <>
       <Header />
@@ -730,7 +778,7 @@ useEffect(() => {
             <ChevronRight size={12} />
             <Link href="/products" className="hover:text-[#129cd3]">Products</Link>
             <ChevronRight size={12} />
-            <span className="text-gray-800 font-medium line-clamp-1">{product.name}</span>
+            <span className="text-gray-800 font-medium line-clamp-1">{displayTitle}</span>
           </div>
         </div>
 
@@ -853,12 +901,12 @@ useEffect(() => {
               )}
 
               <h1
-                title={product.name}
+                title={displayTitle}
                 className="text-2xl font-bold text-gray-900 mb-3 leading-snug"
               >
-                {!titleExpanded && product.name.length > 80 ? (
+                {!titleExpanded && displayTitle.length > 80 ? (
                   <>
-                    {product.name.slice(0, 80)}
+                    {displayTitle.slice(0, 80)}
                     <span
                       className="text-[#129cd3] cursor-pointer font-normal text-base ml-0.5"
                       onClick={() => setTitleExpanded(true)}
@@ -867,7 +915,7 @@ useEffect(() => {
                     </span>
                   </>
                 ) : (
-                  product.name
+                  displayTitle
                 )}
               </h1>
 
@@ -923,7 +971,7 @@ useEffect(() => {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} selectedVariant={selectedVariant} modelIdx={(isLensProduct || isSpeakerProduct) ? lensOrSpeakerModelIdx : undefined} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} selectedVariant={selectedVariant} modelIdx={isTvProduct ? tvSpecIdx : (isLensProduct || isSpeakerProduct) ? lensOrSpeakerModelIdx : undefined} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1557,7 +1605,7 @@ useEffect(() => {
                   {(isLensProduct || isSpeakerProduct)
                     ? (String(product.specs[multiModelKey("Description", lensOrSpeakerModelIdx)] ?? "").trim() || product.description || "No description available.")
                     : isTvProduct
-                    ? (String(product.specs[multiModelKey("Description", getTvSizeIndex(product.specs, selectedVariant))] ?? "").trim() || product.description || "No description available.")
+                    ? (String(product.specs[multiModelKey("Description", tvSpecIdx)] ?? "").trim() || product.description || "No description available.")
                     : (product.description || "No description available.")}
                 </div>
               )}
@@ -1591,7 +1639,7 @@ useEffect(() => {
                     isTv={isTvProduct}
                     modelIdx={
                       isTvProduct
-                        ? getTvSizeIndex(product.specs, selectedVariant)
+                        ? tvSpecIdx
                         : (isLensProduct || isSpeakerProduct)
                         ? lensOrSpeakerModelIdx
                         : 0
@@ -2187,8 +2235,7 @@ function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
   return rows;
 }
 
-function buildTvHighlights(specs: Record<string, unknown>, selectedVariant?: Variant): HighlightRow[] {
-  const sizeIdx = getTvSizeIndex(specs, selectedVariant);
+function buildTvHighlights(specs: Record<string, unknown>, sizeIdx: number, selectedVariant?: Variant): HighlightRow[] {
   const s = (base: string) => {
     const v = specs[multiModelKey(base, sizeIdx)];
     return v ? String(v).trim() : "";
@@ -2333,7 +2380,7 @@ function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, selectedV
     : isCamera
     ? buildCameraHighlights(specs)
     : isTv
-    ? buildTvHighlights(specs, selectedVariant)
+    ? buildTvHighlights(specs, activeModelIdx, selectedVariant)
     : buildHighlights(specs);
 
   if (highlights.length === 0) return null;

@@ -37,6 +37,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 type VariantRow = {
   uid: string;
   existingId?: string;
+  name: string;       // TV only: per-variant product name, e.g. "Samsung 43\" Crystal 4K TV"
   ram: string;
   storage: string;    // ROM (phone) | Lens Name (camera) | Model No. (TV)
   color: string;
@@ -155,6 +156,7 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     a.lensIncluded = r.lensIncluded || "No";
     if (r.lensIncluded === "Yes" && r.storage.trim()) a.lens = r.storage.trim();
   } else if (isTV) {
+    if (r.name?.trim()) a.name = r.name.trim();
     if (r.ram.trim()) a.size = r.ram.trim();
     if (r.storage.trim()) a.model = r.storage.trim();
     if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
@@ -215,6 +217,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
     return {
       uid: uid(),
       existingId: v.id,
+      name: isTV && v.attributes.name != null ? String(v.attributes.name) : "",
       ram: ramVal,
       storage: storageVal,
       color: v.attributes.color != null ? String(v.attributes.color) : "",
@@ -290,7 +293,7 @@ const ProductVariantsEditor = forwardRef<
   const isSpeaker = !isCamera && !isTV && !isLens && isSpeakerCategory(categorySlug);
   const [rows, setRows] = useState<VariantRow[]>(() => {
     if (draftRows && draftRows.length > 0) {
-      return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined }));
+      return (draftRows as VariantRow[]).map((r) => ({ name: "", ...r, uid: uid(), existingId: undefined }));
     }
     return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens);
   });
@@ -330,6 +333,7 @@ const ProductVariantsEditor = forwardRef<
       ...rs,
       {
         uid: uid(),
+        name: "",
         ram: "",
         storage: "",
         color: "",
@@ -475,7 +479,7 @@ const ProductVariantsEditor = forwardRef<
       hasRows: () => rows.length > 0,
       getRows: () => rows as unknown[],
       setRows: (newRows: unknown[]) => setRows(
-        (newRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined }))
+        (newRows as VariantRow[]).map((r) => ({ name: "", ...r, uid: uid(), existingId: undefined }))
       ),
       getMinSellingPrice: () => {
         const prices = rows.map((r) => Number(r.price)).filter((n) => !isNaN(n) && n > 0);
@@ -518,17 +522,20 @@ const ProductVariantsEditor = forwardRef<
         // 2. Create or update each row.
         const keptIds = new Set<string>();
         for (const r of rows) {
+          const existing = r.existingId ? initialVariants.find((v) => v.id === r.existingId) : undefined;
           const body = {
-            sku: makeSku(productName, r, isCamera, isTV),
+            // On update keep the original SKU to avoid backend uniqueness conflicts;
+            // generate a new SKU only for newly created variants.
+            sku: existing ? existing.sku : makeSku(productName, r, isCamera, isTV),
             attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens),
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
             imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens)] ?? [],
           };
-          if (r.existingId && initialVariants.some((v) => v.id === r.existingId)) {
-            keptIds.add(r.existingId);
-            await adminApi.updateVariant(productId, r.existingId, body);
+          if (existing) {
+            keptIds.add(existing.id);
+            await adminApi.updateVariant(productId, existing.id, body);
           } else {
             await adminApi.createVariant(productId, body);
           }
@@ -597,6 +604,16 @@ const ProductVariantsEditor = forwardRef<
         {rows.map((r) => isTV ? (
           /* ── TV: multi-row card ───────────────────────────────── */
           <div key={r.uid} className="border border-gray-200 rounded-xl p-3 bg-white space-y-3">
+            {/* Product Name — full width */}
+            <Field label="Product Name">
+              <input
+                value={r.name}
+                onChange={(e) => updateRow(r.uid, { name: e.target.value })}
+                placeholder='e.g. Samsung 43" Crystal 4K TV'
+                disabled={disabled}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+              />
+            </Field>
             {/* Row 1: Size + Model No. + delete */}
             <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
               <Field label="Size (inch)">
