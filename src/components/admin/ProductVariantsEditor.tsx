@@ -348,13 +348,16 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
 
 const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
-  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; hideRam?: boolean; draftRows?: unknown[]; specModelNos?: string[] }
->(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, hideRam = false, draftRows, specModelNos = [] }, ref) {
+  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; draftRows?: unknown[]; specModelNos?: string[] }
+>(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, draftRows, specModelNos = [] }, ref) {
+  const [isIPhone, setIsIPhone] = useState(false);
   const isLens = isLensCategory(categorySlug);
   const isCamera = !isLens && isCameraCategory(categorySlug);
   const isTV = isTvCategory(categorySlug);
   const isSpeaker = !isCamera && !isTV && !isLens && isSpeakerCategory(categorySlug);
   const isSmartDevice = !isCamera && !isTV && !isLens && !isSpeaker && isSmartDeviceCategory(categorySlug);
+  const isPhone = !isCamera && !isTV && !isLens && !isSpeaker && !isSmartDevice;
+  const hideRam = isPhone && isIPhone;
   const [attrColumns, setAttrColumns] = useState<string[]>(() =>
     isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : []
   );
@@ -682,6 +685,21 @@ const ProductVariantsEditor = forwardRef<
             ? "Add each ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."}
         </p>
+        {isPhone && (
+          <label className="flex items-center gap-2 mt-2 cursor-pointer select-none w-fit">
+            <input
+              type="checkbox"
+              checked={isIPhone}
+              onChange={(e) => setIsIPhone(e.target.checked)}
+              className="w-4 h-4 accent-[#129cd3]"
+              disabled={disabled}
+            />
+            <span className="text-sm text-gray-600 font-medium">
+              Is this an iPhone?{" "}
+              <span className="text-xs text-gray-400">(RAM column will be hidden)</span>
+            </span>
+          </label>
+        )}
       </div>
 
       {/* Datalists shared by every row */}

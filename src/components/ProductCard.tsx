@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cartApi, catalogApi, isApiError } from "@/lib/api";
+import { apiLimiter } from "@/lib/apiLimiter";
 import type { ListCard, Variant } from "@/lib/api";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
@@ -140,7 +141,7 @@ export default function ProductCard({
       });
       return;
     }
-    catalogApi.getProduct(product.slug)
+    apiLimiter(() => catalogApi.getProduct(product.slug))
       .then((d) => {
         const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);
@@ -433,7 +434,7 @@ export function ProductCardExpander({
       });
       return;
     }
-    catalogApi.getProduct(product.slug)
+    apiLimiter(() => catalogApi.getProduct(product.slug))
       .then((d) => {
         const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);

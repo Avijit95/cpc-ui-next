@@ -339,7 +339,6 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     initSpecRows(initial?.specs),
   );
   const variantsRef = useRef<ProductVariantsHandle | null>(null);
-  const [isIPhone, setIsIPhone] = useState(false);
   const couponSectionRef = useRef<HTMLDivElement>(null);
 
   // ── Draft auto-save (create mode only) ────────────────────────────────────
@@ -1188,7 +1187,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const isSpeaker      = catSlug.includes("speaker") || catName.includes("speaker");
               const isSmartDevice  = !isTv && (catSlug.includes("smart") || catName.includes("smart"));
               return isPhone ? (
-                <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} isIPhone={isIPhone} onIsIPhoneChange={setIsIPhone} />
+                <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isTv ? (
                 <TvSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isLens ? (
@@ -1234,7 +1233,6 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 initialVariants={isEdit ? mode.initial.variants : []}
                 disabled={busy}
                 categorySlug={catSlug}
-                hideRam={isIPhone}
                 draftRows={draftInitRows ?? undefined}
                 specModelNos={specModelNos}
               />
@@ -1417,7 +1415,6 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
 const PHONE_SPEC_KEYS = new Set([
   "Display Size", "Resolution", "Screen Type",
-  "RAM", "ROM",
   "Height", "Width", "Depth", "Weight",
   "Battery",
   "Front Camera", "Rear Camera",
@@ -1438,14 +1435,6 @@ const PHONE_SPEC_GROUPS: PhoneSpecGroup[] = [
       { key: "Display Size", placeholder: "e.g. 6.8", unit: "inches", numeric: true },
       { key: "Resolution", placeholder: "e.g. 2400 × 1080 px" },
       { key: "Screen Type", placeholder: "e.g. AMOLED, 120Hz" },
-    ],
-  },
-  {
-    label: "Memory",
-    icon: "💾",
-    fields: [
-      { key: "RAM", placeholder: "e.g. 8", unit: "GB", numeric: true },
-      { key: "ROM", placeholder: "e.g. 128", unit: "GB", numeric: true },
     ],
   },
   {
@@ -1486,14 +1475,10 @@ function PhoneSpecsEditor({
   rows,
   onChange,
   disabled,
-  isIPhone,
-  onIsIPhoneChange,
 }: {
   rows: SpecRow[];
   onChange: (rows: SpecRow[]) => void;
   disabled: boolean;
-  isIPhone: boolean;
-  onIsIPhoneChange: (v: boolean) => void;
 }) {
 
   const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
@@ -1517,21 +1502,6 @@ function PhoneSpecsEditor({
     <div className="space-y-4">
       {PHONE_SPEC_GROUPS.map((group) => (
         <div key={group.label}>
-          {group.label === "Memory" && (
-            <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isIPhone}
-                onChange={(e) => onIsIPhoneChange(e.target.checked)}
-                className="w-4 h-4 accent-[#129cd3]"
-                disabled={disabled}
-              />
-              <span className="text-sm text-gray-600 font-medium">
-                Is this an iPhone?{" "}
-                <span className="text-xs text-gray-400">(RAM field will be hidden)</span>
-              </span>
-            </label>
-          )}
           <div className="border border-gray-100 rounded-xl overflow-hidden">
           {/* Group header */}
           <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
@@ -1540,7 +1510,7 @@ function PhoneSpecsEditor({
           </div>
           {/* Fields */}
           <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {group.fields.filter((field) => !(isIPhone && group.label === "Memory" && field.key === "RAM")).map((field) => (
+            {group.fields.map((field) => (
               <div key={field.key} className="flex flex-col gap-1">
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
                   {field.key}

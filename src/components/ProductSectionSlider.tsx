@@ -3,14 +3,10 @@
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
-import ProductCard from "./ProductCard";
+import ProductCard, { detailCache } from "./ProductCard";
 import { catalogApi } from "@/lib/api";
 import type { ListCard, Variant } from "@/lib/api";
-
-// Re-use the same module-level cache from ProductCard to avoid double-fetching.
-// We import indirectly by referencing the same catalogApi; the cache lives in
-// ProductCard.tsx module scope, so we inline a lightweight local one here.
-const sliderDetailCache = new Map<string, Variant[]>();
+import { apiLimiter } from "@/lib/apiLimiter";
 
 type SliderItem = { product: ListCard; variant?: Variant };
 
@@ -32,16 +28,19 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
     let active = true;
     Promise.all(
       items.map((p) => {
-        if (sliderDetailCache.has(p.slug)) {
-          return Promise.resolve(sliderDetailCache.get(p.slug)!);
+        const cached = detailCache.get(p.slug);
+        if (cached) {
+          return Promise.resolve(cached.variants);
         }
-        return catalogApi
-          .getProduct(p.slug)
-          .then((d) => {
-            sliderDetailCache.set(p.slug, d.variants);
-            return d.variants;
-          })
-          .catch(() => [] as Variant[]);
+        return apiLimiter(() =>
+          catalogApi
+            .getProduct(p.slug)
+            .then((d) => {
+              detailCache.set(p.slug, { stock: d.stock ?? 0, variants: d.variants, specs: d.specs ?? {} });
+              return d.variants;
+            })
+            .catch(() => [] as Variant[])
+        );
       })
     ).then((allVariants) => {
       if (!active) return;
