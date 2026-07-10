@@ -1514,10 +1514,11 @@ useEffect(() => {
                         window.setTimeout(() => setAddState("idle"), 1500);
                       } catch (err) {
                         setAddState("error");
+                        const msg = isApiError(err) ? err.displayMessage : "";
                         setAddError(
-                          isApiError(err)
-                            ? err.displayMessage
-                            : "Could not add to cart",
+                          msg.toLowerCase().includes("name must be")
+                            ? "This product is missing required information. Please contact support."
+                            : msg || "Could not add to cart",
                         );
                         window.setTimeout(() => setAddState("idle"), 2500);
                       }
@@ -1584,10 +1585,11 @@ useEffect(() => {
                         );
                       } catch (err) {
                         setBuying(false);
+                        const msg = isApiError(err) ? err.displayMessage : "";
                         setAddError(
-                          isApiError(err)
-                            ? err.displayMessage
-                            : "Could not start checkout",
+                          msg.toLowerCase().includes("name must be")
+                            ? "This product is missing required information. Please contact support."
+                            : msg || "Could not start checkout",
                         );
                       }
                     }}
