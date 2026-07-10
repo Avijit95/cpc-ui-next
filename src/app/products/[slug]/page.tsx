@@ -753,6 +753,10 @@ useEffect(() => {
     const pos = modelGroup.values.indexOf(selectedVal);
     return pos >= 0 ? pos : 0;
   })();
+  const cameraModelIdx = (() => {
+    if (!isCameraProduct || !selectedVariant) return 0;
+    return getActiveModelIndex(product.specs, selectedVariant);
+  })();
   const smartDeviceModelIdx = (() => {
     if (!isSmartDeviceProduct || !selectedVariant) return 0;
     // Always use variant position: the admin adds variants and spec sections in
@@ -903,6 +907,9 @@ useEffect(() => {
   const sdSpecName = isSmartDeviceProduct
     ? String(product.specs[multiModelKey("Product Name", smartDeviceModelIdx)] ?? "").trim()
     : "";
+  const cameraSpecName = isCameraProduct
+    ? String(product.specs[multiModelKey("Product Name", cameraModelIdx)] ?? "").trim()
+    : "";
   const displayTitle = isTvProduct && selectedVariant?.attributes.name
     ? String(selectedVariant.attributes.name)
     : isTvProduct && tvSpecName
@@ -913,6 +920,8 @@ useEffect(() => {
     ? speakerSpecName
     : isSmartDeviceProduct && sdSpecName
     ? sdSpecName
+    : isCameraProduct && cameraSpecName
+    ? cameraSpecName
     : product.name;
 
   return (
@@ -1144,7 +1153,7 @@ useEffect(() => {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} isSmartDevice={isSmartDeviceProduct} selectedVariant={selectedVariant} modelIdx={isTvProduct ? tvSpecIdx : (isLensProduct || isSpeakerProduct) ? lensOrSpeakerModelIdx : isSmartDeviceProduct ? smartDeviceModelIdx : undefined} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} isSmartDevice={isSmartDeviceProduct} selectedVariant={selectedVariant} modelIdx={isTvProduct ? tvSpecIdx : (isLensProduct || isSpeakerProduct) ? lensOrSpeakerModelIdx : isSmartDeviceProduct ? smartDeviceModelIdx : isCameraProduct ? cameraModelIdx : undefined} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1784,6 +1793,8 @@ useEffect(() => {
                     ? (String(product.specs[multiModelKey("Description", tvSpecIdx)] ?? "").trim() || product.description || "No description available.")
                     : isSmartDeviceProduct
                     ? (String(product.specs[multiModelKey("Description", smartDeviceModelIdx)] ?? "").trim() || product.description || "No description available.")
+                    : isCameraProduct
+                    ? (String(product.specs[multiModelKey("Description", cameraModelIdx)] ?? "").trim() || product.description || "No description available.")
                     : (product.description || "No description available.")}
                 </div>
               )}
@@ -1818,11 +1829,14 @@ useEffect(() => {
                       isLens={isLensProduct}
                       isSpeaker={isSpeakerProduct}
                       isTv={isTvProduct}
+                      isCamera={isCameraProduct}
                       modelIdx={
                         isTvProduct
                           ? tvSpecIdx
                           : (isLensProduct || isSpeakerProduct)
                           ? lensOrSpeakerModelIdx
+                          : isCameraProduct
+                          ? cameraModelIdx
                           : 0
                       }
                     />
@@ -2182,6 +2196,22 @@ const LENS_PER_MODEL_SPEC_BASES = [
   "Recommended Usage",
 ];
 
+// ── Camera per-model keys ─────────────────────────────────────────────────────
+const CAMERA_PER_MODEL_SPEC_BASES = [
+  "Model", "Product Name", "Description", "Slug",
+  "Series", "Camera Type", "Launch Year",
+  "Sensor Type", "Sensor Size", "Effective Resolution (MP)", "Image Processor", "ISO Range",
+  "Lens Mount", "Lens Included", "Lens Name", "Focal Length", "Aperture", "Autofocus",
+  "Aspect Ratio", "Screen Size", "Screen Type", "Touchscreen", "Vari-Angle Screen",
+  "Built-in Flash", "Hot Shoe",
+  "Memory Card Type", "Card Slots",
+  "Wi-Fi", "Bluetooth", "NFC", "USB Type", "HDMI",
+  "Battery Model", "Battery Life (Shots)",
+  "Shutter Speed", "Self-timer",
+  "Video Resolution", "Video Quality",
+  "Width", "Depth", "Height", "Weight",
+];
+
 // ── TV per-size keys ──────────────────────────────────────────────────────────
 const TV_PER_SIZE_SPEC_BASES = [
   "Screen Size", "Product Name", "Slug", "Description",
@@ -2284,12 +2314,14 @@ function SpecsTable({
   isLens = false,
   isSpeaker = false,
   isTv = false,
+  isCamera = false,
   modelIdx = 0,
 }: {
   specs: Record<string, unknown>;
   isLens?: boolean;
   isSpeaker?: boolean;
   isTv?: boolean;
+  isCamera?: boolean;
   modelIdx?: number;
 }) {
   let allEntries = Object.entries(specs);
@@ -2300,6 +2332,8 @@ function SpecsTable({
     allEntries = filterMultiModelEntries(allEntries, SPEAKER_PER_MODEL_SPEC_BASES, modelIdx);
   } else if (isTv) {
     allEntries = filterMultiModelEntries(allEntries, TV_PER_SIZE_SPEC_BASES, modelIdx);
+  } else if (isCamera) {
+    allEntries = filterMultiModelEntries(allEntries, CAMERA_PER_MODEL_SPEC_BASES, modelIdx);
   }
 
   allEntries = allEntries.filter(([key]) => !HIDDEN_SPEC_KEYS.has(key));
@@ -2675,9 +2709,9 @@ function buildTvHighlights(specs: Record<string, unknown>, sizeIdx: number, sele
   return rows;
 }
 
-function buildCameraHighlights(specs: Record<string, unknown>): HighlightRow[] {
+function buildCameraHighlights(specs: Record<string, unknown>, modelIdx = 0): HighlightRow[] {
   const s = (key: string) => {
-    const v = specs[key];
+    const v = specs[multiModelKey(key, modelIdx)];
     return v ? String(v).trim() : "";
   };
   const rows: HighlightRow[] = [];
@@ -2770,7 +2804,7 @@ function buildSpeakerHighlights(specs: Record<string, unknown>, modelIdx = 0): H
 
 function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, isSmartDevice, selectedVariant, modelIdx: modelIdxProp }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; isSpeaker?: boolean; isSmartDevice?: boolean; selectedVariant?: Variant; modelIdx?: number }) {
   const [expanded, setExpanded] = useState(true);
-  const activeModelIdx = modelIdxProp !== undefined ? modelIdxProp : (isLens || isSpeaker) ? getActiveModelIndex(specs, selectedVariant) : 0;
+  const activeModelIdx = modelIdxProp !== undefined ? modelIdxProp : (isLens || isSpeaker || isCamera) ? getActiveModelIndex(specs, selectedVariant) : 0;
   const highlights = isSmartDevice
     ? buildSmartDeviceHighlights(specs, activeModelIdx)
     : isLens
@@ -2778,7 +2812,7 @@ function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, isSmartDe
     : isSpeaker
     ? buildSpeakerHighlights(specs, activeModelIdx)
     : isCamera
-    ? buildCameraHighlights(specs)
+    ? buildCameraHighlights(specs, activeModelIdx)
     : isTv
     ? buildTvHighlights(specs, activeModelIdx, selectedVariant)
     : buildHighlights(specs);

@@ -704,9 +704,10 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const _bIsSpeaker     = _bCatSlug.includes("speaker") || _bCatName.includes("speaker");
     const _bIsTv          = _bCatSlug.includes("tv") || _bCatName.includes("tv") || _bCatName.includes("television");
     const _bIsSmartDevice = !_bIsTv && (_bCatSlug.includes("smart") || _bCatName.includes("smart"));
-    const _bNameOptional  = _bIsLens || _bIsSpeaker || _bIsTv || _bIsSmartDevice;
-    // For smart devices the name comes from the first model's "Product Name" spec row.
-    const _sdName = _bIsSmartDevice
+    const _bIsCamera      = !_bIsLens && (_bCatSlug.includes("camera") || _bCatName.includes("camera"));
+    const _bNameOptional  = _bIsLens || _bIsSpeaker || _bIsTv || _bIsSmartDevice || _bIsCamera;
+    // For smart devices and cameras the name comes from the first model's "Product Name" spec row.
+    const _sdName = (_bIsSmartDevice || _bIsCamera)
       ? (specRows.find((r) => r.key === "Product Name")?.value ?? "").trim()
       : "";
     // For lens products, derive name from first variant's model (ram field) if product name is blank.
@@ -1105,7 +1106,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             const _siIsSpeaker     = _siCatSlug.includes("speaker") || _siCatName.includes("speaker");
             const _siIsTv          = _siCatSlug.includes("tv") || _siCatName.includes("tv") || _siCatName.includes("television");
             const _siIsSmartDevice = !_siIsTv && (_siCatSlug.includes("smart") || _siCatName.includes("smart"));
-            if (_siIsLens || _siIsSpeaker || _siIsTv || _siIsSmartDevice) return null;
+            const _siIsCamera      = !_siIsLens && (_siCatSlug.includes("camera") || _siCatName.includes("camera"));
+            if (_siIsLens || _siIsSpeaker || _siIsTv || _siIsSmartDevice || _siIsCamera) return null;
             return (
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Basic Information</h3>
@@ -1147,8 +1149,9 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const _isLens        = _cs.includes("lens") || _cn.includes("lens");
               const _isSpeaker     = _cs.includes("speaker") || _cn.includes("speaker");
               const _isTv          = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
+              const _isCamera      = !_isLens && (_cs.includes("camera") || _cn.includes("camera"));
               const _isSmartDevice = !_isTv && (_cs.includes("smart") || _cn.includes("smart"));
-              return !_isLens && !_isSpeaker && !_isTv && !_isSmartDevice ? (
+              return !_isLens && !_isSpeaker && !_isTv && !_isSmartDevice && !_isCamera ? (
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
                     Description
@@ -1216,14 +1219,32 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             const _isLensV    = _cs.includes("lens")    || catName.includes("lens");
             const _isSpeakerV = _cs.includes("speaker") || catName.includes("speaker");
             const _isTvV      = _cs.includes("tv")      || catName.includes("tv") || catName.includes("television");
+            const _isCameraV   = !_isLensV && (_cs.includes("camera") || catName.includes("camera"));
             const _isSmartDevV = !_isTvV && (_cs.includes("smart") || catName.includes("smart"));
-            const _needsModelCheck = _isLensV || _isSpeakerV || _isSmartDevV;
+            const _needsModelCheck = _isLensV || _isSpeakerV || _isSmartDevV || _isCameraV;
             // Extract spec model nos for multi-model types (Model, Model 2, Model 3 …).
             const specModelNos = _needsModelCheck
               ? Array.from({ length: 5 }, (_, i) => {
                   const key = i === 0 ? "Model" : `Model ${i + 1}`;
                   return specRows.find((r) => r.key === key)?.value?.trim() ?? "";
                 }).filter(Boolean)
+              : [];
+            // For cameras, also pass per-model spec data so variants can auto-fill.
+            const cameraSpecModels = _isCameraV
+              ? Array.from({ length: 5 }, (_, i) => {
+                  const modelKey = i === 0 ? "Model" : `Model ${i + 1}`;
+                  const model = specRows.find((r) => r.key === modelKey)?.value?.trim() ?? "";
+                  if (!model) return null;
+                  const lensIncludedKey = i === 0 ? "Lens Included" : `Lens Included ${i + 1}`;
+                  const launchYearKey   = i === 0 ? "Launch Year"   : `Launch Year ${i + 1}`;
+                  const lensNameKey     = i === 0 ? "Lens Name"     : `Lens Name ${i + 1}`;
+                  return {
+                    model,
+                    lensIncluded: specRows.find((r) => r.key === lensIncludedKey)?.value?.trim() ?? "",
+                    launchYear:   specRows.find((r) => r.key === launchYearKey)?.value?.trim()   ?? "",
+                    lensName:     specRows.find((r) => r.key === lensNameKey)?.value?.trim()     ?? "",
+                  };
+                }).filter(Boolean) as { model: string; lensIncluded: string; launchYear: string; lensName: string }[]
               : [];
             // Key includes catSlug so the editor remounts once categories load,
             // ensuring isTV/isCamera are correct when initRows/initColorImages run.
@@ -1239,6 +1260,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 categorySlug={catSlug}
                 draftRows={draftInitRows ?? undefined}
                 specModelNos={specModelNos}
+                cameraSpecModels={cameraSpecModels}
               />
             );
           })()}
@@ -1880,30 +1902,32 @@ function TvSpecsEditor({
 
 // ── Camera-specific structured spec editor ────────────────────────────────────
 
-const CAMERA_SPEC_KEYS = new Set([
-  // General
-  "Brand", "Model", "Series", "Camera Type", "Color", "Launch Year",
-  // Sensor
+const MAX_CAMERA_MODELS = 5;
+
+function cameraModelKey(base: string, idx: number): string {
+  return idx === 0 ? base : `${base} ${idx + 1}`;
+}
+
+const CAMERA_MODEL_BASE_KEYS = [
+  "Model", "Product Name", "Description", "Slug",
+  "Series", "Camera Type", "Launch Year",
   "Sensor Type", "Sensor Size", "Effective Resolution (MP)", "Image Processor", "ISO Range",
-  // Lens
   "Lens Mount", "Lens Included", "Lens Name", "Focal Length", "Aperture", "Autofocus",
-  // Display
-  "Screen Size", "Screen Type", "Touchscreen", "Vari-Angle Screen",
-  // Flash
+  "Aspect Ratio", "Screen Size", "Screen Type", "Touchscreen", "Vari-Angle Screen",
   "Built-in Flash", "Hot Shoe",
-  // Storage
   "Memory Card Type", "Card Slots",
-  // Connectivity
   "Wi-Fi", "Bluetooth", "NFC", "USB Type", "HDMI",
-  // Battery
   "Battery Model", "Battery Life (Shots)",
-  // Video
-  "Video Resolution", "Video Quality",
-  // Shutter
   "Shutter Speed", "Self-timer",
-  // Dimensions
+  "Video Resolution", "Video Quality",
   "Width", "Depth", "Height", "Weight",
-]);
+];
+
+const CAMERA_MODEL_SPEC_KEYS = new Set(
+  CAMERA_MODEL_BASE_KEYS.flatMap((k) =>
+    Array.from({ length: MAX_CAMERA_MODELS }, (_, i) => cameraModelKey(k, i)),
+  ),
+);
 
 const YES_NO_KEYS = new Set([
   "Lens Included", "Touchscreen", "Vari-Angle Screen",
@@ -1921,11 +1945,9 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
     label: "General",
     icon: "📋",
     fields: [
-      { key: "Brand", placeholder: "e.g. Sony, Canon, Nikon" },
       { key: "Model", placeholder: "e.g. Alpha A7 IV" },
       { key: "Series", placeholder: "e.g. Alpha, EOS, Z" },
       { key: "Camera Type", placeholder: "e.g. Mirrorless, DSLR, Compact, Bridge" },
-      { key: "Color", placeholder: "e.g. Black, Silver" },
       { key: "Launch Year", placeholder: "e.g. 2024", numeric: true },
     ],
   },
@@ -2034,14 +2056,7 @@ function CameraSpecsEditor({
   onChange: (rows: SpecRow[]) => void;
   disabled: boolean;
 }) {
-  const get = (key: string) => {
-    const val = rows.find((r) => r.key === key)?.value;
-    if (val !== undefined) return val;
-    if (key === "Lens Included") return "No"; // default to No
-    return "";
-  };
-
-  const lensIncluded = get("Lens Included") === "Yes";
+  const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
 
   const set = (key: string, value: string) => {
     const existing = rows.find((r) => r.key === key);
@@ -2052,272 +2067,206 @@ function CameraSpecsEditor({
     }
   };
 
-  // ── Multi-lens helpers ────────────────────────────────────────────────
-  const lensKey = (i: number, field: "name" | "focal") => {
-    const base = field === "name" ? "Lens Name" : "Focal Length";
-    return i === 0 ? base : `${base} ${i + 1}`;
-  };
-
-  const getLensEntries = (): { name: string; focal: string }[] => {
-    const entries: { name: string; focal: string }[] = [
-      { name: get("Lens Name"), focal: get("Focal Length") },
-    ];
-    for (let i = 2; ; i++) {
-      const nk = `Lens Name ${i}`;
-      const fk = `Focal Length ${i}`;
-      const nRow = rows.find((r) => r.key === nk);
-      const fRow = rows.find((r) => r.key === fk);
-      if (!nRow && !fRow) break;
-      entries.push({ name: nRow?.value ?? "", focal: fRow?.value ?? "" });
+  const [modelCount, setModelCount] = useState(() => {
+    let count = 1;
+    for (let i = 1; i < MAX_CAMERA_MODELS; i++) {
+      if (rows.some((r) => r.key === cameraModelKey("Model", i))) count = i + 1;
     }
-    return entries;
+    return count;
+  });
+
+  const removeModel = (i: number) => {
+    const keysToRemove = new Set(CAMERA_MODEL_BASE_KEYS.map((k) => cameraModelKey(k, i)));
+    onChange(rows.filter((r) => !keysToRemove.has(r.key)));
+    setModelCount((c) => Math.max(1, c - 1));
   };
 
-  const setLensField = (index: number, field: "name" | "focal", value: string) => {
-    const key = lensKey(index, field);
-    const existing = rows.find((r) => r.key === key);
-    if (existing) {
-      onChange(rows.map((r) => (r.id === existing.id ? { ...r, value } : r)));
-    } else {
-      onChange([...rows, { id: uid(), key, value }]);
-    }
-  };
-
-  const addLens = () => {
-    const next = getLensEntries().length + 1;
-    onChange([
-      ...rows,
-      { id: uid(), key: `Lens Name ${next}`, value: "" },
-      { id: uid(), key: `Focal Length ${next}`, value: "" },
-    ]);
-  };
-
-  const removeLens = (index: number) => {
-    if (index === 0) return;
-    const entries = getLensEntries().filter((_, i) => i !== index);
-    const lensPattern = /^(Lens Name|Focal Length)( \d+)?$/;
-    let updated = rows.filter((r) => !lensPattern.test(r.key));
-    entries.forEach((e, i) => {
-      if (e.name) updated = [...updated, { id: uid(), key: lensKey(i, "name"), value: e.name }];
-      if (e.focal) updated = [...updated, { id: uid(), key: lensKey(i, "focal"), value: e.focal }];
-    });
-    onChange(updated);
-  };
-
-  const lensEntries = getLensEntries();
-  // ─────────────────────────────────────────────────────────────────────
-
-  const isDynamicLensKey = (key: string) =>
-    /^(Lens Name|Focal Length)( \d+)?$/.test(key);
-
-  const extraRows = rows.filter((r) => !CAMERA_SPEC_KEYS.has(r.key) && !isDynamicLensKey(r.key));
-  const setExtraRows = (next: SpecRow[]) => {
-    onChange([...rows.filter((r) => CAMERA_SPEC_KEYS.has(r.key) || isDynamicLensKey(r.key)), ...next]);
-  };
+  const modelExtraSuffix = (idx: number) => (idx === 0 ? "" : ` ${idx + 1}`);
+  const otherModelSuffixes = Array.from({ length: MAX_CAMERA_MODELS - 1 }, (_, j) => ` ${j + 2}`);
 
   return (
     <div className="space-y-4">
-      {CAMERA_SPEC_GROUPS.map((group) => (
-        <div key={group.label} className="border border-gray-100 rounded-xl overflow-hidden">
-          <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
-            <span className="text-base leading-none">{group.icon}</span>
-            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{group.label}</span>
-          </div>
-
-          {group.label === "Lens" ? (
-            <div className="p-3 space-y-3">
-              {/* Static Lens fields (Mount, Included, Aperture) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {group.fields
-                  .filter((f) => f.key !== "Lens Name" && f.key !== "Focal Length")
-                  .map((field) => (
-                    <div key={field.key} className="flex flex-col gap-1">
-                      <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                        {field.key}
-                      </label>
-                      {YES_NO_KEYS.has(field.key) ? (
-                        <select
-                          value={get(field.key)}
-                          onChange={(e) => set(field.key, e.target.value)}
-                          disabled={disabled}
-                          className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                        >
-                          <option value="">— Select —</option>
-                          <option value="Yes">Yes</option>
-                          <option value="No">No</option>
-                        </select>
-                      ) : (
-                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                          <input
-                            value={get(field.key)}
-                            onChange={(e) => set(field.key, e.target.value)}
-                            placeholder={field.placeholder}
-                            disabled={disabled}
-                            type={field.numeric ? "number" : "text"}
-                            inputMode={field.numeric ? "decimal" : undefined}
-                            min={field.numeric ? "0" : undefined}
-                            step={field.numeric ? "any" : undefined}
-                            className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                          />
-                          {field.unit && (
-                            <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
-                              {field.unit}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-              </div>
-
-              {/* Multi-lens entries — only visible when Lens Included = Yes */}
-              {lensIncluded && (
-                <div className="space-y-2 pt-1 border-t border-gray-100">
-                  {lensEntries.map((entry, i) => (
-                    <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                      {/* Lens Name */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                          Lens Name{i > 0 ? ` ${i + 1}` : ""}
-                        </label>
-                        <input
-                          value={entry.name}
-                          onChange={(e) => setLensField(i, "name", e.target.value)}
-                          placeholder="e.g. 28–70 mm F3.5–5.6 OSS"
-                          disabled={disabled}
-                          className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                        />
-                      </div>
-                      {/* Focal Length */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                          Focal Length{i > 0 ? ` ${i + 1}` : ""}
-                        </label>
-                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                          <input
-                            value={entry.focal}
-                            onChange={(e) => setLensField(i, "focal", e.target.value)}
-                            placeholder="e.g. 28–70 mm"
-                            disabled={disabled}
-                            className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                          />
-                          <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">mm</span>
-                        </div>
-                      </div>
-                      {/* Remove button (not for first entry) */}
-                      {i > 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => removeLens(i)}
-                          disabled={disabled}
-                          className="mb-0.5 w-8 h-9 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      ) : (
-                        <div className="w-8" />
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addLens}
-                    disabled={disabled}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-[#129cd3] hover:text-[#0e87b5] disabled:opacity-40 transition-colors py-1"
-                  >
-                    <Plus size={13} /> Add Lens
-                  </button>
-                </div>
+      {Array.from({ length: modelCount }, (_, i) => {
+        const modelVal = get(cameraModelKey("Model", i));
+        return (
+          <div key={i} className="border border-[#129cd3]/30 rounded-xl overflow-hidden">
+            {/* Model No. header */}
+            <div className="bg-[#e8f7fc] border-b border-[#129cd3]/20 px-4 py-2.5 flex items-center gap-3">
+              <span className="text-[11px] font-bold text-[#129cd3] uppercase tracking-wide whitespace-nowrap">
+                Model{i > 0 ? ` ${i + 1}` : ""}
+              </span>
+              <input
+                value={modelVal}
+                onChange={(e) => set(cameraModelKey("Model", i), e.target.value)}
+                placeholder="e.g. EOS 1500D"
+                disabled={disabled}
+                className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:text-gray-400"
+              />
+              {i > 0 && (
+                <button
+                  type="button"
+                  onClick={() => removeModel(i)}
+                  disabled={disabled}
+                  className="p-1 text-gray-400 hover:text-red-500 disabled:opacity-40"
+                  title="Remove this model"
+                >
+                  <X size={14} />
+                </button>
               )}
             </div>
-          ) : (
-            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {group.fields.map((field) => (
-                <div
-                  key={field.key}
-                  className={`flex flex-col gap-1 ${(group.fields.length === 1 || field.wide) ? "sm:col-span-2" : ""}`}
-                >
-                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                    {field.key}
-                  </label>
-                  {field.key === "Sensor Size" ? (() => {
-                    const raw = get("Sensor Size");
-                    const m = raw.match(/^([\d.]*)\s*[×x]\s*([\d.]*)/);
-                    const wVal = m ? m[1] : (raw && !/[×x]/.test(raw) ? raw : "");
-                    const hVal = m ? m[2] : "";
-                    const compose = (w: string, h: string) =>
-                      w || h ? `${w} × ${h} mm` : "";
-                    return (
-                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="any"
-                          value={wVal}
-                          onChange={(e) => set("Sensor Size", compose(e.target.value, hVal))}
-                          placeholder="e.g. 35.9"
-                          disabled={disabled}
-                          className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                        />
-                        <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-r border-gray-200 font-medium select-none">×</span>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="any"
-                          value={hVal}
-                          onChange={(e) => set("Sensor Size", compose(wVal, e.target.value))}
-                          placeholder="e.g. 23.9"
-                          disabled={disabled}
-                          className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                        />
-                        <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">mm</span>
-                      </div>
-                    );
-                  })() : YES_NO_KEYS.has(field.key) ? (
-                    <select
-                      value={get(field.key)}
-                      onChange={(e) => set(field.key, e.target.value)}
-                      disabled={disabled}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                    >
-                      <option value="">— Select —</option>
-                      <option value="Yes">Yes</option>
-                      <option value="No">No</option>
-                    </select>
-                  ) : (
-                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
-                      <input
-                        value={get(field.key)}
-                        onChange={(e) => set(field.key, e.target.value)}
-                        placeholder={field.placeholder}
-                        disabled={disabled}
-                        type={field.numeric ? "number" : "text"}
-                        inputMode={field.numeric ? "decimal" : undefined}
-                        min={field.numeric ? "0" : undefined}
-                        step={field.numeric ? "any" : undefined}
-                        className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                      />
-                      {field.unit && (
-                        <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">
-                          {field.unit}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
 
-      {/* Additional free-form specs */}
-      <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-        <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-      </div>
+            {modelVal.trim() ? (
+              <div className="p-3 space-y-4">
+                {/* Lens Included — shown first, gates lens-specific fields */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Lens Included?</label>
+                  <select
+                    value={get(cameraModelKey("Lens Included", i))}
+                    onChange={(e) => set(cameraModelKey("Lens Included", i), e.target.value)}
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">— Select —</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+                {/* Product Name */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
+                  <input
+                    value={get(cameraModelKey("Product Name", i))}
+                    onChange={(e) => set(cameraModelKey("Product Name", i), e.target.value)}
+                    placeholder="e.g. Canon EOS 1500D DSLR Camera Body"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Description */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
+                  <textarea
+                    rows={4}
+                    value={get(cameraModelKey("Description", i))}
+                    onChange={(e) => set(cameraModelKey("Description", i), e.target.value)}
+                    placeholder="Describe key features of this camera model…"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-y bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Spec groups */}
+                {CAMERA_SPEC_GROUPS.map((group) => (
+                  <div key={group.label}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="text-sm leading-none">{group.icon}</span>
+                      <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{group.label}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {group.fields.filter((field) => {
+                        // "Lens Included" is shown above — skip it here
+                        if (field.key === "Lens Included") return false;
+                        // Hide lens name/focal length when lens is not included
+                        const lensVal = get(cameraModelKey("Lens Included", i));
+                        if ((field.key === "Lens Name" || field.key === "Focal Length") && lensVal !== "Yes") return false;
+                        return true;
+                      }).map((field) => {
+                        const k = cameraModelKey(field.key, i);
+                        return (
+                          <div key={k} className={`flex flex-col gap-1 ${(group.fields.length === 1 || field.wide) ? "sm:col-span-2" : ""}`}>
+                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{field.key}</label>
+                            {field.key === "Sensor Size" ? (() => {
+                              const raw = get(k);
+                              const m = raw.match(/^([\d.]*)\s*[×x]\s*([\d.]*)/);
+                              const wVal = m ? m[1] : (raw && !/[×x]/.test(raw) ? raw : "");
+                              const hVal = m ? m[2] : "";
+                              const compose = (w: string, h: string) => w || h ? `${w} × ${h} mm` : "";
+                              return (
+                                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                                  <input type="number" inputMode="decimal" min="0" step="any"
+                                    value={wVal} onChange={(e) => set(k, compose(e.target.value, hVal))}
+                                    placeholder="e.g. 35.9" disabled={disabled}
+                                    className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400" />
+                                  <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-r border-gray-200 font-medium select-none">×</span>
+                                  <input type="number" inputMode="decimal" min="0" step="any"
+                                    value={hVal} onChange={(e) => set(k, compose(wVal, e.target.value))}
+                                    placeholder="e.g. 23.9" disabled={disabled}
+                                    className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400" />
+                                  <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">mm</span>
+                                </div>
+                              );
+                            })() : YES_NO_KEYS.has(field.key) ? (
+                              <select value={get(k)} onChange={(e) => set(k, e.target.value)} disabled={disabled}
+                                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400">
+                                <option value="">— Select —</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                              </select>
+                            ) : (
+                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
+                                <input value={get(k)} onChange={(e) => set(k, e.target.value)}
+                                  placeholder={field.placeholder} disabled={disabled}
+                                  type={field.numeric ? "number" : "text"}
+                                  inputMode={field.numeric ? "decimal" : undefined}
+                                  min={field.numeric ? "0" : undefined}
+                                  step={field.numeric ? "any" : undefined}
+                                  className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400" />
+                                {field.unit && (
+                                  <span className="px-2 py-2 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 font-medium">{field.unit}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {/* Additional free-form specs — scoped to this model */}
+                {(() => {
+                  const sfx = modelExtraSuffix(i);
+                  const modelExtraRows = rows
+                    .filter((r) => {
+                      if (CAMERA_MODEL_SPEC_KEYS.has(r.key)) return false;
+                      if (i === 0) return !otherModelSuffixes.some((s) => r.key.endsWith(s));
+                      return r.key.endsWith(sfx) && !CAMERA_MODEL_SPEC_KEYS.has(r.key.slice(0, -sfx.length));
+                    })
+                    .map((r) => (sfx ? { ...r, key: r.key.slice(0, -sfx.length) } : r));
+                  const setModelExtraRows = (next: SpecRow[]) => {
+                    const withSuffix = next.map((r) => ({ ...r, key: sfx ? `${r.key}${sfx}` : r.key }));
+                    const kept = rows.filter((r) => {
+                      if (CAMERA_MODEL_SPEC_KEYS.has(r.key)) return true;
+                      if (i === 0) return otherModelSuffixes.some((s) => r.key.endsWith(s));
+                      return !(r.key.endsWith(sfx) && !CAMERA_MODEL_SPEC_KEYS.has(r.key.slice(0, -sfx.length)));
+                    });
+                    onChange([...kept, ...withSuffix]);
+                  };
+                  return (
+                    <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                      <SpecsEditor rows={modelExtraRows} onChange={setModelExtraRows} disabled={disabled} />
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <p className="px-4 py-5 text-center text-xs text-gray-400">
+                Enter a model number above to unlock specification fields.
+              </p>
+            )}
+          </div>
+        );
+      })}
+
+      {modelCount < MAX_CAMERA_MODELS && (
+        <button
+          type="button"
+          onClick={() => setModelCount((c) => c + 1)}
+          disabled={disabled}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#129cd3] border border-[#129cd3]/40 px-3 py-2 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+        >
+          <Plus size={14} /> Add Another Model
+        </button>
+      )}
     </div>
   );
 }

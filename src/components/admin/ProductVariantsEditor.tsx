@@ -167,12 +167,17 @@ function comboKey(r: VariantRow, isCamera: boolean, isSmartDevice = false): stri
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-// For cameras images are grouped by body color / lens; for TVs by size+color+launchYear+model; lens by model+color; smart devices by model+color+custom attrs; all others by color.
+// For cameras images are grouped by model+color+launchYear+lensIncluded+lensName; for TVs by size+color+launchYear+model; lens by model+color; smart devices by model+color+custom attrs; all others by color.
 function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): string {
   if (isCamera) {
-    if (r.lensIncluded === "Yes" && r.storage.trim()) return `Lens: ${r.storage.trim()}`;
-    const color = r.color.trim();
-    return color ? `Camera: ${color}` : "Camera";
+    const parts = [
+      r.ram.trim(),
+      r.color.trim(),
+      r.launchYear.trim(),
+      r.lensIncluded === "Yes" ? "WithLens" : "BodyOnly",
+      r.lensIncluded === "Yes" ? r.storage.trim() : "",
+    ].filter(Boolean);
+    return parts.join(" / ") || "Camera";
   }
   if (isLens) {
     const model = r.ram.trim();
@@ -299,13 +304,15 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
   for (const v of variants) {
     let groupKey: string;
     if (isCamera) {
-      const lensName = v.attributes.lens != null ? String(v.attributes.lens).trim() : "";
-      if (v.attributes.lensIncluded === "Yes" && lensName) {
-        groupKey = `Lens: ${lensName}`;
-      } else {
-        const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
-        groupKey = color ? `Camera: ${color}` : "Camera";
-      }
+      const model      = v.attributes.model      != null ? String(v.attributes.model).trim()      : "";
+      const color      = v.attributes.color      != null ? String(v.attributes.color).trim()      : "";
+      const launchYear = v.attributes.launchYear != null ? String(v.attributes.launchYear).trim() : "";
+      const lensFlag   = v.attributes.lensIncluded === "Yes" ? "WithLens" : "BodyOnly";
+      const lensName   = v.attributes.lensIncluded === "Yes" && v.attributes.lens != null
+        ? String(v.attributes.lens).trim()
+        : "";
+      const parts = [model, color, launchYear, lensFlag, lensName].filter(Boolean);
+      groupKey = parts.join(" / ") || "Camera";
     } else if (isLens) {
       const model = (v.attributes.model ?? v.attributes.ram) != null
         ? String(v.attributes.model ?? v.attributes.ram).trim()
@@ -347,10 +354,12 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
   return map;
 }
 
+type CameraSpecModel = { model: string; lensIncluded: string; launchYear: string; lensName: string };
+
 const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
-  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; draftRows?: unknown[]; specModelNos?: string[] }
->(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, draftRows, specModelNos = [] }, ref) {
+  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; draftRows?: unknown[]; specModelNos?: string[]; cameraSpecModels?: CameraSpecModel[] }
+>(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, draftRows, specModelNos = [], cameraSpecModels = [] }, ref) {
   const [isIPhone, setIsIPhone] = useState(false);
   const isLens = isLensCategory(categorySlug);
   const isCamera = !isLens && isCameraCategory(categorySlug);
@@ -784,7 +793,7 @@ const ProductVariantsEditor = forwardRef<
         {rows.map((r) => {
         // Model-no validation: applies to multi-model types (speaker, lens, smart device).
         // If specModelNos is provided, the variant model must match one of the spec models.
-        const hasSpecModels = specModelNos.length > 0 && (isSmartDevice || isSpeaker || isLens);
+        const hasSpecModels = specModelNos.length > 0 && (isSmartDevice || isSpeaker || isLens || isCamera);
         const modelEntered = r.ram.trim() !== "";
         const modelMatched = !hasSpecModels || !modelEntered ||
           specModelNos.some((m) => m.trim().toLowerCase() === r.ram.trim().toLowerCase());
@@ -984,7 +993,22 @@ const ProductVariantsEditor = forwardRef<
                 <Field label="Model No.">
                   <input
                     value={r.ram}
-                    onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const updates: Partial<VariantRow> = { ram: val };
+                      if (isCamera && cameraSpecModels.length > 0) {
+                        const matched = cameraSpecModels.find(
+                          (m) => m.model.trim().toLowerCase() === val.trim().toLowerCase(),
+                        );
+                        if (matched) {
+                          if (matched.launchYear)   updates.launchYear   = matched.launchYear;
+                          if (matched.lensIncluded) updates.lensIncluded = matched.lensIncluded;
+                          if (matched.lensIncluded !== "Yes") updates.storage = "";
+                          else if (matched.lensName) updates.storage = matched.lensName;
+                        }
+                      }
+                      updateRow(r.uid, updates);
+                    }}
                     placeholder="e.g. EOS R50"
                     disabled={disabled}
                     className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
