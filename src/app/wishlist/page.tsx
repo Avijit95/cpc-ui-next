@@ -17,7 +17,7 @@ import type { ListCard, Variant } from "@/lib/api";
 export default function WishlistPage() {
   const router = useRouter();
   const { status } = useAuth();
-  const { items, loading, error, setItems, refresh } = useWishlist();
+  const { items, loading, error, refresh } = useWishlist();
   const { stocks, setStock } = useStock();
 
   const [productDetails, setProductDetails] = useState<Record<string, ProductDetail>>({});

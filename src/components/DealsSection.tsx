@@ -221,7 +221,7 @@ export default function DealsSection() {
     const delta = clientX - dragStartX.current;
     dragStartX.current = null;
     if (Math.abs(delta) >= SWIPE_THRESHOLD) {
-      delta < 0 ? nextDeal() : prevDeal();
+      if (delta < 0) nextDeal(); else prevDeal();
     }
   };
 

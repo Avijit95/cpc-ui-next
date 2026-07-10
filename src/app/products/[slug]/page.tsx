@@ -7,7 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
 import type { ProductDetail, Variant, Review, ReviewListResponse, ListCard } from "@/lib/api";
-import ProductCard, { ProductCardExpander, ProductCardSkeleton } from "@/components/ProductCard";
+import { ProductCardExpander, ProductCardSkeleton } from "@/components/ProductCard";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
@@ -2233,7 +2233,6 @@ const SPEAKER_PER_MODEL_SPEC_BASES = [
 
 // Convenience aliases kept for the lens-specific helpers below
 const lensKeyForIdx = multiModelKey;
-const getActiveLensModelIndex = getActiveModelIndex;
 
 function humanizeSpecKey(key: string): string {
   const spaced = key

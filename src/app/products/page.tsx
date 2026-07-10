@@ -1061,7 +1061,6 @@ function PriceSortedGrid({ products, dir }: { products: ListCard[]; dir: "asc" |
       setFlat(items);
     });
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, dir]);
 
   // While fetching, fall back to product-level sorted cards

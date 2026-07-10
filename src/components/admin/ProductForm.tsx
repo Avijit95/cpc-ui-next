@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,10 +17,7 @@ import "react-image-crop/dist/ReactCrop.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Check,
   ChevronLeft,
-  ChevronRight,
-  ImagePlus,
   Link2,
   Loader2,
   Plus,
@@ -311,12 +309,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const [images, setImages] = useState<ProductImageItem[]>(() =>
     initProductImages(initial),
   );
-  const [imageError, setImageError] = useState<string | null>(null);
+  const [, setImageError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<
     { current: number; total: number } | null
   >(null);
   const [processingCount, setProcessingCount] = useState(0);
-  const [autoRemoveBg, setAutoRemoveBg] = useState(true);
+  const autoRemoveBg = true;
   // Crop-modal queue: files validated but not yet cropped/processed.
   const [cropQueue, setCropQueue] = useState<File[]>([]);
   const [cropModal, setCropModal] = useState<{ src: string; file: File } | null>(null);
@@ -440,6 +438,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode.kind]);
 
   const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -548,7 +547,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   }, [cropModal, advanceCrop, processAndAdd, autoRemoveBg]);
 
   // Validate files and push them into the crop queue.
-  const onPickFiles = useCallback(
+  const _onPickFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
       setImageError(null);
@@ -578,7 +577,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     [remainingSlots],
   );
 
-  const removeImage = (id: string) => {
+  const _removeImage = (id: string) => {
     setImages((curr) => {
       const removed = curr.find((it) => it.id === id);
       if (removed?.kind === "pending") URL.revokeObjectURL(removed.previewUrl);
@@ -587,7 +586,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   };
 
   // Move an image one slot earlier (dir -1) or later (dir +1) — its display rank.
-  const moveImage = (id: string, dir: -1 | 1) => {
+  const _moveImage = (id: string, dir: -1 | 1) => {
     setImages((curr) => {
       const i = curr.findIndex((it) => it.id === id);
       const j = i + dir;
@@ -599,7 +598,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   };
 
   // Move any image to position 0 (makes it the main/display photo).
-  const setAsMain = (id: string) => {
+  const _setAsMain = (id: string) => {
     setImages((curr) => {
       const i = curr.findIndex((it) => it.id === id);
       if (i <= 0) return curr;
@@ -610,7 +609,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     });
   };
 
-  const toggleScraped = (url: string) => {
+  const _toggleScraped = (url: string) => {
     setImageError(null);
     const target = scrapedImages.find((i) => i.url === url);
     if (!target) return;
@@ -935,7 +934,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const busy = submitting !== null;
   const isEdit = mode.kind === "edit";
   const currentStatus = isEdit ? mode.initial.status : "DRAFT";
-  const atImageLimit = totalImageCount >= MAX_IMAGES;
+  const _atImageLimit = totalImageCount >= MAX_IMAGES;
 
   // Show variants for all products so any category can manage stock via variants.
   const showVariants = true;
@@ -3145,7 +3144,7 @@ function SmartDeviceSpecsEditor({
   const [sectionsByModel, setSectionsByModel] = useState<SDSection[][]>(() => initSDSections(rows));
 
   const rowsRef = useRef(rows);
-  rowsRef.current = rows;
+  useLayoutEffect(() => { rowsRef.current = rows; });
 
   // Sync dynamic sections → parent rows (only fires on section state change)
   useEffect(() => {

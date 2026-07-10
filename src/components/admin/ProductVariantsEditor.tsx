@@ -660,7 +660,7 @@ const ProductVariantsEditor = forwardRef<
         }
       },
     }),
-    [rows, colors, colorImages, productName, initialVariants, isCamera, isTV, isSpeaker, isSmartDevice, attrColumns],
+    [rows, colors, colorImages, productName, initialVariants, isCamera, isTV, isSpeaker, isLens, isSmartDevice, attrColumns],
   );
 
   return (
