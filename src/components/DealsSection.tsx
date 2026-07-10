@@ -226,7 +226,7 @@ export default function DealsSection() {
   };
 
   return (
-    <section className="py-8 px-[10px] xs:px-4 bg-gray-50">
+    <section className="py-8 px-[10px] xs:px-4 bg-white/20">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3" style={{ gap: "clamp(7px, 1.1vw, 20px)" }}>
         {/* Today Deals */}
         <div className="md:col-span-2 border border-gray-200 p-4 bg-white shadow-sm">
@@ -251,7 +251,7 @@ export default function DealsSection() {
             </div>
 
             <div
-              className="pt-14 xs:p-5 xs:pt-14 flex flex-col xs:flex-row xs:items-center gap-3 relative select-none"
+              className="pt-14 xs:p-5 xs:pt-14 flex flex-col min-[1100px]:flex-row min-[1100px]:items-center gap-3 relative select-none"
               onMouseDown={(e) => onDragStart(e.clientX)}
               onMouseMove={(e) => onDragMove(e.clientX)}
               onMouseUp={(e) => onDragEnd(e.clientX)}
@@ -261,7 +261,7 @@ export default function DealsSection() {
               onTouchEnd={(e) => onDragEnd(e.changedTouches[0].clientX)}
             >
               {/* Image row: arrows flank the image on all sizes */}
-              <div className="flex items-center justify-center gap-[5px] xs:gap-3 xs:contents">
+              <div className="flex items-center justify-center gap-[5px] xs:gap-3 min-[1100px]:contents">
                 {/* Prev Arrow */}
                 <button
                   onClick={prevDeal}

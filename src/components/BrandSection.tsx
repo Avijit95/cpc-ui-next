@@ -2,7 +2,7 @@ import { brands } from "@/data/products";
 
 export default function BrandSection() {
   return (
-    <section className="py-8 px-4 bg-white border-b border-gray-100">
+    <section className="py-8 px-4 bg-white/20 section-gradient-border">
       <div className="max-w-7xl mx-auto">
         <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide border-l-4 border-orange-500 pl-3 mb-6">
           OUR BRANDS

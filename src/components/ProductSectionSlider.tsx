@@ -89,7 +89,7 @@ export default function ProductSectionSlider({ title, items, viewAllHref }: Prop
   };
 
   return (
-    <section className="py-8 px-4 bg-white border-b border-gray-100">
+    <section className="py-8 px-4 bg-white/20 section-gradient-border">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">

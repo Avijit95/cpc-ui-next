@@ -21,7 +21,7 @@ export default function CategorySlider({ items }: { items: Category[] }) {
   };
 
   return (
-    <section className="py-8 px-4 bg-white border-b border-gray-100">
+    <section className="py-8 px-4 bg-white/20 section-gradient-border">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xs font-bold text-white bg-[#129cd3] px-4 py-2 uppercase tracking-wide">
