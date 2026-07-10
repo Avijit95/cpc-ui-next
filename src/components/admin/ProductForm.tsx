@@ -349,8 +349,15 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const [pendingDraft, setPendingDraft] = useState<DraftPayload | null>(() => {
     const draft = loadDraft(draftKey);
     if (!draft) return null;
-    // For create mode, skip empty drafts (no name yet means nothing meaningful was typed).
-    if (mode.kind === "create" && !draft.form.name) return null;
+    // For create mode, skip truly empty drafts (nothing meaningful entered yet).
+    if (mode.kind === "create") {
+      const hasContent =
+        !!draft.form.name ||
+        !!draft.form.description ||
+        draft.specRows.some((r) => r.value?.trim()) ||
+        draft.variantRows.length > 0;
+      if (!hasContent) return null;
+    }
     return draft;
   });
   // Draft variant rows passed directly to the editor as an initialisation prop.
@@ -376,7 +383,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, specRows, images]);
 
-  // Also save variant rows every 20 s (covers variant-only changes between form saves).
+  // Also save variant rows every 5 s (covers variant-only changes between form saves).
   useEffect(() => {
     const id = setInterval(() => {
       saveDraft(draftKey, {
@@ -388,7 +395,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           .map((i) => (i as Extract<typeof i, { kind: "pending" }>).file.name),
         savedAt: Date.now(),
       });
-    }, 20000);
+    }, 5000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, specRows, images]);
@@ -463,12 +470,14 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const isTv      = slug.includes("tv")       || name.includes("tv")       || name.includes("television");
     const isLens    = slug.includes("lens")      || name.includes("lens");
     const isCamera  = !isLens && (slug.includes("camera") || name.includes("camera"));
-    const isSpeaker = slug.includes("speaker")  || name.includes("speaker");
-    if (isPhone)   return { productName: "e.g. Samsung Galaxy S24 Ultra", slugHint: "e.g. samsung-galaxy-s24-ultra", brand: "e.g. Apple, Samsung, OnePlus" };
-    if (isTv)      return { productName: 'e.g. Samsung 55" 4K QLED Smart TV', slugHint: "e.g. samsung-55-4k-qled-smart-tv", brand: "e.g. Samsung, LG, Sony" };
-    if (isLens)    return { productName: "e.g. Sony FE 200-600mm F5.6-6.3 G OSS", slugHint: "e.g. sony-fe-200-600mm-f5-6", brand: "e.g. Sony, Canon, Sigma" };
-    if (isCamera)  return { productName: "e.g. Sony Alpha A7 IV Mirrorless Camera", slugHint: "e.g. sony-alpha-a7-iv", brand: "e.g. Sony, Canon, Nikon" };
-    if (isSpeaker) return { productName: "e.g. JBL Charge 5 Portable Bluetooth Speaker", slugHint: "e.g. jbl-charge-5", brand: "e.g. JBL, Sony, Bose" };
+    const isSpeaker      = slug.includes("speaker")  || name.includes("speaker");
+    const isSmartDevice  = !isTv && (slug.includes("smart") || name.includes("smart"));
+    if (isPhone)        return { productName: "e.g. Samsung Galaxy S24 Ultra", slugHint: "e.g. samsung-galaxy-s24-ultra", brand: "e.g. Apple, Samsung, OnePlus" };
+    if (isTv)           return { productName: 'e.g. Samsung 55" 4K QLED Smart TV', slugHint: "e.g. samsung-55-4k-qled-smart-tv", brand: "e.g. Samsung, LG, Sony" };
+    if (isLens)         return { productName: "e.g. Sony FE 200-600mm F5.6-6.3 G OSS", slugHint: "e.g. sony-fe-200-600mm-f5-6", brand: "e.g. Sony, Canon, Sigma" };
+    if (isCamera)       return { productName: "e.g. Sony Alpha A7 IV Mirrorless Camera", slugHint: "e.g. sony-alpha-a7-iv", brand: "e.g. Sony, Canon, Nikon" };
+    if (isSpeaker)      return { productName: "e.g. JBL Charge 5 Portable Bluetooth Speaker", slugHint: "e.g. jbl-charge-5", brand: "e.g. JBL, Sony, Bose" };
+    if (isSmartDevice)  return { productName: "e.g. Amazon Echo Dot (5th Gen)", slugHint: "e.g. amazon-echo-dot-5th-gen", brand: "e.g. Amazon, Google, Apple" };
     return { productName: "e.g. Product Name", slugHint: "e.g. product-name", brand: "e.g. Brand Name" };
   }, [categories, form.categoryId]);
 
@@ -691,14 +700,20 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const buildBody = (
     status: ProductStatus,
   ): CreateProductBody | { error: string } => {
-    const name = form.name.trim();
     const _bCatSlug = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
     const _bCatName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
     const _bIsLens    = _bCatSlug.includes("lens") || _bCatName.includes("lens");
-    const _bIsSpeaker = _bCatSlug.includes("speaker") || _bCatName.includes("speaker");
-    const _bIsTv      = _bCatSlug.includes("tv") || _bCatName.includes("tv") || _bCatName.includes("television");
-    const _bNameOptional = _bIsLens || _bIsSpeaker || _bIsTv;
+    const _bIsSpeaker     = _bCatSlug.includes("speaker") || _bCatName.includes("speaker");
+    const _bIsTv          = _bCatSlug.includes("tv") || _bCatName.includes("tv") || _bCatName.includes("television");
+    const _bIsSmartDevice = !_bIsTv && (_bCatSlug.includes("smart") || _bCatName.includes("smart"));
+    const _bNameOptional  = _bIsLens || _bIsSpeaker || _bIsTv || _bIsSmartDevice;
+    // For smart devices the name comes from the first model's "Product Name" spec row.
+    const _sdName = _bIsSmartDevice
+      ? (specRows.find((r) => r.key === "Product Name")?.value ?? "").trim()
+      : "";
+    const name = form.name.trim() || _sdName;
     if (!name && !_bNameOptional) return { error: "Product name is required." };
+    if (_bIsSmartDevice && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
     if (!form.categoryId) return { error: "Pick a category." };
 
     const description = form.description;
@@ -1084,10 +1099,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           {(() => {
             const _siCatSlug = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
             const _siCatName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
-            const _siIsLens    = _siCatSlug.includes("lens") || _siCatName.includes("lens");
-            const _siIsSpeaker = _siCatSlug.includes("speaker") || _siCatName.includes("speaker");
-            const _siIsTv      = _siCatSlug.includes("tv") || _siCatName.includes("tv") || _siCatName.includes("television");
-            if (_siIsLens || _siIsSpeaker || _siIsTv) return null;
+            const _siIsLens        = _siCatSlug.includes("lens") || _siCatName.includes("lens");
+            const _siIsSpeaker     = _siCatSlug.includes("speaker") || _siCatName.includes("speaker");
+            const _siIsTv          = _siCatSlug.includes("tv") || _siCatName.includes("tv") || _siCatName.includes("television");
+            const _siIsSmartDevice = !_siIsTv && (_siCatSlug.includes("smart") || _siCatName.includes("smart"));
+            if (_siIsLens || _siIsSpeaker || _siIsTv || _siIsSmartDevice) return null;
             return (
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Basic Information</h3>
@@ -1105,11 +1121,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             {(() => {
               const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
               const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
-              const _isLens = _cs.includes("lens") || _cn.includes("lens");
-              const _isSpeaker = _cs.includes("speaker") || _cn.includes("speaker");
-              const _isTv = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
-              const _isCamera = !_isLens && (_cs.includes("camera") || _cn.includes("camera"));
-              const _hideSlug = _isLens || _isSpeaker || _isTv || _isCamera;
+              const _isLens        = _cs.includes("lens") || _cn.includes("lens");
+              const _isSpeaker     = _cs.includes("speaker") || _cn.includes("speaker");
+              const _isTv          = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
+              const _isCamera      = !_isLens && (_cs.includes("camera") || _cn.includes("camera"));
+              const _isSmartDevice = !_isTv && (_cs.includes("smart") || _cn.includes("smart"));
+              const _hideSlug      = _isLens || _isSpeaker || _isTv || _isCamera || _isSmartDevice;
               return _hideSlug ? null : (
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Slug</label>
@@ -1125,10 +1142,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             {(() => {
               const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
               const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
-              const _isLens = _cs.includes("lens") || _cn.includes("lens");
-              const _isSpeaker = _cs.includes("speaker") || _cn.includes("speaker");
-              const _isTv = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
-              return !_isLens && !_isSpeaker && !_isTv ? (
+              const _isLens        = _cs.includes("lens") || _cn.includes("lens");
+              const _isSpeaker     = _cs.includes("speaker") || _cn.includes("speaker");
+              const _isTv          = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
+              const _isSmartDevice = !_isTv && (_cs.includes("smart") || _cn.includes("smart"));
+              return !_isLens && !_isSpeaker && !_isTv && !_isSmartDevice ? (
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
                     Description
@@ -1168,7 +1186,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const isTv = catSlug.includes("tv") || catName.includes("tv") || catName.includes("television");
               const isLens = catSlug.includes("lens") || catName.includes("lens");
               const isCamera = !isLens && (catSlug.includes("camera") || catName.includes("camera"));
-              const isSpeaker = catSlug.includes("speaker") || catName.includes("speaker");
+              const isSpeaker      = catSlug.includes("speaker") || catName.includes("speaker");
+              const isSmartDevice  = !isTv && (catSlug.includes("smart") || catName.includes("smart"));
               return isPhone ? (
                 <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} isIPhone={isIPhone} onIsIPhoneChange={setIsIPhone} />
               ) : isTv ? (
@@ -1179,6 +1198,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 <CameraSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isSpeaker ? (
                 <SpeakerSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+              ) : isSmartDevice ? (
+                <SmartDeviceSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : (
                 <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
               );
@@ -1188,6 +1209,20 @@ export default function ProductForm({ mode }: { mode: Mode }) {
 
           {showVariants && (() => {
             const catSlug = categories.find((c) => c.id === form.categoryId)?.slug;
+            const catName = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
+            const _cs = catSlug?.toLowerCase() ?? "";
+            const _isLensV    = _cs.includes("lens")    || catName.includes("lens");
+            const _isSpeakerV = _cs.includes("speaker") || catName.includes("speaker");
+            const _isTvV      = _cs.includes("tv")      || catName.includes("tv") || catName.includes("television");
+            const _isSmartDevV = !_isTvV && (_cs.includes("smart") || catName.includes("smart"));
+            const _needsModelCheck = _isLensV || _isSpeakerV || _isSmartDevV;
+            // Extract spec model nos for multi-model types (Model, Model 2, Model 3 …).
+            const specModelNos = _needsModelCheck
+              ? Array.from({ length: 5 }, (_, i) => {
+                  const key = i === 0 ? "Model" : `Model ${i + 1}`;
+                  return specRows.find((r) => r.key === key)?.value?.trim() ?? "";
+                }).filter(Boolean)
+              : [];
             // Key includes catSlug so the editor remounts once categories load,
             // ensuring isTV/isCamera are correct when initRows/initColorImages run.
             // restoreKey forces a remount on draft restore so draftRows are picked up.
@@ -1202,6 +1237,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 categorySlug={catSlug}
                 hideRam={isIPhone}
                 draftRows={draftInitRows ?? undefined}
+                specModelNos={specModelNos}
               />
             );
           })()}
@@ -1554,7 +1590,7 @@ function tvSizeKey(base: string, idx: number): string {
   return idx === 0 ? base : `${base} ${idx + 1}`;
 }
 
-type TvSpecField = { key: string; placeholder?: string; unit?: string; wide?: boolean; numeric?: boolean };
+type TvSpecField = { key: string; placeholder?: string; unit?: string; wide?: boolean; numeric?: boolean; numericRange?: boolean };
 type TvSpecGroup = { label: string; icon: string; fields: TvSpecField[] };
 
 // Keys that differ per screen size
@@ -1593,8 +1629,8 @@ const TV_PER_SIZE_GROUPS: TvSpecGroup[] = [
       { key: "Display Technology",  placeholder: "e.g. LED, QLED, OLED" },
       { key: "Resolution",          placeholder: "e.g. 3840 × 2160 (4K Ultra HD)" },
       { key: "LED Arrangement",     placeholder: "e.g. Direct Lit" },
-      { key: "Viewing Angle",       placeholder: "e.g. 178°" },
-      { key: "Aspect Ratio",        placeholder: "e.g. 16:9" },
+      { key: "Viewing Angle",       placeholder: "e.g. 178", unit: "°", numeric: true },
+      { key: "Aspect Ratio",        placeholder: "e.g. 16:9", numericRange: true },
     ],
   },
   {
@@ -1697,10 +1733,9 @@ function TvSpecsEditor({
     setSizeCount((c) => Math.max(1, c - 1));
   };
 
-  const extraRows = rows.filter((r) => !TV_SPEC_KEYS.has(r.key));
-  const setExtraRows = (next: SpecRow[]) => {
-    onChange([...rows.filter((r) => TV_SPEC_KEYS.has(r.key)), ...next]);
-  };
+  // Per-size extra-row helpers (same suffix convention as tvSizeKey: "" for size 0, " 2" for size 1, etc.)
+  const tvExtraSuffix = (idx: number) => (idx === 0 ? "" : ` ${idx + 1}`);
+  const otherTvSuffixes = Array.from({ length: MAX_TV_SIZES - 1 }, (_, j) => ` ${j + 2}`);
 
   return (
     <div className="space-y-4">
@@ -1714,13 +1749,20 @@ function TvSpecsEditor({
               <span className="text-[11px] font-bold text-[#129cd3] uppercase tracking-wide whitespace-nowrap">
                 Screen Size{i > 0 ? ` ${i + 1}` : ""}
               </span>
-              <input
-                value={sizeVal}
-                onChange={(e) => set(tvSizeKey("Screen Size", i), e.target.value)}
-                placeholder='Enter screen size to unlock spec fields… e.g. 43"'
-                disabled={disabled}
-                className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
-              />
+              <div className="flex-1 flex items-center border border-[#129cd3]/40 rounded-lg overflow-hidden focus-within:border-[#129cd3] bg-white">
+                <input
+                  value={sizeVal}
+                  onChange={(e) => set(tvSizeKey("Screen Size", i), e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="e.g. 43"
+                  disabled={disabled}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  className="flex-1 px-3 py-1.5 text-sm outline-none bg-transparent disabled:text-gray-400"
+                />
+                <span className="px-2 py-1.5 text-xs text-gray-400 bg-gray-50 border-l border-[#129cd3]/30 font-medium select-none">inch</span>
+              </div>
               {i > 0 && (
                 <button
                   type="button"
@@ -1787,11 +1829,13 @@ function TvSpecsEditor({
                             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#129cd3] transition-colors">
                               <input
                                 value={get(k)}
-                                onChange={(e) => set(k, e.target.value)}
+                                onChange={(e) => set(k, field.numericRange
+                                  ? e.target.value.replace(/[^0-9.:]/g, "")
+                                  : e.target.value)}
                                 placeholder={field.placeholder}
                                 disabled={disabled}
                                 type={field.numeric ? "number" : "text"}
-                                inputMode={field.numeric ? "decimal" : undefined}
+                                inputMode={field.numeric || field.numericRange ? "decimal" : undefined}
                                 min={field.numeric ? "0" : undefined}
                                 step={field.numeric ? "any" : undefined}
                                 className="flex-1 px-3 py-2 text-sm outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -1814,13 +1858,34 @@ function TvSpecsEditor({
                 Enter a screen size above to unlock specification fields.
               </p>
             )}
-            {/* Additional free-form specs — always visible at the bottom of each size card */}
-            <div className="border-t border-gray-100 p-3">
-              <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
-                <SpecsEditor rows={extraRows} onChange={setExtraRows} disabled={disabled} />
-              </div>
-            </div>
+            {/* Additional free-form specs — scoped to this size */}
+            {(() => {
+              const sfx = tvExtraSuffix(i);
+              const sizeExtraRows = rows
+                .filter((r) => {
+                  if (TV_SPEC_KEYS.has(r.key)) return false;
+                  if (i === 0) return !otherTvSuffixes.some((s) => r.key.endsWith(s));
+                  return r.key.endsWith(sfx) && !TV_SPEC_KEYS.has(r.key.slice(0, -sfx.length));
+                })
+                .map((r) => (sfx ? { ...r, key: r.key.slice(0, -sfx.length) } : r));
+              const setSizeExtraRows = (next: SpecRow[]) => {
+                const withSuffix = next.map((r) => ({ ...r, key: sfx ? `${r.key}${sfx}` : r.key }));
+                const kept = rows.filter((r) => {
+                  if (TV_SPEC_KEYS.has(r.key)) return true;
+                  if (i === 0) return otherTvSuffixes.some((s) => r.key.endsWith(s));
+                  return !(r.key.endsWith(sfx) && !TV_SPEC_KEYS.has(r.key.slice(0, -sfx.length)));
+                });
+                onChange([...kept, ...withSuffix]);
+              };
+              return (
+                <div className="border-t border-gray-100 p-3">
+                  <div className="border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Additional Specs</p>
+                    <SpecsEditor rows={sizeExtraRows} onChange={setSizeExtraRows} disabled={disabled} />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })}
@@ -2959,6 +3024,323 @@ function SpeakerSpecsEditor({
 
       {/* Add another model */}
       {modelCount < MAX_SPEAKER_MODELS && (
+        <button
+          type="button"
+          onClick={() => setModelCount((c) => c + 1)}
+          disabled={disabled}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#129cd3] border border-[#129cd3]/40 px-3 py-2 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+        >
+          <Plus size={14} /> Add Another Model
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Smart Device-specific structured spec editor ──────────────────────────────
+
+const MAX_SMART_DEVICE_MODELS = 5;
+
+function smartDeviceModelKey(base: string, idx: number): string {
+  return idx === 0 ? base : `${base} ${idx + 1}`;
+}
+
+const SD_RESERVED_BASE_KEYS = ["Model", "Product Name", "Product Type", "Slug", "Description", "Color"];
+const SD_RESERVED_KEY_SET = new Set(
+  SD_RESERVED_BASE_KEYS.flatMap((k) =>
+    Array.from({ length: MAX_SMART_DEVICE_MODELS }, (_, i) => smartDeviceModelKey(k, i)),
+  ),
+);
+
+type SDField   = { id: string; key: string; value: string };
+type SDSection = { id: string; heading: string; fields: SDField[] };
+
+const SD_HEADING_RE = /^__h\d+$/;
+const SD_FIELD_PREFIX_RE = /^__h(\d+):(.+)$/;
+
+function initSDSections(rows: SpecRow[]): SDSection[][] {
+  return Array.from({ length: MAX_SMART_DEVICE_MODELS }, (_, mi) => {
+    const reservedForModel = new Set(SD_RESERVED_BASE_KEYS.map((k) => smartDeviceModelKey(k, mi)));
+    // Collect raw rows for this model with their base keys (model suffix stripped).
+    type RawRow = { id: string; baseKey: string; value: string };
+    let rawRows: RawRow[];
+    if (mi === 0) {
+      rawRows = rows
+        .filter((r) => !SD_RESERVED_KEY_SET.has(r.key) && !/\s\d+$/.test(r.key))
+        .map((r) => ({ id: r.id, baseKey: r.key, value: r.value }));
+    } else {
+      const suffix = ` ${mi + 1}`;
+      rawRows = rows
+        .filter((r) => !reservedForModel.has(r.key) && r.key.endsWith(suffix))
+        .map((r) => ({ id: r.id, baseKey: r.key.slice(0, -suffix.length), value: r.value }));
+    }
+    if (rawRows.length === 0) return [{ id: uid(), heading: "", fields: [] }];
+
+    // New format: fields stored as __hN:fieldKey — order-independent reconstruction.
+    const hasNewFormat = rawRows.some((r) => SD_FIELD_PREFIX_RE.test(r.baseKey));
+    if (hasNewFormat) {
+      const headings = new Map<number, string>();
+      const fieldsBySection = new Map<number, SDField[]>();
+      for (const row of rawRows) {
+        const hm = row.baseKey.match(/^__h(\d+)$/);
+        if (hm) { headings.set(+hm[1], row.value); continue; }
+        const fm = row.baseKey.match(/^__h(\d+):(.+)$/);
+        if (fm) {
+          const si = +fm[1];
+          if (!fieldsBySection.has(si)) fieldsBySection.set(si, []);
+          fieldsBySection.get(si)!.push({ id: row.id, key: fm[2], value: row.value });
+        }
+      }
+      const maxSi = Math.max(-1, ...headings.keys(), ...fieldsBySection.keys());
+      if (maxSi < 0) return [{ id: uid(), heading: "", fields: [] }];
+      return Array.from({ length: maxSi + 1 }, (_, si) => ({
+        id: uid(),
+        heading: headings.get(si) ?? "",
+        fields: fieldsBySection.get(si) ?? [],
+      }));
+    }
+
+    // Legacy format: __hN marker rows interleaved — order-dependent (may fail after JSONB round-trip).
+    const sections: SDSection[] = [];
+    let cur: SDSection = { id: uid(), heading: "", fields: [] };
+    for (const row of rawRows) {
+      if (SD_HEADING_RE.test(row.baseKey)) {
+        if (cur.fields.length > 0 || cur.heading) sections.push(cur);
+        cur = { id: uid(), heading: row.value, fields: [] };
+      } else {
+        cur.fields.push({ id: row.id, key: row.baseKey, value: row.value });
+      }
+    }
+    sections.push(cur);
+    return sections.length > 0 ? sections : [{ id: uid(), heading: "", fields: [] }];
+  });
+}
+
+function SmartDeviceSpecsEditor({
+  rows,
+  onChange,
+  disabled,
+}: {
+  rows: SpecRow[];
+  onChange: (rows: SpecRow[]) => void;
+  disabled: boolean;
+}) {
+  const get = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
+  const setVal = (key: string, value: string) => {
+    if (rows.some((r) => r.key === key)) {
+      onChange(rows.map((r) => r.key === key ? { ...r, value } : r));
+    } else {
+      onChange([...rows, { id: uid(), key, value }]);
+    }
+  };
+
+  const [modelCount, setModelCount] = useState(() => {
+    let count = 1;
+    for (let i = 1; i < MAX_SMART_DEVICE_MODELS; i++) {
+      if (rows.some((r) => r.key === smartDeviceModelKey("Model", i))) count = i + 1;
+    }
+    return count;
+  });
+
+  const [sectionsByModel, setSectionsByModel] = useState<SDSection[][]>(() => initSDSections(rows));
+
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  // Sync dynamic sections → parent rows (only fires on section state change)
+  useEffect(() => {
+    const reservedRows = rowsRef.current.filter((r) => SD_RESERVED_KEY_SET.has(r.key));
+    const dynRows: SpecRow[] = [];
+    sectionsByModel.forEach((sections, mi) => {
+      sections.forEach((sec, si) => {
+        // Persist heading as a marker row (__hN). Fields are stored with section prefix
+        // (__hN:fieldKey) so reconstruction is order-independent (backend may sort keys).
+        dynRows.push({ id: uid(), key: smartDeviceModelKey(`__h${si}`, mi), value: sec.heading });
+        sec.fields.forEach((f) => {
+          if (f.key.trim()) {
+            dynRows.push({ id: f.id, key: smartDeviceModelKey(`__h${si}:${f.key}`, mi), value: f.value });
+          }
+        });
+      });
+    });
+    onChange([...reservedRows, ...dynRows]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionsByModel]);
+
+  const updateSections = (mi: number, updater: (secs: SDSection[]) => SDSection[]) =>
+    setSectionsByModel((prev) => {
+      const next = [...prev];
+      next[mi] = updater(next[mi] ?? []);
+      return next;
+    });
+
+  const removeModel = (i: number) => {
+    // Clear reserved rows for this model
+    const reservedForModel = new Set(SD_RESERVED_BASE_KEYS.map((k) => smartDeviceModelKey(k, i)));
+    onChange(rowsRef.current.filter((r) => !reservedForModel.has(r.key)));
+    // Clear dynamic sections for this model
+    setSectionsByModel((prev) => {
+      const next = [...prev];
+      next[i] = [{ id: uid(), heading: "", fields: [] }];
+      return next;
+    });
+    setModelCount((c) => Math.max(1, c - 1));
+  };
+
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: modelCount }, (_, i) => {
+        const modelVal = get(smartDeviceModelKey("Model", i));
+        const sections = sectionsByModel[i] ?? [];
+        return (
+          <div key={i} className="border border-[#129cd3]/30 rounded-xl overflow-hidden">
+            {/* Model No. row */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-[#e8f7fc]">
+              <span className="text-xs font-bold text-[#129cd3] uppercase tracking-wide whitespace-nowrap">Model {i + 1}</span>
+              <input
+                value={modelVal}
+                onChange={(e) => setVal(smartDeviceModelKey("Model", i), e.target.value)}
+                placeholder="Enter model no. to unlock spec fields…"
+                disabled={disabled}
+                className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+              />
+              {i > 0 && (
+                <button type="button" onClick={() => removeModel(i)} disabled={disabled} className="text-red-400 hover:text-red-600 disabled:opacity-40">
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+
+            {modelVal && (
+              <div className="p-4 space-y-4 bg-white">
+                {/* Reserved fields */}
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
+                      <input
+                        value={get(smartDeviceModelKey("Product Name", i))}
+                        onChange={(e) => setVal(smartDeviceModelKey("Product Name", i), e.target.value)}
+                        placeholder="e.g. Amazon Echo Dot (5th Gen)"
+                        disabled={disabled}
+                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Type</label>
+                      <input
+                        value={get(smartDeviceModelKey("Product Type", i))}
+                        onChange={(e) => setVal(smartDeviceModelKey("Product Type", i), e.target.value)}
+                        placeholder="e.g. Smart Speaker, Smart Plug"
+                        disabled={disabled}
+                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Slug</label>
+                    <input
+                      value={get(smartDeviceModelKey("Slug", i))}
+                      onChange={(e) => setVal(smartDeviceModelKey("Slug", i), e.target.value)}
+                      placeholder="e.g. amazon-echo-dot-5th-gen (auto-generated if empty)"
+                      disabled={disabled}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] font-mono bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
+                    <textarea
+                      rows={4}
+                      value={get(smartDeviceModelKey("Description", i))}
+                      onChange={(e) => setVal(smartDeviceModelKey("Description", i), e.target.value)}
+                      placeholder="Describe key features and what makes this model great…"
+                      disabled={disabled}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-y bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Dynamic spec sections */}
+                <div className="space-y-3">
+                  {sections.map((sec, si) => (
+                    <div key={sec.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* Section heading input */}
+                      <div className="flex items-center gap-2 px-3 py-2 bg-[#ebebeb] border-b border-gray-200">
+                        <svg className="w-3 h-3 text-[#6e6e6e]/50 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H7v-3a2 2 0 01.586-1.414z" /></svg>
+                        <input
+                          value={sec.heading}
+                          onChange={(e) => updateSections(i, (secs) => secs.map((s, idx) => idx === si ? { ...s, heading: e.target.value } : s))}
+                          placeholder="SECTION HEADING"
+                          disabled={disabled}
+                          className="flex-1 bg-transparent text-xs font-extrabold text-[#6e6e6e] uppercase tracking-widest placeholder:text-[#6e6e6e]/40 outline-none border-none"
+                        />
+                        {sections.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => updateSections(i, (secs) => secs.filter((_, idx) => idx !== si))}
+                            disabled={disabled}
+                            className="text-red-400 hover:text-red-600 disabled:opacity-40"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                      {/* Fields */}
+                      <div className="p-3 space-y-2">
+                        {sec.fields.map((field, fi) => (
+                          <div key={field.id} className="flex items-center gap-2">
+                            <input
+                              value={field.key}
+                              onChange={(e) => updateSections(i, (secs) => secs.map((s, idx) => idx === si ? { ...s, fields: s.fields.map((f, fIdx) => fIdx === fi ? { ...f, key: e.target.value } : f) } : s))}
+                              placeholder="Spec name"
+                              disabled={disabled}
+                              className="w-2/5 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                            />
+                            <input
+                              value={field.value}
+                              onChange={(e) => updateSections(i, (secs) => secs.map((s, idx) => idx === si ? { ...s, fields: s.fields.map((f, fIdx) => fIdx === fi ? { ...f, value: e.target.value } : f) } : s))}
+                              placeholder="Value"
+                              disabled={disabled}
+                              className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateSections(i, (secs) => secs.map((s, idx) => idx === si ? { ...s, fields: s.fields.filter((_, fIdx) => fIdx !== fi) } : s))}
+                              disabled={disabled}
+                              className="text-red-400 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => updateSections(i, (secs) => secs.map((s, idx) => idx === si ? { ...s, fields: [...s.fields, { id: uid(), key: "", value: "" }] } : s))}
+                          disabled={disabled}
+                          className="text-xs font-semibold text-[#129cd3] hover:underline disabled:opacity-40"
+                        >
+                          + Add Field
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => updateSections(i, (secs) => [...secs, { id: uid(), heading: "", fields: [] }])}
+                    disabled={disabled}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#129cd3] border border-[#129cd3]/40 px-3 py-1.5 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+                  >
+                    <Plus size={12} /> Add Section
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Add another model */}
+      {modelCount < MAX_SMART_DEVICE_MODELS && (
         <button
           type="button"
           onClick={() => setModelCount((c) => c + 1)}

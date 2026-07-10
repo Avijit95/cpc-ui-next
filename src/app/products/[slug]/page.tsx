@@ -6,7 +6,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
-import type { ProductDetail, Variant, Review, ReviewListResponse } from "@/lib/api";
+import type { ProductDetail, Variant, Review, ReviewListResponse, ListCard } from "@/lib/api";
+import ProductCard, { ProductCardExpander, ProductCardSkeleton } from "@/components/ProductCard";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
@@ -184,6 +185,124 @@ function formatReviewDate(iso: string) {
   } catch {
     return iso;
   }
+}
+
+function SimilarProducts({
+  breadcrumbs,
+  currentSlug,
+  brand,
+}: {
+  breadcrumbs: { id: string }[];
+  currentSlug: string;
+  brand?: string;
+}) {
+  const [items, setItems] = useState<ListCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Stable dep: join breadcrumb IDs into a string
+  const crumbIds = breadcrumbs.map((c) => c.id).join(",");
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const filter = (res: { items: ListCard[] }) =>
+      res.items.filter((p) => p.slug !== currentSlug);
+
+    async function load() {
+      // Try each breadcrumb level from deepest to shallowest
+      const levels = [...breadcrumbs].reverse();
+      for (const crumb of levels) {
+        try {
+          const res = await catalogApi.listProducts({ category: crumb.id, limit: 15 }, ctrl.signal);
+          const filtered = filter(res);
+          if (filtered.length > 0) {
+            setItems(filtered);
+            return;
+          }
+        } catch {
+          // abort or network error — stop
+          return;
+        }
+      }
+      // Final fallback: fetch by brand
+      if (brand) {
+        try {
+          const res = await catalogApi.listProducts({ brand, limit: 15 }, ctrl.signal);
+          setItems(filter(res));
+        } catch { /* ignore */ }
+      }
+    }
+
+    load().finally(() => setLoading(false));
+    return () => ctrl.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crumbIds, currentSlug, brand]);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  const scrollRight = () => {
+    scrollRef.current?.scrollBy({ left: 500, behavior: "smooth" });
+  };
+
+  const scrollLeft = () => {
+    scrollRef.current?.scrollBy({ left: -500, behavior: "smooth" });
+  };
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <section className="border-t border-gray-200 pt-8 pb-4">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 mb-5">Similar Products</h2>
+        <div className="relative">
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="flex flex-nowrap gap-4 overflow-x-auto pb-2 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+        >
+          {loading
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex-shrink-0 w-[230px]">
+                  <ProductCardSkeleton />
+                </div>
+              ))
+            : items.map((p) => (
+                <ProductCardExpander
+                  key={p.id}
+                  product={p}
+                  cardClassName="flex-shrink-0 w-[230px]"
+                />
+              ))}
+        </div>
+        {canScrollLeft && (
+          <button
+            onClick={scrollLeft}
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors shadow z-10"
+            aria-label="Scroll left"
+          >
+            <ChevronLeft size={20} className="text-white" />
+          </button>
+        )}
+        {canScrollRight && (
+          <button
+            onClick={scrollRight}
+            className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors shadow z-10"
+            aria-label="Scroll right"
+          >
+            <ChevronRight size={20} className="text-white" />
+          </button>
+        )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function ProductDetailPage() {
@@ -615,6 +734,9 @@ useEffect(() => {
   const isCameraProduct = !isLensProduct && product.breadcrumbs.some(
     (b) => b.slug?.toLowerCase().includes("camera") || b.name?.toLowerCase().includes("camera")
   );
+  const isSmartDeviceProduct = !isTvProduct && !isLensProduct && !isSpeakerProduct && !isCameraProduct && product.breadcrumbs.some(
+    (b) => (b.slug?.toLowerCase().includes("smart") || b.name?.toLowerCase().includes("smart"))
+  );
   // For lens/speaker: the attribute key used for model (may be "model" for new variants or "ram" for old)
   const lensModelKey = (isLensProduct || isSpeakerProduct)
     ? variantGroups.find((g) => g.key === "model" || g.key === "ram")?.key
@@ -626,6 +748,17 @@ useEffect(() => {
     const modelGroup = variantGroups.find((g) => g.key === lensModelKey);
     if (!modelGroup) return 0;
     const selectedVal = attrValue(selectedVariant, lensModelKey);
+    const pos = modelGroup.values.indexOf(selectedVal);
+    return pos >= 0 ? pos : 0;
+  })();
+  const sdModelAttrKey = isSmartDeviceProduct
+    ? variantGroups.find((g) => g.key === "model")?.key
+    : undefined;
+  const smartDeviceModelIdx = (() => {
+    if (!isSmartDeviceProduct || !sdModelAttrKey || !selectedVariant) return 0;
+    const modelGroup = variantGroups.find((g) => g.key === sdModelAttrKey);
+    if (!modelGroup) return 0;
+    const selectedVal = attrValue(selectedVariant, sdModelAttrKey);
     const pos = modelGroup.values.indexOf(selectedVal);
     return pos >= 0 ? pos : 0;
   })();
@@ -761,10 +894,25 @@ useEffect(() => {
     return 0;
   })();
   const tvSpecName = String(product.specs[multiModelKey("Product Name", tvSpecIdx)] ?? "").trim();
+  const lensSpecName = isLensProduct
+    ? String(product.specs[multiModelKey("Lens Name", lensOrSpeakerModelIdx)] ?? "").trim()
+    : "";
+  const speakerSpecName = isSpeakerProduct
+    ? String(product.specs[multiModelKey("Product Name", lensOrSpeakerModelIdx)] ?? "").trim()
+    : "";
+  const sdSpecName = isSmartDeviceProduct
+    ? String(product.specs[multiModelKey("Product Name", smartDeviceModelIdx)] ?? "").trim()
+    : "";
   const displayTitle = isTvProduct && selectedVariant?.attributes.name
     ? String(selectedVariant.attributes.name)
     : isTvProduct && tvSpecName
     ? tvSpecName
+    : isLensProduct && lensSpecName
+    ? lensSpecName
+    : isSpeakerProduct && speakerSpecName
+    ? speakerSpecName
+    : isSmartDeviceProduct && sdSpecName
+    ? sdSpecName
     : product.name;
 
   return (
@@ -793,7 +941,7 @@ useEffect(() => {
           </button>
 
           {/* Product Section — sticky-left / scrollable-right */}
-          <div className="flex flex-col lg:flex-row gap-6 lg:items-start">
+          <div className="flex flex-col lg:flex-row gap-6 lg:items-start mb-8">
             {/* Left: Image — sticky */}
             <div className="lg:w-2/5 flex-shrink-0 lg:sticky lg:top-20 lg:self-start">
               <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -971,7 +1119,7 @@ useEffect(() => {
               {activeDeal && <DealCountdown endsAt={activeDeal.endsAt} />}
 
               {/* Product Highlights */}
-              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} selectedVariant={selectedVariant} modelIdx={isTvProduct ? tvSpecIdx : (isLensProduct || isSpeakerProduct) ? lensOrSpeakerModelIdx : undefined} />
+              <ProductHighlights specs={product.specs} isTv={isTvProduct} isCamera={isCameraProduct} isLens={isLensProduct} isSpeaker={isSpeakerProduct} isSmartDevice={isSmartDeviceProduct} selectedVariant={selectedVariant} modelIdx={isTvProduct ? tvSpecIdx : (isLensProduct || isSpeakerProduct) ? lensOrSpeakerModelIdx : isSmartDeviceProduct ? smartDeviceModelIdx : undefined} />
 
               {/* Stock */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1588,7 +1736,7 @@ useEffect(() => {
               </div>{/* end product info card */}
 
           {/* Accordion Section — Description / Specifications / Reviews */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200 shadow-sm">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-300 shadow-sm mt-6">
 
             {/* Description */}
             <div>
@@ -1606,6 +1754,8 @@ useEffect(() => {
                     ? (String(product.specs[multiModelKey("Description", lensOrSpeakerModelIdx)] ?? "").trim() || product.description || "No description available.")
                     : isTvProduct
                     ? (String(product.specs[multiModelKey("Description", tvSpecIdx)] ?? "").trim() || product.description || "No description available.")
+                    : isSmartDeviceProduct
+                    ? (String(product.specs[multiModelKey("Description", smartDeviceModelIdx)] ?? "").trim() || product.description || "No description available.")
                     : (product.description || "No description available.")}
                 </div>
               )}
@@ -1623,28 +1773,32 @@ useEffect(() => {
               </button>
               {openSections["Specifications"] && (
                 <div className="px-5 py-5 border-t border-gray-100">
-                  <SpecsTable
-                    specs={
-                      isTvProduct && selectedVariant
-                        ? {
-                            ...product.specs,
-                            ...(selectedVariant.attributes.dimWithoutStand ? { "W×H×D (without stand)": selectedVariant.attributes.dimWithoutStand } : {}),
-                            ...(selectedVariant.attributes.dimWithStand ? { "W×H×D (with stand)": selectedVariant.attributes.dimWithStand } : {}),
-                            ...(selectedVariant.attributes.weight ? { "Weight": selectedVariant.attributes.weight } : {}),
-                          }
-                        : product.specs
-                    }
-                    isLens={isLensProduct}
-                    isSpeaker={isSpeakerProduct}
-                    isTv={isTvProduct}
-                    modelIdx={
-                      isTvProduct
-                        ? tvSpecIdx
-                        : (isLensProduct || isSpeakerProduct)
-                        ? lensOrSpeakerModelIdx
-                        : 0
-                    }
-                  />
+                  {isSmartDeviceProduct ? (
+                    <SmartDeviceSpecsTable specs={product.specs} modelIdx={smartDeviceModelIdx} />
+                  ) : (
+                    <SpecsTable
+                      specs={
+                        isTvProduct && selectedVariant
+                          ? {
+                              ...product.specs,
+                              ...(selectedVariant.attributes.dimWithoutStand ? { "W×H×D (without stand)": selectedVariant.attributes.dimWithoutStand } : {}),
+                              ...(selectedVariant.attributes.dimWithStand ? { "W×H×D (with stand)": selectedVariant.attributes.dimWithStand } : {}),
+                              ...(selectedVariant.attributes.weight ? { "Weight": selectedVariant.attributes.weight } : {}),
+                            }
+                          : product.specs
+                      }
+                      isLens={isLensProduct}
+                      isSpeaker={isSpeakerProduct}
+                      isTv={isTvProduct}
+                      modelIdx={
+                        isTvProduct
+                          ? tvSpecIdx
+                          : (isLensProduct || isSpeakerProduct)
+                          ? lensOrSpeakerModelIdx
+                          : 0
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -1945,7 +2099,15 @@ useEffect(() => {
           </div>{/* accordion container */}
         </div>{/* right column flex-1 */}
       </div>{/* flex row */}
+      {/* Similar Products */}
+      <SimilarProducts
+        breadcrumbs={product.breadcrumbs}
+        currentSlug={product.slug}
+        brand={product.brand ?? undefined}
+      />
+
       </div>{/* max-w-7xl */}
+
       </main>
       <Footer />
     </>
@@ -2167,6 +2329,215 @@ function SpecsTable({
   );
 }
 
+// ── Smart Device Specs Table ──────────────────────────────────────────────────
+
+const SD_RESERVED_DISPLAY_KEYS = new Set([
+  "Product Name", "Product Type", "Slug", "Description", "Color", "Model",
+]);
+
+function SmartDeviceSpecsTable({
+  specs,
+  modelIdx = 0,
+}: {
+  specs: Record<string, unknown>;
+  modelIdx?: number;
+}) {
+  const suffix = modelIdx > 0 ? ` ${modelIdx + 1}` : "";
+  const numericSuffixRe = / \d+$/;
+
+  // Collect entries belonging to this model
+  const modelEntries: [string, string][] = [];
+  for (const [key, value] of Object.entries(specs)) {
+    if (modelIdx === 0) {
+      if (numericSuffixRe.test(key)) continue;
+      modelEntries.push([key, String(value ?? "")]);
+    } else {
+      if (!key.endsWith(suffix)) continue;
+      modelEntries.push([key.slice(0, -suffix.length), String(value ?? "")]);
+    }
+  }
+
+  type Section = { heading: string; fields: [string, string][] };
+  let visibleSections: Section[] = [];
+
+  // New format: fields stored as __hN:fieldKey — order-independent
+  const hasNewFormat = modelEntries.some(([k]) => /^__h\d+:/.test(k));
+  if (hasNewFormat) {
+    const headings = new Map<number, string>();
+    const fieldsBySection = new Map<number, [string, string][]>();
+    for (const [key, value] of modelEntries) {
+      const hm = key.match(/^__h(\d+)$/);
+      if (hm) { headings.set(+hm[1], value); continue; }
+      const fm = key.match(/^__h(\d+):(.+)$/);
+      if (fm) {
+        const si = +fm[1];
+        const fieldKey = fm[2];
+        if (SD_RESERVED_DISPLAY_KEYS.has(fieldKey) || HIDDEN_SPEC_KEYS.has(fieldKey)) continue;
+        if (!fieldKey.trim() || !value.trim()) continue;
+        if (!fieldsBySection.has(si)) fieldsBySection.set(si, []);
+        fieldsBySection.get(si)!.push([fieldKey, value]);
+      }
+    }
+    const maxSi = Math.max(-1, ...headings.keys(), ...fieldsBySection.keys());
+    if (maxSi >= 0) {
+      const sections = Array.from({ length: maxSi + 1 }, (_, si) => ({
+        heading: headings.get(si) ?? "",
+        fields: fieldsBySection.get(si) ?? [] as [string, string][],
+      }));
+      visibleSections = sections.filter((s) => s.fields.length > 0);
+    }
+  } else {
+    // Legacy format: order-dependent __hN markers
+    const sections: Section[] = [];
+    let cur: Section = { heading: "", fields: [] };
+    for (const [key, value] of modelEntries) {
+      if (/^__h\d+$/.test(key)) {
+        if (cur.heading || cur.fields.length > 0) sections.push(cur);
+        cur = { heading: value, fields: [] };
+      } else {
+        if (SD_RESERVED_DISPLAY_KEYS.has(key) || HIDDEN_SPEC_KEYS.has(key)) continue;
+        if (!key.trim() || !value.trim()) continue;
+        cur.fields.push([key, value]);
+      }
+    }
+    if (cur.heading || cur.fields.length > 0) sections.push(cur);
+    visibleSections = sections.filter((s) => s.fields.length > 0);
+  }
+
+  if (visibleSections.length === 0) {
+    return <p className="text-sm text-gray-500">No specifications listed.</p>;
+  }
+
+  return (
+    <div className="divide-y divide-gray-200">
+      {visibleSections.map((section, si) => (
+        <div key={si}>
+          {section.heading && (
+            <div className="px-4 py-2.5 bg-gradient-to-r from-[#129cd3]/10 via-[#129cd3]/5 to-transparent border-l-4 border-[#129cd3]">
+              <h3 className="text-xs font-extrabold text-[#0a6d93] uppercase tracking-widest">{section.heading}</h3>
+            </div>
+          )}
+          <div className="divide-y divide-gray-100 mb-2">
+            {section.fields.map(([key, value], idx) => (
+              <div
+                key={key}
+                className={`flex items-start gap-6 px-2 py-3 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
+                  {humanizeSpecKey(key)}
+                </span>
+                <span className="text-sm font-medium text-gray-800 flex-1 leading-snug">
+                  {formatSpecValue(value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Smart Device Highlights ───────────────────────────────────────────────────
+
+function buildSmartDeviceHighlights(
+  specs: Record<string, unknown>,
+  modelIdx = 0,
+): HighlightRow[] {
+  const suffix = modelIdx > 0 ? ` ${modelIdx + 1}` : "";
+  const numericSuffixRe = / \d+$/;
+
+  const modelEntries: [string, string][] = [];
+  for (const [key, value] of Object.entries(specs)) {
+    if (modelIdx === 0) {
+      if (numericSuffixRe.test(key)) continue;
+      modelEntries.push([key, String(value ?? "")]);
+    } else {
+      if (!key.endsWith(suffix)) continue;
+      modelEntries.push([key.slice(0, -suffix.length), String(value ?? "")]);
+    }
+  }
+
+  type Section = { heading: string; fields: [string, string][] };
+  let sections: Section[] = [];
+
+  const hasNewFormat = modelEntries.some(([k]) => /^__h\d+:/.test(k));
+  if (hasNewFormat) {
+    const headings = new Map<number, string>();
+    const fieldsBySection = new Map<number, [string, string][]>();
+    for (const [key, value] of modelEntries) {
+      const hm = key.match(/^__h(\d+)$/);
+      if (hm) { headings.set(+hm[1], value); continue; }
+      const fm = key.match(/^__h(\d+):(.+)$/);
+      if (fm) {
+        const si = +fm[1];
+        const fieldKey = fm[2];
+        if (SD_RESERVED_DISPLAY_KEYS.has(fieldKey) || HIDDEN_SPEC_KEYS.has(fieldKey)) continue;
+        if (!fieldKey.trim() || !value.trim()) continue;
+        if (!fieldsBySection.has(si)) fieldsBySection.set(si, []);
+        fieldsBySection.get(si)!.push([fieldKey, value]);
+      }
+    }
+    const maxSi = Math.max(-1, ...headings.keys(), ...fieldsBySection.keys());
+    if (maxSi >= 0) {
+      sections = Array.from({ length: maxSi + 1 }, (_, si) => ({
+        heading: headings.get(si) ?? "",
+        fields: fieldsBySection.get(si) ?? [],
+      })).filter((s) => s.fields.length > 0);
+    }
+  } else {
+    let cur: Section = { heading: "", fields: [] };
+    for (const [key, value] of modelEntries) {
+      if (/^__h\d+$/.test(key)) {
+        if (cur.heading || cur.fields.length > 0) sections.push(cur);
+        cur = { heading: value, fields: [] };
+      } else {
+        if (SD_RESERVED_DISPLAY_KEYS.has(key) || HIDDEN_SPEC_KEYS.has(key)) continue;
+        if (!key.trim() || !value.trim()) continue;
+        cur.fields.push([key, value]);
+      }
+    }
+    if (cur.heading || cur.fields.length > 0) sections.push(cur);
+    sections = sections.filter((s) => s.fields.length > 0);
+  }
+
+  const ICONS = [
+    <Zap key="z" size={16} className="text-yellow-600" />,
+    <Wifi key="w" size={16} className="text-blue-600" />,
+    <BatteryMedium key="b" size={16} className="text-green-600" />,
+    <HardDrive key="h" size={16} className="text-purple-600" />,
+    <Cpu key="c" size={16} className="text-orange-600" />,
+    <Monitor key="m" size={16} className="text-[#129cd3]" />,
+    <Ruler key="r" size={16} className="text-gray-600" />,
+    <Hash key="hash" size={16} className="text-pink-600" />,
+  ];
+  const ACCENTS = [
+    "bg-yellow-100",
+    "bg-blue-100",
+    "bg-green-100",
+    "bg-purple-100",
+    "bg-orange-100",
+    "bg-[#e8f7fc]",
+    "bg-gray-100",
+    "bg-pink-100",
+  ];
+
+  const rows: HighlightRow[] = [];
+  let iconIdx = 0;
+  for (const s of sections) {
+    for (const [fieldKey, fieldValue] of s.fields.slice(0, 2)) {
+      rows.push({
+        icon: ICONS[iconIdx % ICONS.length],
+        label: humanizeSpecKey(fieldKey),
+        text: fieldValue,
+        accent: ACCENTS[iconIdx % ACCENTS.length],
+      });
+      iconIdx++;
+    }
+  }
+  return rows;
+}
+
 // ── Product Highlights ────────────────────────────────────────────────────────
 
 type HighlightRow = {
@@ -2370,10 +2741,12 @@ function buildSpeakerHighlights(specs: Record<string, unknown>, modelIdx = 0): H
   return rows;
 }
 
-function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, selectedVariant, modelIdx: modelIdxProp }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; isSpeaker?: boolean; selectedVariant?: Variant; modelIdx?: number }) {
+function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, isSmartDevice, selectedVariant, modelIdx: modelIdxProp }: { specs: Record<string, unknown>; isTv?: boolean; isCamera?: boolean; isLens?: boolean; isSpeaker?: boolean; isSmartDevice?: boolean; selectedVariant?: Variant; modelIdx?: number }) {
   const [expanded, setExpanded] = useState(true);
   const activeModelIdx = modelIdxProp !== undefined ? modelIdxProp : (isLens || isSpeaker) ? getActiveModelIndex(specs, selectedVariant) : 0;
-  const highlights = isLens
+  const highlights = isSmartDevice
+    ? buildSmartDeviceHighlights(specs, activeModelIdx)
+    : isLens
     ? buildLensHighlights(specs, activeModelIdx)
     : isSpeaker
     ? buildSpeakerHighlights(specs, activeModelIdx)

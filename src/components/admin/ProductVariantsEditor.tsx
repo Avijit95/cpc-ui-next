@@ -7,8 +7,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import { ChevronLeft, ChevronRight, ImagePlus, Plus, Star, Trash2, X } from "lucide-react";
-import { adminApi } from "@/lib/api";
+import { AlertTriangle, ChevronLeft, ChevronRight, ImagePlus, Plus, Star, Trash2, X } from "lucide-react";
+import { adminApi, isApiError } from "@/lib/api";
 import { imageUrlForKey } from "@/lib/image-url";
 import type { AdminVariant, ProductImageContentType } from "@/lib/api";
 
@@ -47,6 +47,9 @@ type VariantRow = {
   weight: string;           // TV only: e.g. "4.5 kg"
   dimWithStand: string;     // TV only: W×H×D with stand, e.g. "97.2 × 62.5 × 21.3 cm"
   dimWithoutStand: string;  // TV only: W×H×D without stand, e.g. "97.2 × 56.2 × 7.4 cm"
+  attr1: string; // Smart Device: custom attribute 1
+  attr2: string; // Smart Device: custom attribute 2
+  attr3: string; // Smart Device: custom attribute 3
   stock: string;
   base: string;      // MRP (struck price); blank = no separate MRP
   price: string;     // selling price (GST-inclusive); blank = use product base price
@@ -105,31 +108,67 @@ function isSpeakerCategory(slug?: string): boolean {
   return !!slug && slug.toLowerCase().includes("speaker");
 }
 
+function isSmartDeviceCategory(slug?: string): boolean {
+  if (!slug) return false;
+  const s = slug.toLowerCase();
+  return s.includes("smart") && !s.includes("tv") && !s.includes("television");
+}
+
+// Derives custom attr column names from existing saved variants (edit mode).
+function initSmartDeviceAttrCols(variants: AdminVariant[]): string[] {
+  const seen = new Set<string>();
+  const cols: string[] = [];
+  for (const v of variants) {
+    for (const key of Object.keys(v.attributes)) {
+      if (key !== "model" && key !== "color" && !seen.has(key) && cols.length < 3) {
+        seen.add(key);
+        cols.push(key);
+      }
+    }
+  }
+  return cols;
+}
+
 const TV_SIZE_PRESETS = ["32\"", "43\"", "50\"", "55\"", "65\"", "75\"", "85\""];
 
-function makeSku(name: string, r: VariantRow, isCamera: boolean, isTV = false): string {
-  const base = slugifyPart(name) || "variant";
-  const parts = isCamera
-    ? [r.ram, r.color, r.launchYear, r.lensIncluded === "Yes" ? r.storage : ""]
-    : isTV
-    ? [r.ram, r.storage, r.launchYear, r.color]
-    : [r.ram, r.storage, r.color];
+function makeSku(name: string, r: VariantRow, isCamera: boolean, isTV = false, isSmartDevice = false, attrColumns: string[] = []): string {
+  let parts: string[];
+  if (isCamera) {
+    parts = [r.ram, r.color, r.launchYear, r.lensIncluded === "Yes" ? r.storage : ""];
+  } else if (isTV) {
+    parts = [r.ram, r.storage, r.launchYear, r.color];
+  } else if (isSmartDevice) {
+    // Include model + color + all custom attr values so variants with same model/color
+    // but different watt/capacity/etc. get distinct SKUs.
+    const attrVals = [r.attr1, r.attr2, r.attr3].slice(0, attrColumns.length);
+    parts = [r.ram, r.color, ...attrVals];
+  } else {
+    parts = [r.ram, r.storage, r.color];
+  }
   const tail = parts.map(slugifyPart).filter(Boolean).join("-");
+  // Reserve space in the base so the tail always appears in the SKU.
+  const maxBase = tail ? Math.max(20, 80 - tail.length - 1) : 80;
+  // Trim trailing dashes from base to avoid double-dash when concatenating tail.
+  const base = (slugifyPart(name) || "variant").slice(0, maxBase).replace(/-+$/, "");
   const full = tail ? `${base}-${tail}` : base;
   return full.slice(0, 80);
 }
 
-function comboKey(r: VariantRow, isCamera: boolean): string {
+function comboKey(r: VariantRow, isCamera: boolean, isSmartDevice = false): string {
   if (isCamera) {
     // Lens name (storage) distinguishes variants when lensIncluded=Yes.
     const lensKey = r.lensIncluded === "Yes" ? r.storage.trim() : "";
     return `${r.ram.trim()}|${r.color.trim()}|${r.launchYear.trim()}|${r.lensIncluded.trim()}|${lensKey}`.toLowerCase();
   }
+  if (isSmartDevice) {
+    // Include all custom attrs so variants that differ only by watt/capacity are distinct.
+    return `${r.ram.trim()}|${r.color.trim()}|${r.attr1.trim()}|${r.attr2.trim()}|${r.attr3.trim()}`.toLowerCase();
+  }
   return `${r.ram.trim()}|${r.storage.trim()}|${r.color.trim()}`.toLowerCase();
 }
 
-// For cameras images are grouped by body color / lens; for TVs by size+color+launchYear+model; lens by model+color; all others by color.
-function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false): string {
+// For cameras images are grouped by body color / lens; for TVs by size+color+launchYear+model; lens by model+color; smart devices by model+color+custom attrs; all others by color.
+function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): string {
   if (isCamera) {
     if (r.lensIncluded === "Yes" && r.storage.trim()) return `Lens: ${r.storage.trim()}`;
     const color = r.color.trim();
@@ -145,10 +184,16 @@ function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens =
     const parts = [r.ram.trim(), r.color.trim(), r.launchYear.trim(), r.storage.trim()].filter(Boolean);
     return parts.join(" / ") || "";
   }
+  if (isSmartDevice) {
+    // Group by model + color + all custom attr values so each distinct config gets its own images.
+    const attrVals = [r.attr1, r.attr2, r.attr3].slice(0, attrColumns.length).map((v) => v.trim()).filter(Boolean);
+    const parts = [r.ram.trim(), r.color.trim(), ...attrVals].filter(Boolean);
+    return parts.join(" / ") || "";
+  }
   return r.color.trim();
 }
 
-function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false): Record<string, unknown> {
+function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): Record<string, unknown> {
   const a: Record<string, unknown> = {};
   if (isCamera) {
     if (r.ram.trim()) a.model = r.ram.trim();
@@ -164,9 +209,13 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     if (r.weight.trim()) a.weight = r.weight.trim();
     if (r.dimWithStand.trim()) a.dimWithStand = r.dimWithStand.trim();
     if (r.dimWithoutStand.trim()) a.dimWithoutStand = r.dimWithoutStand.trim();
-  } else if (isSpeaker) {
+  } else if (isSpeaker || isSmartDevice) {
     if (r.ram.trim()) a.model = r.ram.trim();
-    if (r.storage.trim()) a.watt = r.storage.trim();
+    if (!isSmartDevice && r.storage.trim()) a.watt = r.storage.trim();
+    if (isSmartDevice) {
+      const vals = [r.attr1, r.attr2, r.attr3];
+      attrColumns.forEach((col, idx) => { if (col.trim() && vals[idx]?.trim()) a[col.toLowerCase()] = vals[idx].trim(); });
+    }
   } else if (isLens) {
     if (r.ram.trim()) a.model = r.ram.trim();
   } else {
@@ -188,18 +237,18 @@ function calcGstFields(selling: string, gst: string): { gstAmount: string; netBa
   return { gstAmount: gstAmount.toFixed(2), netBase: netBase.toFixed(2) };
 }
 
-function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false): VariantRow[] {
+function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): VariantRow[] {
   return variants.map((v) => {
     const base = v.basePrice != null ? String(v.basePrice) : "";
     const price = v.priceOverride != null ? String(v.priceOverride) : "";
     const gst = "18";
     const { gstAmount, netBase } = calcGstFields(price, gst);
-    // Camera → model/lens; TV → size/model; Speaker → model/watt; Lens → model (fallback ram); default → ram/storage.
+    // Camera → model/lens; TV → size/model; Speaker/SmartDevice → model; Lens → model (fallback ram); default → ram/storage.
     const ramVal = isCamera
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : isTV
       ? (v.attributes.size != null ? String(v.attributes.size) : "")
-      : isSpeaker
+      : (isSpeaker || isSmartDevice)
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : isLens
       ? (v.attributes.model != null ? String(v.attributes.model) : v.attributes.ram != null ? String(v.attributes.ram) : "")
@@ -210,6 +259,8 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
       ? (v.attributes.model != null ? String(v.attributes.model) : "")
       : isSpeaker
       ? (v.attributes.watt != null ? String(v.attributes.watt) : "")
+      : isSmartDevice
+      ? ""
       : (v.attributes.storage != null ? String(v.attributes.storage) : "");
     const lensIncluded = isCamera
       ? (v.attributes.lensIncluded != null ? String(v.attributes.lensIncluded) : "No")
@@ -227,6 +278,9 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
       weight: isTV && v.attributes.weight != null ? String(v.attributes.weight) : "",
       dimWithStand: isTV && v.attributes.dimWithStand != null ? String(v.attributes.dimWithStand) : "",
       dimWithoutStand: isTV && v.attributes.dimWithoutStand != null ? String(v.attributes.dimWithoutStand) : "",
+      attr1: isSmartDevice && attrColumns[0] ? (v.attributes[attrColumns[0].toLowerCase()] != null ? String(v.attributes[attrColumns[0].toLowerCase()]) : "") : "",
+      attr2: isSmartDevice && attrColumns[1] ? (v.attributes[attrColumns[1].toLowerCase()] != null ? String(v.attributes[attrColumns[1].toLowerCase()]) : "") : "",
+      attr3: isSmartDevice && attrColumns[2] ? (v.attributes[attrColumns[2].toLowerCase()] != null ? String(v.attributes[attrColumns[2].toLowerCase()]) : "") : "",
       stock: String(v.stock ?? 0),
       base,
       price,
@@ -239,7 +293,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
 
 // Variants sharing the same group key share one image set — take the first non-empty.
 // Camera: grouped by body/lens; TV: grouped by size+color; lens by model+color; all others: grouped by color.
-function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean, isLens = false): Record<string, ColorImages> {
+function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): Record<string, ColorImages> {
   const map: Record<string, ColorImages> = {};
   for (const v of variants) {
     let groupKey: string;
@@ -264,6 +318,15 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
       const model = v.attributes.model != null ? String(v.attributes.model).trim() : "";
       const parts = [size, color, launchYear, model].filter(Boolean);
       groupKey = parts.join(" / ") || "";
+    } else if (isSmartDevice) {
+      const model = v.attributes.model != null ? String(v.attributes.model).trim() : "";
+      const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
+      const attrVals = attrColumns.slice(0, 3).map((col) => {
+        const val = v.attributes[col.toLowerCase()];
+        return val != null ? String(val).trim() : "";
+      }).filter(Boolean);
+      const parts = [model, color, ...attrVals].filter(Boolean);
+      groupKey = parts.join(" / ") || "";
     } else {
       groupKey = v.attributes.color != null ? String(v.attributes.color).trim() : "";
     }
@@ -285,31 +348,36 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
 
 const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
-  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; hideRam?: boolean; draftRows?: unknown[] }
->(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, hideRam = false, draftRows }, ref) {
+  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; hideRam?: boolean; draftRows?: unknown[]; specModelNos?: string[] }
+>(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, hideRam = false, draftRows, specModelNos = [] }, ref) {
   const isLens = isLensCategory(categorySlug);
   const isCamera = !isLens && isCameraCategory(categorySlug);
   const isTV = isTvCategory(categorySlug);
   const isSpeaker = !isCamera && !isTV && !isLens && isSpeakerCategory(categorySlug);
+  const isSmartDevice = !isCamera && !isTV && !isLens && !isSpeaker && isSmartDeviceCategory(categorySlug);
+  const [attrColumns, setAttrColumns] = useState<string[]>(() =>
+    isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : []
+  );
   const [rows, setRows] = useState<VariantRow[]>(() => {
+    const _attrCols = isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : [];
     if (draftRows && draftRows.length > 0) {
-      return (draftRows as VariantRow[]).map((r) => ({ name: "", ...r, uid: uid(), existingId: undefined }));
+      return (draftRows as VariantRow[]).map((r) => ({ name: "", attr1: "", attr2: "", attr3: "", ...r, uid: uid(), existingId: undefined }));
     }
-    return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens);
+    return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens, isSmartDevice, _attrCols);
   });
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
-    () => initColorImages(initialVariants, isTV, isCamera, isLens),
+    () => initColorImages(initialVariants, isTV, isCamera, isLens, isSmartDevice, isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : []),
   );
 
-  // Distinct image group keys (camera: body/lens; TV: size; others: color) — drives the image uploaders.
+  // Distinct image group keys (camera: body/lens; TV: size; smart device: model+color+attrs; others: color) — drives the image uploaders.
   const colors = useMemo(() => {
     const out: string[] = [];
     for (const r of rows) {
-      const c = imageGroupKey(r, isTV, isCamera, isLens);
+      const c = imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns);
       if (c && !out.includes(c)) out.push(c);
     }
     return out;
-  }, [rows, isTV, isCamera, isLens]);
+  }, [rows, isTV, isCamera, isLens, isSmartDevice, attrColumns]);
 
   // Revoke blob previews on unmount.
   useEffect(() => {
@@ -343,6 +411,9 @@ const ProductVariantsEditor = forwardRef<
         weight: "",
         dimWithStand: "",
         dimWithoutStand: "",
+        attr1: "",
+        attr2: "",
+        attr3: "",
         stock: "0",
         base: "",
         price: "",
@@ -433,6 +504,8 @@ const ProductVariantsEditor = forwardRef<
               ? "Each variant needs at least one of Size, Model No., or Color."
               : isSpeaker
               ? "Each variant needs at least one of Model No., Watt, or Color."
+              : isSmartDevice
+              ? "Each variant needs at least one of Model No. or Color."
               : "Each variant needs at least one of RAM, ROM, or Color.";
           }
           const stockNum = Number(r.stock);
@@ -463,12 +536,14 @@ const ProductVariantsEditor = forwardRef<
             }
           }
           if (!isTV) {
-            const key = comboKey(r, isCamera);
+            const key = comboKey(r, isCamera, isSmartDevice);
             if (seen.has(key)) {
               return isCamera
                 ? (isLens ? "Two variants have the same Model No. / Color combination." : "Two variants have the same Model No. / Color / Launch Year / Lens combination.")
                 : isSpeaker
                 ? "Two variants have the same Model No. / Watt / Color combination."
+                : isSmartDevice
+                ? "Two variants have the same Model No. / Color / custom attribute combination."
                 : "Two variants have the same RAM / ROM / Color combination.";
             }
             seen.add(key);
@@ -519,37 +594,73 @@ const ProductVariantsEditor = forwardRef<
           finalKeys[color] = resolved.map((r) => r.key);
         }
 
-        // 2. Create or update each row.
+        // Helper: backend returns "not found" when variant no longer exists
+        // (e.g. stale ID from a previous partial-save attempt).
+        const isNotFound = (err: unknown) =>
+          isApiError(err) && (
+            err.displayMessage.toLowerCase().includes("not found") ||
+            (err.code ?? "").toLowerCase().includes("not_found") ||
+            err.statusCode === 404
+          );
+
+        // 2. Update existing rows; collect new rows to create after deletes.
         const keptIds = new Set<string>();
+        const toCreate: VariantRow[] = [];
         for (const r of rows) {
           const existing = r.existingId ? initialVariants.find((v) => v.id === r.existingId) : undefined;
-          const body = {
-            // On update keep the original SKU to avoid backend uniqueness conflicts;
-            // generate a new SKU only for newly created variants.
-            sku: existing ? existing.sku : makeSku(productName, r, isCamera, isTV),
-            attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens),
-            basePrice: r.base.trim() === "" ? null : Number(r.base),
-            priceOverride: r.price.trim() === "" ? null : Number(r.price),
-            stock: Number(r.stock),
-            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens)] ?? [],
-          };
           if (existing) {
             keptIds.add(existing.id);
-            await adminApi.updateVariant(productId, existing.id, body);
+            const body = {
+              // On update keep the original SKU to avoid backend uniqueness conflicts.
+              sku: existing.sku,
+              attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens, isSmartDevice, attrColumns),
+              basePrice: r.base.trim() === "" ? null : Number(r.base),
+              priceOverride: r.price.trim() === "" ? null : Number(r.price),
+              stock: Number(r.stock),
+              imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns)] ?? [],
+            };
+            try {
+              await adminApi.updateVariant(productId, existing.id, body);
+            } catch (err) {
+              if (isNotFound(err)) {
+                // Variant was removed externally — re-create it instead.
+                toCreate.push(r);
+              } else {
+                throw err;
+              }
+            }
           } else {
-            await adminApi.createVariant(productId, body);
+            toCreate.push(r);
           }
         }
 
-        // 3. Delete variants that were removed from the editor.
+        // 3. Delete removed variants BEFORE creating new ones — prevents SKU collisions
+        //    when a replaced variant's auto-generated SKU matches its predecessor.
         for (const v of initialVariants) {
           if (!keptIds.has(v.id)) {
-            await adminApi.deleteVariant(productId, v.id);
+            try {
+              await adminApi.deleteVariant(productId, v.id);
+            } catch (err) {
+              // If already gone, treat as success — it's effectively deleted.
+              if (!isNotFound(err)) throw err;
+            }
           }
+        }
+
+        // 4. Create new variants (after deletes so their generated SKUs are free).
+        for (const r of toCreate) {
+          await adminApi.createVariant(productId, {
+            sku: makeSku(productName, r, isCamera, isTV, isSmartDevice, attrColumns),
+            attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens, isSmartDevice, attrColumns),
+            basePrice: r.base.trim() === "" ? null : Number(r.base),
+            priceOverride: r.price.trim() === "" ? null : Number(r.price),
+            stock: Number(r.stock),
+            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns)] ?? [],
+          });
         }
       },
     }),
-    [rows, colors, colorImages, productName, initialVariants, isCamera, isTV, isSpeaker],
+    [rows, colors, colorImages, productName, initialVariants, isCamera, isTV, isSpeaker, isSmartDevice, attrColumns],
   );
 
   return (
@@ -565,6 +676,8 @@ const ProductVariantsEditor = forwardRef<
             ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
             : isSpeaker
             ? "Add each Model No. / Watt / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            : isSmartDevice
+            ? "Add each Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : hideRam
             ? "Add each ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
             : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."}
@@ -596,12 +709,71 @@ const ProductVariantsEditor = forwardRef<
         ))}
       </datalist>
 
+      {/* Smart Device: custom attribute column builder */}
+      {isSmartDevice && (
+        <>
+        <div className="flex flex-wrap items-center gap-2 pb-1 border-b border-gray-100">
+          <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Custom columns:</span>
+          {attrColumns.map((col, ci) => (
+            <div key={ci} className="flex items-center gap-1 bg-[#e8f7fc] border border-[#129cd3]/30 rounded-lg px-2 py-1">
+              <input
+                value={col}
+                onChange={(e) => setAttrColumns((prev) => prev.map((c, i) => i === ci ? e.target.value : c))}
+                placeholder="e.g. Size"
+                disabled={disabled}
+                className="bg-transparent text-xs font-semibold text-[#0a6d93] outline-none w-20"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setAttrColumns((prev) => prev.filter((_, i) => i !== ci));
+                  setRows((rs) => rs.map((r) => {
+                    if (ci === 0) return { ...r, attr1: r.attr2, attr2: r.attr3, attr3: "" };
+                    if (ci === 1) return { ...r, attr2: r.attr3, attr3: "" };
+                    return { ...r, attr3: "" };
+                  }));
+                }}
+                disabled={disabled}
+                className="text-[#129cd3] hover:text-red-500 disabled:opacity-40"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+          {attrColumns.length < 3 && (
+            <button
+              type="button"
+              onClick={() => setAttrColumns((prev) => [...prev, ""])}
+              disabled={disabled}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#129cd3] border border-dashed border-[#129cd3]/40 px-2 py-1 rounded-lg hover:bg-[#e8f7fc] disabled:opacity-50"
+            >
+              <Plus size={11} /> Add Column
+            </button>
+          )}
+        </div>
+        <p className="text-[11px] text-gray-400 mt-1">
+          <span className="font-semibold text-gray-500">Tip:</span> Use custom columns to add variant-specific attributes unique to this product — e.g. <span className="italic">Size</span>, <span className="italic">Wattage</span>, <span className="italic">Voltage</span>. Type the column name, then fill in the value for each variant row below. Model No. and Color are always included by default.
+        </p>
+        </>
+      )}
+
       {/* Variant rows */}
       <div className="space-y-2">
         {rows.length === 0 && (
           <p className="text-[12px] text-gray-400">No variants yet. Add one below.</p>
         )}
-        {rows.map((r) => isTV ? (
+        {rows.map((r) => {
+        // Model-no validation: applies to multi-model types (speaker, lens, smart device).
+        // If specModelNos is provided, the variant model must match one of the spec models.
+        const hasSpecModels = specModelNos.length > 0 && (isSmartDevice || isSpeaker || isLens);
+        const modelEntered = r.ram.trim() !== "";
+        const modelMatched = !hasSpecModels || !modelEntered ||
+          specModelNos.some((m) => m.trim().toLowerCase() === r.ram.trim().toLowerCase());
+        const showModelAlert = hasSpecModels && modelEntered && !modelMatched;
+        // Disable non-model fields when there's an active mismatch.
+        const rowDisabled = disabled || (hasSpecModels && modelEntered && !modelMatched);
+
+        return isTV ? (
           /* ── TV: multi-row card ───────────────────────────────── */
           <div key={r.uid} className="border border-gray-200 rounded-xl p-3 bg-white space-y-3">
             {/* Product Name — full width */}
@@ -765,13 +937,24 @@ const ProductVariantsEditor = forwardRef<
           </div>
         ) : (
           /* ── non-TV: existing compact grid ───────────────────── */
+          <div key={r.uid} className={`rounded-lg overflow-hidden ${showModelAlert ? "border border-red-300" : "border border-gray-100"}`}>
+            {showModelAlert && (
+              <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700">
+                <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  Model No. <strong>&ldquo;{r.ram}&rdquo;</strong> doesn&apos;t match any model defined in the Specifications section.
+                  Fix the model no. here or add this model to the Specifications first. Other fields are locked until the model matches.
+                </span>
+              </div>
+            )}
           <div
-            key={r.uid}
-            className={`grid grid-cols-2 gap-2 items-end border border-gray-100 rounded-lg p-2.5 ${
+            className={`grid grid-cols-2 gap-2 items-end p-2.5 ${
               isLens
                 ? "sm:grid-cols-[repeat(8,1fr)_auto]"
                 : isCamera
                 ? r.lensIncluded === "Yes" ? "sm:grid-cols-[repeat(11,1fr)_auto]" : "sm:grid-cols-[repeat(10,1fr)_auto]"
+                : isSmartDevice
+                ? `sm:grid-cols-[repeat(${8 + attrColumns.length},1fr)_auto]`
                 : !hideRam
                 ? "sm:grid-cols-[repeat(9,1fr)_auto]"
                 : "sm:grid-cols-[repeat(8,1fr)_auto]"
@@ -794,7 +977,7 @@ const ProductVariantsEditor = forwardRef<
                     onChange={(e) => updateRow(r.uid, { color: e.target.value })}
                     list="variant-color-presets"
                     placeholder="e.g. Black"
-                    disabled={disabled}
+                    disabled={rowDisabled}
                     className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                   />
                 </Field>
@@ -804,7 +987,7 @@ const ProductVariantsEditor = forwardRef<
                       <select
                         value={r.launchYear}
                         onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
-                        disabled={disabled}
+                        disabled={rowDisabled}
                         className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
                       >
                         <option value="">— Year —</option>
@@ -820,7 +1003,7 @@ const ProductVariantsEditor = forwardRef<
                           const val = e.target.value;
                           updateRow(r.uid, { lensIncluded: val, storage: val === "No" ? "" : r.storage });
                         }}
-                        disabled={disabled}
+                        disabled={rowDisabled}
                         className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
                       >
                         <option value="No">No</option>
@@ -833,12 +1016,49 @@ const ProductVariantsEditor = forwardRef<
                           value={r.storage}
                           onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
                           placeholder="e.g. 18-55mm f/3.5-5.6"
-                          disabled={disabled}
+                          disabled={rowDisabled}
                           className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                         />
                       </Field>
                     )}
                   </>
+                )}
+              </>
+            ) : isSmartDevice ? (
+              <>
+                <Field label="Model No.">
+                  <input
+                    value={r.ram}
+                    onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                    placeholder="e.g. Echo Dot 5th Gen"
+                    disabled={disabled}
+                    className={`w-full border rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] ${showModelAlert ? "border-red-300 bg-red-50/30" : "border-gray-200"}`}
+                  />
+                </Field>
+                <Field label="Color">
+                  <input
+                    value={r.color}
+                    onChange={(e) => updateRow(r.uid, { color: e.target.value })}
+                    list="variant-color-presets"
+                    placeholder="e.g. Black"
+                    disabled={rowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  />
+                </Field>
+                {attrColumns[0] && (
+                  <Field label={attrColumns[0]}>
+                    <input value={r.attr1} onChange={(e) => updateRow(r.uid, { attr1: e.target.value })} placeholder="Value" disabled={rowDisabled} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]" />
+                  </Field>
+                )}
+                {attrColumns[1] && (
+                  <Field label={attrColumns[1]}>
+                    <input value={r.attr2} onChange={(e) => updateRow(r.uid, { attr2: e.target.value })} placeholder="Value" disabled={rowDisabled} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]" />
+                  </Field>
+                )}
+                {attrColumns[2] && (
+                  <Field label={attrColumns[2]}>
+                    <input value={r.attr3} onChange={(e) => updateRow(r.uid, { attr3: e.target.value })} placeholder="Value" disabled={rowDisabled} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]" />
+                  </Field>
                 )}
               </>
             ) : !hideRam ? (
@@ -849,30 +1069,30 @@ const ProductVariantsEditor = forwardRef<
                   list={isSpeaker ? undefined : "variant-ram-presets"}
                   placeholder={isSpeaker ? "e.g. JBL Charge 5" : "8GB"}
                   disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  className={`w-full border rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] ${isSpeaker && showModelAlert ? "border-red-300 bg-red-50/30" : "border-gray-200"}`}
                 />
               </Field>
             ) : null}
-            {!isCamera && !isLens && (
+            {!isCamera && !isLens && !isSmartDevice && (
               <Field label={isSpeaker ? "Watt" : "ROM"}>
                 <input
                   value={r.storage}
                   onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
                   list={isSpeaker ? undefined : "variant-storage-presets"}
                   placeholder={isSpeaker ? "e.g. 30W" : "128GB"}
-                  disabled={disabled}
+                  disabled={rowDisabled}
                   className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                 />
               </Field>
             )}
-            {!isCamera && !isLens && (
+            {!isCamera && !isLens && !isSmartDevice && (
               <Field label="Color">
                 <input
                   value={r.color}
                   onChange={(e) => updateRow(r.uid, { color: e.target.value })}
                   list="variant-color-presets"
                   placeholder="Red"
-                  disabled={disabled}
+                  disabled={rowDisabled}
                   className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
                 />
               </Field>
@@ -882,7 +1102,7 @@ const ProductVariantsEditor = forwardRef<
                 type="number" min={0} step={1}
                 value={r.stock}
                 onChange={(e) => updateRow(r.uid, { stock: e.target.value })}
-                disabled={disabled}
+                disabled={rowDisabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
@@ -892,7 +1112,7 @@ const ProductVariantsEditor = forwardRef<
                 value={r.base}
                 onChange={(e) => updateRow(r.uid, { base: e.target.value })}
                 placeholder="0"
-                disabled={disabled}
+                disabled={rowDisabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
@@ -905,7 +1125,7 @@ const ProductVariantsEditor = forwardRef<
                   updateRow(r.uid, { price, ...calcGstFields(price, r.gst) });
                 }}
                 placeholder="= MRP"
-                disabled={disabled}
+                disabled={rowDisabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
@@ -917,7 +1137,7 @@ const ProductVariantsEditor = forwardRef<
                   const gst = e.target.value;
                   updateRow(r.uid, { gst, ...calcGstFields(r.price, gst) });
                 }}
-                disabled={disabled}
+                disabled={rowDisabled}
                 className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
@@ -944,7 +1164,9 @@ const ProductVariantsEditor = forwardRef<
               <Trash2 size={16} />
             </button>
           </div>
-        ))}
+          </div>
+        );
+      })}
         <button
           type="button"
           onClick={addRow}
@@ -959,7 +1181,7 @@ const ProductVariantsEditor = forwardRef<
       {colors.length > 0 && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
           <p className="text-xs font-semibold text-gray-700">
-            {isCamera ? "Images by body / lens" : isTV ? "Images by size, color, year & model" : "Images by color"}
+            {isCamera ? "Images by body / lens" : isTV ? "Images by size, color, year & model" : isSmartDevice ? "Images by model, color & attributes" : "Images by color"}
           </p>
           {colors.map((color) => {
             const ci = colorImages[color] ?? { items: [], defaultId: null };

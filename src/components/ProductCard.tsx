@@ -61,6 +61,21 @@ function variantTitleSuffix(v: Variant): string | null {
   return null;
 }
 
+// For smart device / speaker variants: build a standalone card title from
+// model + all custom attrs (watt, capacity, battery type, etc.).
+// Replaces product.name entirely so the distinct info isn't hidden by line-clamp.
+function smartDeviceCardTitle(v: Variant): string | null {
+  const attrs = v.attributes;
+  if (!attrs.model || "ram" in attrs || "storage" in attrs || "lensIncluded" in attrs || "size" in attrs) return null;
+  const parts: string[] = [String(attrs.model)];
+  for (const [k, val] of Object.entries(attrs)) {
+    if (k !== "model" && k !== "color" && val != null && String(val).trim() !== "") {
+      parts.push(String(val));
+    }
+  }
+  return parts.join(" · ");
+}
+
 // From a group of same-lens-type variants, pick the best representative:
 // prefer in-stock + has image, then in-stock, then has image, then first.
 function pickBestCameraVariant(group: Variant[]): Variant {
@@ -77,9 +92,11 @@ type AddState = "idle" | "busy" | "added" | "error";
 export default function ProductCard({
   product,
   variantOverride,
+  className,
 }: {
   product: ListCard;
   variantOverride?: Variant;
+  className?: string;
 }) {
   const [addState, setAddState] = useState<AddState>("idle");
   const [wishlistBusy, setWishlistBusy] = useState(false);
@@ -113,8 +130,10 @@ export default function ProductCard({
 
     const cached = detailCache.get(product.slug);
     if (cached) {
-      if (stocks[`p:${product.slug}`] === undefined) {
-        setStock(`p:${product.slug}`, effectiveProductStock(cached.stock, cached.variants));
+      const effective = effectiveProductStock(cached.stock, cached.variants);
+      const current = stocks[`p:${product.slug}`];
+      if (current === undefined || (current === 0 && effective > 0)) {
+        setStock(`p:${product.slug}`, effective);
       }
       cached.variants.forEach((v) => {
         if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
@@ -125,8 +144,11 @@ export default function ProductCard({
       .then((d) => {
         const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);
-        if (stocks[`p:${product.slug}`] === undefined) {
-          setStock(`p:${product.slug}`, effectiveProductStock(d.stock, d.variants));
+        const effective = effectiveProductStock(d.stock, d.variants);
+        const current = stocks[`p:${product.slug}`];
+        // Seed if unknown, or correct upward if variants have stock but product-level was seeded as 0
+        if (current === undefined || (current === 0 && effective > 0)) {
+          setStock(`p:${product.slug}`, effective);
         }
         d.variants.forEach((v) => {
           if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
@@ -166,13 +188,14 @@ export default function ProductCard({
 
   const variantAttrLabel = variantOverride ? variantLabel(variantOverride) : null;
   const cameraTitleSuffix = variantOverride ? variantTitleSuffix(variantOverride) : null;
+  const sdTitle = variantOverride ? smartDeviceCardTitle(variantOverride) : null;
 
   const isOutOfStock = stockValue !== null && stockValue === 0;
   const isCriticalStock = stockValue !== null && stockValue > 0 && stockValue < 5;
   const isLowStock = stockValue !== null && stockValue >= 5 && stockValue < 10;
 
   return (
-    <div className="product-home-card group bg-white border border-gray-200 hover:border-[#8dd4ee] hover:shadow-md transition-all overflow-hidden flex flex-col max-[499px]:rounded-xl">
+    <div className={`product-home-card group bg-white border border-gray-200 hover:border-[#8dd4ee] hover:shadow-md transition-all overflow-hidden flex flex-col max-[499px]:rounded-xl${className ? ` ${className}` : ""}`}>
       {/* Image */}
       <Link
         href={productLink}
@@ -258,7 +281,7 @@ export default function ProductCard({
         )}
         <Link href={productLink}>
           <h3 className="text-xs max-[499px]:text-[13px] max-[499px]:leading-normal font-semibold text-gray-800 mb-1 max-[499px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
-            {product.name}{cameraTitleSuffix ? ` ${cameraTitleSuffix}` : ""}
+            {sdTitle ?? (product.name + (cameraTitleSuffix ? ` ${cameraTitleSuffix}` : ""))}
           </h3>
         </Link>
         {variantAttrLabel && (
@@ -384,12 +407,14 @@ export function ProductCardExpander({
   priceMin,
   priceMax,
   variantFilter,
+  cardClassName,
 }: {
   product: ListCard;
   priceSortDir?: "asc" | "desc";
   priceMin?: number;
   priceMax?: number;
   variantFilter?: (v: Variant) => boolean;
+  cardClassName?: string;
 }) {
   const { stocks, setStock } = useStock();
   const [variants, setVariants] = useState<Variant[]>(
@@ -425,7 +450,7 @@ export function ProductCardExpander({
   }, []);
 
   if (variants.length === 0) {
-    return <ProductCard product={product} />;
+    return <ProductCard product={product} className={cardClassName} />;
   }
 
   // Camera: one card per lens type (Body Only, Body with each lens).
@@ -442,7 +467,7 @@ export function ProductCardExpander({
     return (
       <>
         {cameraVariants.map((v) => (
-          <ProductCard key={v.id} product={product} variantOverride={v} />
+          <ProductCard key={v.id} product={product} variantOverride={v} className={cardClassName} />
         ))}
       </>
     );
@@ -470,7 +495,7 @@ export function ProductCardExpander({
   return (
     <>
       {visibleVariants.map((v) => (
-        <ProductCard key={v.id} product={product} variantOverride={v} />
+        <ProductCard key={v.id} product={product} variantOverride={v} className={cardClassName} />
       ))}
     </>
   );
