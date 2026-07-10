@@ -561,6 +561,7 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
+    if (!cached) return true; // not yet fetched — show until cache is ready
 
     // ── Screen Size ───────────────────────────────────────────────────────────
     if (sizeOpts.length > 0) {
@@ -595,13 +596,37 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
     }
 
     // ── Connectivity ─────────────────────────────────────────────────────────
+    // TV stores connectivity as individual fields (HDMI Ports, Wi-Fi, USB Ports…)
+    // NOT as a combined "Connectivity Technology" string — check per-size keys.
     if (connOpts.length > 0) {
-      const raw =
-        cached?.specs["Connectivity Technology"] ??
-        cached?.specs["Connectivity"] ??
-        cached?.specs["connectivity"];
-      if (!raw) return false;
-      if (!connOpts.some((opt) => matchTvConnectivity(String(raw), opt))) return false;
+      const specs = cached.specs;
+      // Check a spec key across all TV size slots (key, "key 2", "key 3"…)
+      const tvSpecAny = (base: string): string => {
+        for (let i = 0; i < 5; i++) {
+          const k = i === 0 ? base : `${base} ${i + 1}`;
+          const v = specs[k];
+          if (v && String(v).trim().toLowerCase() !== "no") return String(v).toLowerCase();
+        }
+        return "";
+      };
+      // Free-text fields that may contain connectivity info
+      const freeText = [
+        specs["Other Convenience Features"],
+        specs["Supported Devices for Casting"],
+        specs["Wi-Fi Type"],
+      ].map((v) => String(v ?? "").toLowerCase()).join(" ");
+
+      const hasConn = (opt: string): boolean => {
+        if (opt === "HDMI")      return !!tvSpecAny("HDMI Ports");
+        if (opt === "USB")       return !!tvSpecAny("USB Ports");
+        if (opt === "Wi-Fi")     return !!tvSpecAny("Wi-Fi");
+        if (opt === "Bluetooth") return !!tvSpecAny("Bluetooth") || freeText.includes("bluetooth");
+        if (opt === "Ethernet")  return !!tvSpecAny("Ethernet")  || freeText.includes("ethernet") || freeText.includes("lan");
+        if (opt === "AV")        return !!tvSpecAny("AV")        || freeText.includes(" av") || freeText.includes("composite");
+        if (opt === "RF")        return !!tvSpecAny("RF")        || freeText.includes("antenna") || freeText.includes("coaxial");
+        return false;
+      };
+      if (!connOpts.some(hasConn)) return false;
     }
 
     return true;
@@ -669,13 +694,15 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
     // Autofocus Points — extract the first integer from spec; check across models.
     if (afOpts.length > 0) {
       // Camera spec stores "Autofocus" as a text field, e.g. "9-point AF" or "425-point"
+      // or just "Phase Detection, Contrast Detection" (no number — don't exclude in that case).
       const raw = specFirst(
         "Autofocus Points", "AF Points", "Number of Focus Points",
         "Phase Detection AF Points", "Auto Focus Points", "Total Focus Points", "Autofocus"
       );
       const match = raw.match(/\d+/);
       const num = match ? parseInt(match[0], 10) : NaN;
-      if (isNaN(num) || !afOpts.includes(String(num))) return false;
+      // Only exclude if a count was found AND doesn't match — skip if no count in spec.
+      if (!isNaN(num) && !afOpts.includes(String(num))) return false;
     }
 
     // Lens Mount — check across all models; "Other…" matches unrecognised mounts.
@@ -686,7 +713,14 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
       ].map(norm).filter(Boolean);
       const nonOther = mountOpts.filter((o) => o !== "Other…");
       const wantsOther = mountOpts.includes("Other…");
-      const matchesNamed = nonOther.some((opt) => vals.some((v) => v.includes(norm(opt))));
+      const matchesNamed = nonOther.some((opt) => {
+        const o = norm(opt);
+        return vals.some((v) => {
+          // "Sony E" filter should also match "Sony FE-Mount" cameras
+          if (o === "sony e") return v.includes("sony e") || v.includes("sony fe");
+          return v.includes(o);
+        });
+      });
       if (!matchesNamed) {
         if (wantsOther) {
           const isKnown = vals.some((v) => KNOWN_LENS_MOUNTS.some((m) => v.includes(m.replace(/-/g, " "))));
@@ -768,6 +802,8 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
         if (combined.includes(o)) return true;
         if (o === "wi fi" && combined.includes("wifi")) return true;
         if (o === "usb c" && (combined.includes("type c") || combined.includes("usb type c"))) return true;
+        // Camera admin stores USB Type-C as specs["USB Type"] = "USB Type-C …"
+        if (o === "usb c") { const usbType = norm(specs["USB Type"] ?? ""); if (usbType.includes("type c") || usbType.includes("type-c")) return true; }
         return false;
       };
       if (!connOpts.some(matchesOpt)) return false;
@@ -814,6 +850,7 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
+    if (!cached) return true; // Not yet fetched — show it until cache is ready
     const specs  = cached?.specs ?? {};
 
     // Connectivity — each option is a separate connectivity type
@@ -823,7 +860,7 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
         if (o === "bluetooth")  return norm(specs["Bluetooth"]) === "yes";
         if (o === "wi fi")      return norm(specs["Wi-Fi"]) === "yes";
         if (o === "aux")        return norm(specs["AUX Input"]) === "yes";
-        if (o === "usb")        return !!specs["USB Port"];
+        if (o === "usb")        { const uv = norm(specs["USB Port"]); return !!uv && uv !== "no"; }
         if (o === "hdmi arc")   return norm(specs["HDMI"]) === "yes";
         if (o === "optical")    return norm(specs["Optical Input"]) === "yes";
         if (o === "rca")        return norm(specs["RCA Input"]) === "yes";
@@ -983,10 +1020,21 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
       if (!typeOpts.some((opt) => vals.some((v) => v.includes(norm(opt))))) return false;
     }
 
-    // Autofocus / Focus Type — check across all models
+    // Autofocus / Focus Type — check across all models.
+    // "Focus Type" may store text like "Autofocus" / "Manual Focus".
+    // "Autofocus" may store "Yes" / "No" (boolean from admin spec editor).
     if (focusOpts.length > 0) {
-      const raw = norm(specFirst("Focus Type", "Autofocus"));
-      if (!focusOpts.some((opt) => raw.includes(norm(opt)))) return false;
+      const focusTypeRaw = norm(specFirst("Focus Type"));
+      const afBool = norm(specFirst("Autofocus")); // "yes" or "no"
+      const hasAF = focusTypeRaw.includes("autofocus") || afBool === "yes";
+      const hasMF = focusTypeRaw.includes("manual")    || afBool === "no";
+      if (!focusOpts.some((opt) => {
+        const o = norm(opt);
+        if (o === "autofocus")    return hasAF;
+        if (o === "manual focus") return hasMF;
+        // fallback: text match
+        return focusTypeRaw.includes(o);
+      })) return false;
     }
 
     // Maximum Aperture — check across all models
