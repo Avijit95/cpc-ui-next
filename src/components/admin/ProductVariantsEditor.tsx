@@ -223,7 +223,8 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     if (r.storage.trim()) a.storage = r.storage.trim();
   }
   if (r.color.trim()) a.color = r.color.trim();
-  return a;
+  // Strip empty-string attributes — backend rejects them with minLength validation errors.
+  return Object.fromEntries(Object.entries(a).filter(([, v]) => v !== ""));
 }
 
 function calcGstFields(selling: string, gst: string): { gstAmount: string; netBase: string } {
