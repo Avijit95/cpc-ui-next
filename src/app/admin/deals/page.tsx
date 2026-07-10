@@ -252,11 +252,15 @@ export default function AdminDealsPage() {
         results.forEach((r, i) => {
           if (r.status !== "fulfilled") return;
           const p = r.value;
-          // Product-level images first, then fall back to first variant image
-          const key =
-            p.images[0] ??
-            p.variants.flatMap((v) => v.imagesObjectKeys)[0];
-          if (key) map[toFetch[i]] = `${S3_BASE}/${key}`;
+          const productId = toFetch[i];
+          // Product-level image keyed by productId
+          const productKey = p.images[0] ?? p.variants.flatMap((v) => v.imagesObjectKeys)[0];
+          if (productKey) map[productId] = `${S3_BASE}/${productKey}`;
+          // Per-variant images keyed by "productId:variantId"
+          for (const v of p.variants) {
+            const variantKey = v.imagesObjectKeys[0];
+            if (variantKey) map[`${productId}:${v.id}`] = `${S3_BASE}/${variantKey}`;
+          }
         });
         if (Object.keys(map).length > 0)
           setProductImages((prev) => ({ ...prev, ...map }));
@@ -886,17 +890,23 @@ export default function AdminDealsPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          {productImages[d.product.id] ? (
-                            <Image
-                              src={productImages[d.product.id]}
-                              alt={d.product.name}
-                              width={36}
-                              height={36}
-                              className="w-9 h-9 object-contain rounded flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 bg-gray-100 rounded flex-shrink-0" />
-                          )}
+                          {(() => {
+                            const imgSrc =
+                              (d.variantId && (d.variant?.primaryImageUrl ?? productImages[`${d.product.id}:${d.variantId}`])) ||
+                              productImages[d.product.id] ||
+                              d.product.primaryImageUrl;
+                            return imgSrc ? (
+                              <Image
+                                src={imgSrc}
+                                alt={d.product.name}
+                                width={36}
+                                height={36}
+                                className="w-9 h-9 object-contain rounded flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 bg-gray-100 rounded flex-shrink-0" />
+                            );
+                          })()}
                           <div className="min-w-0 max-w-[200px]">
                             <span
                               className="text-gray-800 block truncate text-sm"

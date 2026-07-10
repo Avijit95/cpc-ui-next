@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Heart, ShoppingCart, Star } from "lucide-react";
+import { Check, Heart, Share2, ShoppingCart, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -100,6 +100,7 @@ export default function ProductCard({
   className?: string;
 }) {
   const [addState, setAddState] = useState<AddState>("idle");
+  const [shareState, setShareState] = useState<"idle" | "copied">("idle");
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const router = useRouter();
   const { status } = useAuth();
@@ -232,39 +233,64 @@ export default function ProductCard({
               {badge}
             </span>
           )}
-          <button
-            onClick={async (e) => {
-              e.preventDefault();
-              if (wishlistBusy) return;
-              if (status === "unauthenticated") {
-                const path = window.location.pathname + window.location.search;
-                router.push(`/login?next=${encodeURIComponent(path)}`);
-                return;
-              }
-              setWishlistBusy(true);
-              try {
-                if (wishlisted) {
-                  await removeByProductId(product.id, variantOverride?.id);
-                } else {
-                  await addToWishlist(product.id, variantOverride?.id);
+          <div className="col-start-1 row-start-1 self-start justify-self-end m-2 flex flex-col gap-1 z-[999]">
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                if (wishlistBusy) return;
+                if (status === "unauthenticated") {
+                  const path = window.location.pathname + window.location.search;
+                  router.push(`/login?next=${encodeURIComponent(path)}`);
+                  return;
                 }
-              } catch {
-                // Silent fail on heart toggle — full-page error UX would be intrusive.
-              } finally {
-                setWishlistBusy(false);
-              }
-            }}
-            aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-            className="col-start-1 row-start-1 self-start justify-self-end m-2 w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50 z-[999]"
-            disabled={wishlistBusy}
-          >
-            <Heart
-              size={14}
-              className={
-                wishlisted ? "fill-red-500 text-red-500" : "text-gray-400"
-              }
-            />
-          </button>
+                setWishlistBusy(true);
+                try {
+                  if (wishlisted) {
+                    await removeByProductId(product.id, variantOverride?.id);
+                  } else {
+                    await addToWishlist(product.id, variantOverride?.id);
+                  }
+                } catch {
+                  // Silent fail on heart toggle — full-page error UX would be intrusive.
+                } finally {
+                  setWishlistBusy(false);
+                }
+              }}
+              aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+              className="w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50"
+              disabled={wishlistBusy}
+            >
+              <Heart
+                size={14}
+                className={
+                  wishlisted ? "fill-red-500 text-red-500" : "text-gray-400"
+                }
+              />
+            </button>
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                const url = window.location.origin + productLink;
+                try {
+                  if (navigator.share) {
+                    await navigator.share({ title: product.name, url });
+                  } else {
+                    await navigator.clipboard.writeText(url);
+                    setShareState("copied");
+                    window.setTimeout(() => setShareState("idle"), 2000);
+                  }
+                } catch {
+                  // User cancelled share or clipboard failed — no-op
+                }
+              }}
+              aria-label="Share product"
+              className="w-7 h-7 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc]"
+            >
+              {shareState === "copied"
+                ? <Check size={12} className="text-green-500" />
+                : <Share2 size={12} className="text-gray-400" />}
+            </button>
+          </div>
         </div>
       </Link>
 

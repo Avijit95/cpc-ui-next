@@ -16,6 +16,7 @@ import { useActiveCategory } from "@/lib/nav/ActiveCategoryProvider";
 import {
   Star,
   Heart,
+  Share2,
   ShoppingCart,
   Truck,
   ShieldCheck,
@@ -215,7 +216,7 @@ function SimilarProducts({
       const levels = [...breadcrumbs].reverse();
       for (const crumb of levels) {
         try {
-          const res = await catalogApi.listProducts({ category: crumb.id, limit: 15 }, ctrl.signal);
+          const res = await catalogApi.listProducts({ category: crumb.id, limit: 24 }, ctrl.signal);
           const filtered = filter(res);
           if (filtered.length > 0) {
             setItems(filtered);
@@ -229,7 +230,7 @@ function SimilarProducts({
       // Final fallback: fetch by brand
       if (brand) {
         try {
-          const res = await catalogApi.listProducts({ brand, limit: 15 }, ctrl.signal);
+          const res = await catalogApi.listProducts({ brand, limit: 24 }, ctrl.signal);
           setItems(filter(res));
         } catch { /* ignore */ }
       }
@@ -339,6 +340,7 @@ export default function ProductDetailPage() {
   const [addState, setAddState] = useState<AddState>("idle");
   const [addError, setAddError] = useState<string | null>(null);
   const [buying, setBuying] = useState(false);
+  const [shareState, setShareState] = useState<"idle" | "copied">("idle");
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const [titleExpanded, setTitleExpanded] = useState(false);
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
@@ -954,38 +956,63 @@ useEffect(() => {
                 ) : (
                   <div className="w-full h-full" />
                 )}
-                <button
-                  onClick={async () => {
-                    if (wishlistBusy || !product) return;
-                    if (status === "unauthenticated") {
-                      const path = `/products/${slug}`;
-                      router.push(`/login?next=${encodeURIComponent(path)}`);
-                      return;
-                    }
-                    setWishlistBusy(true);
-                    try {
-                      if (wishlisted) {
-                        await removeByProductId(product.id);
-                      } else {
-                        await addToWishlist(product.id);
+                <div className="absolute top-3 right-3 flex flex-col gap-2">
+                  <button
+                    onClick={async () => {
+                      if (wishlistBusy || !product) return;
+                      if (status === "unauthenticated") {
+                        const path = `/products/${slug}`;
+                        router.push(`/login?next=${encodeURIComponent(path)}`);
+                        return;
                       }
-                    } catch {
-                      // Silent on wishlist toggle.
-                    } finally {
-                      setWishlistBusy(false);
-                    }
-                  }}
-                  disabled={wishlistBusy}
-                  aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                  className="absolute top-3 right-3 w-9 h-9 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50"
-                >
-                  <Heart
-                    size={18}
-                    className={
-                      wishlisted ? "fill-red-500 text-red-500" : "text-gray-400"
-                    }
-                  />
-                </button>
+                      setWishlistBusy(true);
+                      try {
+                        if (wishlisted) {
+                          await removeByProductId(product.id);
+                        } else {
+                          await addToWishlist(product.id);
+                        }
+                      } catch {
+                        // Silent on wishlist toggle.
+                      } finally {
+                        setWishlistBusy(false);
+                      }
+                    }}
+                    disabled={wishlistBusy}
+                    aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                    className="w-9 h-9 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc] disabled:opacity-50"
+                  >
+                    <Heart
+                      size={18}
+                      className={
+                        wishlisted ? "fill-red-500 text-red-500" : "text-gray-400"
+                      }
+                    />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const url = window.location.origin + `/products/${slug}` +
+                        (selectedVariant ? `?variant=${selectedVariant.id}` : "");
+                      try {
+                        if (navigator.share) {
+                          await navigator.share({ title: product?.name ?? "", url });
+                        } else {
+                          await navigator.clipboard.writeText(url);
+                          setShareState("copied");
+                          window.setTimeout(() => setShareState("idle"), 2000);
+                        }
+                      } catch {
+                        // User cancelled or clipboard failed
+                      }
+                    }}
+                    aria-label="Share product"
+                    className="w-9 h-9 bg-white shadow rounded-full flex items-center justify-center transition-colors hover:bg-[#e8f7fc]"
+                  >
+                    {shareState === "copied"
+                      ? <Check size={16} className="text-green-500" />
+                      : <Share2 size={16} className="text-gray-400" />}
+                  </button>
+                </div>
               </div>
               {galleryImages.length > 1 && (
                 <div className="flex items-center gap-2 mt-3">
@@ -1571,6 +1598,7 @@ useEffect(() => {
                   </button>
                 </div>
               )}
+
               {addError && (
                 <p className="text-xs text-red-600 -mt-4 mb-4">{addError}</p>
               )}

@@ -5,8 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import ProductSectionSlider from "./ProductSectionSlider";
-import { catalogApi, dealsApi } from "@/lib/api";
+import { adminApi, catalogApi, dealsApi } from "@/lib/api";
 import type { Deal, ListCard, ProductDetail } from "@/lib/api";
+import { useAuth } from "@/lib/auth/AuthProvider";
+
+const S3_BASE = "https://cpn-uploads.s3.ap-south-1.amazonaws.com";
 
 function formatPrice(price: number) {
   return "₹" + price.toLocaleString("en-IN");
@@ -43,20 +46,33 @@ function Countdown({ endsAt }: { endsAt: string }) {
   );
 }
 
-const S3_BASE = "https://cpn-uploads.s3.ap-south-1.amazonaws.com";
-
 function dealImageUrl(
   dealDetails: Record<string, import("@/lib/api").ProductDetail>,
   slug: string,
+  variantId?: string | null,
+  variantPrimaryUrl?: string | null,
 ): string | null {
+  // 1. Use the variant's primaryImageUrl if the deal targets a specific variant
+  if (variantPrimaryUrl) return variantPrimaryUrl;
+
   const detail = dealDetails[slug];
   if (!detail) return null;
-  // Product-level image
+
+  // 2. Find the specific variant's images in the fetched detail
+  if (variantId) {
+    const v = detail.variants.find((v) => v.id === variantId);
+    if (v && v.images.length > 0) {
+      const img = v.images[0];
+      return img.url || `${S3_BASE}/${img.objectKey}`;
+    }
+  }
+
+  // 3. Product-level image
   if (detail.images.length > 0) {
     const img = detail.images[0];
     return img.url || `${S3_BASE}/${img.objectKey}`;
   }
-  // Fall back to first variant image (variant products store images per-variant)
+  // 4. Fall back to first variant image
   for (const v of detail.variants) {
     if (v.images.length > 0) {
       const img = v.images[0];
@@ -124,6 +140,7 @@ function BestSellerRow({ product, imageUrl }: { product: ListCard; imageUrl: str
 }
 
 export default function DealsSection() {
+  const { status: authStatus } = useAuth();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [bestSellers, setBestSellers] = useState<ListCard[]>([]);
   const [dealDetails, setDealDetails] = useState<Record<string, ProductDetail>>({});
@@ -137,9 +154,20 @@ export default function DealsSection() {
   const isDragging = useRef(false);
 
   useEffect(() => {
+    // Wait for auth to resolve before deciding which API to use.
+    if (authStatus === "loading") return;
+
     let cancelled = false;
+    // Authenticated users (admins) use the admin API which returns ALL live deals
+    // without deduplication by productId. Anonymous users fall back to the public
+    // endpoint which only returns one deal per product.
+    const fetchDeals: Promise<Deal[]> =
+      authStatus === "authenticated"
+        ? adminApi.listDeals({ status: "live", limit: 50 }).then((r) => r.items)
+        : dealsApi.getToday();
+
     Promise.allSettled([
-      dealsApi.getToday(),
+      fetchDeals,
       catalogApi.listProducts({ isBestSeller: true, limit: 8 }),
     ])
       .then(([dealsRes, bestRes]) => {
@@ -174,7 +202,7 @@ export default function DealsSection() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authStatus]);
 
   // Tick once per second so the live list re-filters when a deal endsAt passes.
   useEffect(() => {
@@ -184,8 +212,7 @@ export default function DealsSection() {
 
   if (!loaded) return null;
 
-  const liveDeals = deals
-    .filter((d) => new Date(d.endsAt).getTime() > now);
+  const liveDeals = deals.filter((d) => new Date(d.endsAt).getTime() > now);
   const hasDeals = liveDeals.length > 0;
 
   if (!hasDeals && bestSellers.length === 0) return null;
@@ -277,9 +304,9 @@ export default function DealsSection() {
                   className="relative flex-shrink-0 w-[220px] h-[280px]"
                   onClick={(e) => { if (isDragging.current) e.preventDefault(); }}
                 >
-                  {dealImageUrl(dealDetails, deal.product.slug) ? (
+                  {dealImageUrl(dealDetails, deal.product.slug, deal.variantId, deal.variant?.primaryImageUrl) ? (
                     <Image
-                      src={dealImageUrl(dealDetails, deal.product.slug)!}
+                      src={dealImageUrl(dealDetails, deal.product.slug, deal.variantId, deal.variant?.primaryImageUrl)!}
                       alt={deal.product.name}
                       fill
                       sizes="220px"
@@ -487,9 +514,9 @@ export default function DealsSection() {
                       }`}
                     >
                       <div className="relative w-full h-16">
-                        {dealImageUrl(dealDetails, d.product.slug) ? (
+                        {dealImageUrl(dealDetails, d.product.slug, d.variantId, d.variant?.primaryImageUrl) ? (
                           <Image
-                            src={dealImageUrl(dealDetails, d.product.slug)!}
+                            src={dealImageUrl(dealDetails, d.product.slug, d.variantId, d.variant?.primaryImageUrl)!}
                             alt={d.product.name}
                             fill
                             sizes="112px"
