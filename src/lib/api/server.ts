@@ -8,6 +8,7 @@ import type {
   Banner,
   CatalogSort,
   CategoryNode,
+  ProductDetail,
   ProductListResponse,
 } from "./types";
 
@@ -70,6 +71,16 @@ export const serverGetNavLinks = cache(async (): Promise<ServerNavLink[]> => {
     ...apiLinks.slice(insertAt),
   ];
 });
+
+export const serverGetProduct = cache(
+  async (slug: string): Promise<ProductDetail | null> => {
+    try {
+      return await getJson<ProductDetail>(`/products/${encodeURIComponent(slug)}`, 60);
+    } catch {
+      return null;
+    }
+  },
+);
 
 export const serverListProducts = cache(
   async (opts: {

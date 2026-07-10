@@ -706,8 +706,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const _bIsSmartDevice = !_bIsTv && (_bCatSlug.includes("smart") || _bCatName.includes("smart"));
     const _bIsCamera      = !_bIsLens && (_bCatSlug.includes("camera") || _bCatName.includes("camera"));
     const _bNameOptional  = _bIsLens || _bIsSpeaker || _bIsTv || _bIsSmartDevice || _bIsCamera;
-    // For smart devices and cameras the name comes from the first model's "Product Name" spec row.
-    const _sdName = (_bIsSmartDevice || _bIsCamera)
+    // For smart devices, cameras and TVs the name comes from the first model/size "Product Name" spec row.
+    const _sdName = (_bIsSmartDevice || _bIsCamera || _bIsTv)
       ? (specRows.find((r) => r.key === "Product Name")?.value ?? "").trim()
       : "";
     // For lens products, derive name from first variant's model (ram field) if product name is blank.
@@ -717,6 +717,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const name = form.name.trim() || _sdName || _lensName;
     if (!name && !_bNameOptional) return { error: "Product name is required." };
     if (_bIsSmartDevice && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
+    if (_bIsTv && !name) return { error: "Enter a Product Name for at least the first screen size in the Specifications section." };
     if (!form.categoryId) return { error: "Pick a category." };
 
     const description = form.description;
@@ -1222,6 +1223,24 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             const _isCameraV   = !_isLensV && (_cs.includes("camera") || catName.includes("camera"));
             const _isSmartDevV = !_isTvV && (_cs.includes("smart") || catName.includes("smart"));
             const _needsModelCheck = _isLensV || _isSpeakerV || _isSmartDevV || _isCameraV;
+            // Extract spec screen sizes + per-size product names for TVs (Screen Size, Screen Size 2 …).
+            const tvSpecSizes = _isTvV
+              ? Array.from({ length: 5 }, (_, i) => {
+                  const key = i === 0 ? "Screen Size" : `Screen Size ${i + 1}`;
+                  return specRows.find((r) => r.key === key)?.value?.trim() ?? "";
+                }).filter(Boolean)
+              : [];
+            // Per-size data for TV variant auto-fill: productName triggers size auto-fill.
+            const tvSpecModels = _isTvV
+              ? Array.from({ length: 5 }, (_, i) => {
+                  const sizeKey    = i === 0 ? "Screen Size"   : `Screen Size ${i + 1}`;
+                  const nameKey    = i === 0 ? "Product Name"  : `Product Name ${i + 1}`;
+                  const screenSize = specRows.find((r) => r.key === sizeKey)?.value?.trim() ?? "";
+                  const productName = specRows.find((r) => r.key === nameKey)?.value?.trim() ?? "";
+                  if (!screenSize && !productName) return null;
+                  return { screenSize, productName };
+                }).filter(Boolean) as { screenSize: string; productName: string }[]
+              : [];
             // Extract spec model nos for multi-model types (Model, Model 2, Model 3 …).
             const specModelNos = _needsModelCheck
               ? Array.from({ length: 5 }, (_, i) => {
@@ -1261,6 +1280,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 draftRows={draftInitRows ?? undefined}
                 specModelNos={specModelNos}
                 cameraSpecModels={cameraSpecModels}
+                tvSpecSizes={tvSpecSizes}
+                tvSpecModels={tvSpecModels}
               />
             );
           })()}

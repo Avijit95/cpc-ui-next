@@ -632,43 +632,65 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
+    if (!cached) return true; // Not yet fetched — show it until cache is ready
     const specs  = cached?.specs ?? {};
 
-    // Camera Type — check spec then fall back to product name.
+    // Helper: read a spec key across all multi-model indexes (key, "key 2", "key 3"…)
+    // Returns array of all non-empty string values found.
+    const specAllModels = (baseKey: string): string[] => {
+      const out: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const k = i === 0 ? baseKey : `${baseKey} ${i + 1}`;
+        if (specs[k]) out.push(String(specs[k]));
+      }
+      return out;
+    };
+    // Returns first non-empty value across models, or fallback keys.
+    const specFirst = (...baseKeys: string[]): string => {
+      for (const base of baseKeys) {
+        const vals = specAllModels(base);
+        if (vals.length > 0) return vals[0];
+      }
+      return "";
+    };
+    // Returns true if ANY model's value matches the predicate.
+    const anyModel = (baseKey: string, pred: (v: string) => boolean): boolean =>
+      specAllModels(baseKey).some(pred);
+
+    // Camera Type — check across all models, fall back to product name.
     if (typeOpts.length > 0) {
-      const raw = norm(
-        specs["Camera Type"] ?? specs["Type"] ?? specs["camera-type"] ??
-        specs["Camera Style"] ?? specs["Form Factor"] ?? item.name
-      );
-      if (!typeOpts.some((opt) => raw.includes(norm(opt)))) return false;
+      const vals = [
+        ...specAllModels("Camera Type"),
+        norm(specs["Type"] ?? specs["Camera Style"] ?? specs["Form Factor"] ?? item.name),
+      ].map(norm);
+      if (!typeOpts.some((opt) => vals.some((v) => v.includes(norm(opt))))) return false;
     }
 
-    // Autofocus Points — extract the first integer from the spec value.
+    // Autofocus Points — extract the first integer from spec; check across models.
     if (afOpts.length > 0) {
-      const raw = String(
-        specs["Autofocus Points"] ?? specs["AF Points"] ?? specs["Number of Focus Points"] ??
-        specs["Phase Detection AF Points"] ?? specs["Auto Focus Points"] ??
-        specs["Total Focus Points"] ?? ""
+      // Camera spec stores "Autofocus" as a text field, e.g. "9-point AF" or "425-point"
+      const raw = specFirst(
+        "Autofocus Points", "AF Points", "Number of Focus Points",
+        "Phase Detection AF Points", "Auto Focus Points", "Total Focus Points", "Autofocus"
       );
       const match = raw.match(/\d+/);
       const num = match ? parseInt(match[0], 10) : NaN;
       if (isNaN(num) || !afOpts.includes(String(num))) return false;
     }
 
-    // Lens Mount — named options use substring match; "Other…" matches unknown mounts.
+    // Lens Mount — check across all models; "Other…" matches unrecognised mounts.
     if (mountOpts.length > 0) {
-      const raw = norm(
-        specs["Lens Mount"] ?? specs["Mount"] ?? specs["Compatible Lenses"] ??
-        specs["lens-mount"] ?? specs["Lens Type"] ?? specs["Mount Type"] ?? ""
-      );
+      const vals = [
+        ...specAllModels("Lens Mount"),
+        norm(specs["Mount"] ?? specs["Compatible Lenses"] ?? specs["Mount Type"] ?? ""),
+      ].map(norm).filter(Boolean);
       const nonOther = mountOpts.filter((o) => o !== "Other…");
       const wantsOther = mountOpts.includes("Other…");
-      const matchesNamed = nonOther.some((opt) => raw.includes(norm(opt)));
+      const matchesNamed = nonOther.some((opt) => vals.some((v) => v.includes(norm(opt))));
       if (!matchesNamed) {
         if (wantsOther) {
-          // "Other…" = mount field has a value but doesn't match any known named mount.
-          const isKnown = KNOWN_LENS_MOUNTS.some((m) => raw.includes(m.replace(/-/g, " ")));
-          if (!raw || isKnown) return false;
+          const isKnown = vals.some((v) => KNOWN_LENS_MOUNTS.some((m) => v.includes(m.replace(/-/g, " "))));
+          if (vals.length === 0 || isKnown) return false;
         } else {
           return false;
         }
@@ -693,22 +715,23 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
       if (!kitMatch) return false;
     }
 
-    // Sensor Technology — normalise hyphens so "BSI-CMOS" matches "BSI CMOS".
+    // Sensor Technology — check across all models.
     if (sensorOpts.length > 0) {
-      const raw = norm(
-        specs["Sensor Type"] ?? specs["Image Sensor"] ?? specs["Sensor"] ??
-        specs["sensor-type"] ?? specs["Sensor Technology"] ?? specs["Image Sensor Type"] ?? ""
+      const matched = sensorOpts.some((opt) =>
+        anyModel("Sensor Type", (v) => norm(v).includes(norm(opt))) ||
+        norm(specs["Image Sensor"] ?? specs["Sensor"] ?? specs["Image Sensor Type"] ?? "").includes(norm(opt))
       );
-      if (!sensorOpts.some((opt) => raw.includes(norm(opt)))) return false;
+      if (!matched) return false;
     }
 
-    // Resolution (Megapixels) — parse leading number from various spec keys.
+    // Resolution (Megapixels) — check "Effective Resolution (MP)" across all models first.
     if (resOpts.length > 0) {
-      const mp = parseSpec(
-        specs["Maximum Resolution"] ?? specs["Effective Megapixels"] ?? specs["Resolution"] ??
-        specs["Megapixels"] ?? specs["Sensor Resolution"] ?? specs["Effective Pixels"] ??
-        specs["Maximum Megapixels"]
+      // Try multi-model key first, then fallback generic keys
+      const mpStr = specFirst(
+        "Effective Resolution (MP)", "Maximum Resolution", "Effective Megapixels",
+        "Resolution", "Megapixels", "Sensor Resolution", "Effective Pixels", "Maximum Megapixels"
       );
+      const mp = parseSpec(mpStr);
       if (mp === null) return false;
       if (!resOpts.some((opt) => {
         if (opt === "Under 20 MP") return mp < 20;
@@ -720,48 +743,41 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
       })) return false;
     }
 
-    // Connectivity — handle alternate spellings (WiFi / Wi-Fi, USB-C / Type-C).
-    // Cameras often store connectivity in a combined field OR as individual boolean
-    // spec keys (e.g. "Wi-Fi": "Yes", "Bluetooth": "Yes", "NFC": "Yes").
+    // Connectivity — cameras store Wi-Fi/Bluetooth/NFC as individual "Yes/No" spec keys.
     if (connOpts.length > 0) {
-      const combined = norm(
-        specs["Connectivity"] ?? specs["Wireless Connectivity"] ??
-        specs["Connectivity Technology"] ?? specs["connectivity"] ??
-        specs["Wireless Features"] ?? specs["Wireless Communication"] ?? ""
-      );
       const matchesOpt = (opt: string): boolean => {
         const o = norm(opt);
-        // Check combined field first
-        if (combined.includes(o)) return true;
-        if (o === "wi fi" && combined.includes("wifi")) return true;
-        if (o === "usb c" && (combined.includes("type c") || combined.includes("usb type c"))) return true;
-        // Fall back: individual boolean spec fields (e.g. specs["Wi-Fi"] = "Yes")
+        // Check individual boolean spec fields (e.g. specs["Wi-Fi"] = "Yes")
         const directKeys = [opt, opt.replace(/-/g, " "), opt.replace(/-/g, "")];
         for (const key of directKeys) {
           const v = norm(specs[key] ?? "");
           if (v && v !== "no" && v !== "false" && v !== "not supported" && v !== "n/a") return true;
         }
-        // Scan all spec key names for the connectivity keyword (e.g. key "NFC Support" → matches "NFC")
-        for (const [key, val] of Object.entries(specs)) {
-          const k = norm(key);
-          const v = norm(val);
-          if (!k.includes(o) && !(o === "wi fi" && k.includes("wifi")) && !(o === "usb c" && k.includes("type c"))) continue;
-          // Key matches — check the value is truthy (not explicitly "no")
-          if (!v || v === "no" || v === "false" || v === "not supported" || v === "n/a") continue;
-          return true;
+        // Also check multi-model keys (e.g. "Wi-Fi 2", "Bluetooth 2")
+        for (const key of directKeys) {
+          if (anyModel(key, (v) => {
+            const vn = norm(v);
+            return !!vn && vn !== "no" && vn !== "false" && vn !== "not supported" && vn !== "n/a";
+          })) return true;
         }
+        // Check combined connectivity field
+        const combined = norm(
+          specs["Connectivity"] ?? specs["Wireless Connectivity"] ??
+          specs["Connectivity Technology"] ?? specs["Wireless Features"] ?? ""
+        );
+        if (combined.includes(o)) return true;
+        if (o === "wi fi" && combined.includes("wifi")) return true;
+        if (o === "usb c" && (combined.includes("type c") || combined.includes("usb type c"))) return true;
         return false;
       };
       if (!connOpts.some(matchesOpt)) return false;
     }
 
-    // Shutter Speed — flexible substring match after normalisation.
+    // Shutter Speed — check across all models.
     if (shutterOpts.length > 0) {
-      const raw = norm(
-        specs["Shutter Speed"] ?? specs["Maximum Shutter Speed"] ??
-        specs["shutter-speed"] ?? specs["Shutter Speed Range"] ??
-        specs["Electronic Shutter"] ?? ""
-      );
+      const raw = norm(specFirst(
+        "Shutter Speed", "Maximum Shutter Speed", "Shutter Speed Range", "Electronic Shutter"
+      ));
       if (!shutterOpts.some((opt) => {
         const o = norm(opt);
         return raw.includes(o) || o.includes(raw);
@@ -899,33 +915,56 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
+    if (!cached) return true; // Not yet fetched — show it until cache is ready
     const specs  = cached?.specs ?? {};
 
-    // Compatible Mountings
+    // Helper: read across all multi-model indexes ("key", "key 2", "key 3"…)
+    const specAllModels = (baseKey: string): string[] => {
+      const out: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const k = i === 0 ? baseKey : `${baseKey} ${i + 1}`;
+        if (specs[k]) out.push(String(specs[k]));
+      }
+      return out;
+    };
+    const specFirst = (...baseKeys: string[]): string => {
+      for (const base of baseKeys) {
+        const vals = specAllModels(base);
+        if (vals.length > 0) return vals[0];
+      }
+      return "";
+    };
+
+    // Compatible Mountings — check across all models
     if (mountOpts.length > 0) {
-      const raw = norm(specs["Lens Mount"] ?? specs["Compatible Camera"] ?? "");
+      const knownMounts = ["canon rf", "canon ef", "canon ef s", "nikon z", "nikon f", "sony e", "sony fe", "fujifilm x"];
+      const allMountVals = [
+        ...specAllModels("Lens Mount"),
+        ...specAllModels("Compatible Camera"),
+      ].map(norm).filter(Boolean);
       const nonOther = mountOpts.filter((o) => o !== "Other");
       const wantsOther = mountOpts.includes("Other");
-      const knownMounts = ["canon rf", "canon ef", "canon ef s", "nikon z", "nikon f", "sony e", "sony fe", "fujifilm x"];
       const matchesNamed = nonOther.some((opt) => {
         const o = norm(opt);
-        // "Canon EF" must not match "Canon EF-S" (ef s is a superset of ef)
-        if (o === "canon ef") return raw.includes("canon ef") && !raw.includes("canon ef s");
-        return raw.includes(o);
+        return allMountVals.some((raw) => {
+          if (o === "canon ef") return raw.includes("canon ef") && !raw.includes("canon ef s");
+          return raw.includes(o);
+        });
       });
       if (!matchesNamed) {
         if (wantsOther) {
-          const isKnown = knownMounts.some((m) => raw.includes(m));
-          if (!raw || isKnown) return false;
+          const isKnown = allMountVals.some((raw) => knownMounts.some((m) => raw.includes(m)));
+          if (allMountVals.length === 0 || isKnown) return false;
         } else {
           return false;
         }
       }
     }
 
-    // Focal Length — match by overlap of lens range with filter range
+    // Focal Length — check across all models
     if (focalOpts.length > 0) {
-      const focal = parseFocal(specs["Focal Length"] ?? "");
+      const focalStr = specFirst("Focal Length");
+      const focal = parseFocal(focalStr);
       if (!focal) return false;
       if (!focalOpts.some((opt) => {
         if (opt === "8–15 mm")         return focal.min <= 15 && focal.max >= 8;
@@ -938,21 +977,21 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
       })) return false;
     }
 
-    // Lens Type
+    // Lens Type — check across all models
     if (typeOpts.length > 0) {
-      const raw = norm(specs["Lens Type"] ?? specs["Lens Series"] ?? item.name);
-      if (!typeOpts.some((opt) => raw.includes(norm(opt)))) return false;
+      const vals = [...specAllModels("Lens Type"), ...specAllModels("Lens Series"), norm(item.name)].map(norm);
+      if (!typeOpts.some((opt) => vals.some((v) => v.includes(norm(opt))))) return false;
     }
 
-    // Autofocus / Focus Type
+    // Autofocus / Focus Type — check across all models
     if (focusOpts.length > 0) {
-      const raw = norm(specs["Focus Type"] ?? specs["Autofocus"] ?? "");
+      const raw = norm(specFirst("Focus Type", "Autofocus"));
       if (!focusOpts.some((opt) => raw.includes(norm(opt)))) return false;
     }
 
-    // Maximum Aperture
+    // Maximum Aperture — check across all models
     if (apertureOpts.length > 0) {
-      const ap = parseAperture(specs["Maximum Aperture"] ?? specs["Aperture"] ?? "");
+      const ap = parseAperture(specFirst("Maximum Aperture", "Aperture"));
       if (ap === null) return false;
       if (!apertureOpts.some((opt) => {
         if (opt === "f/5.6 & Smaller") return ap >= 5.6;
@@ -1280,9 +1319,9 @@ useEffect(() => {
   const hasLensFilters = Object.values(lensFilters).some((v) => v.length > 0);
   const hasSpeakerFilters = Object.values(speakerFilters).some((v) => v.length > 0);
   // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
-  // Pre-fetch detail for TVs as soon as the category is selected (small catalogue, needed for size/res/conn filters).
-  // Pre-fetch detail for cameras/lenses/speakers only when a filter is active.
-  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || (isCameraCategory && hasCameraFilters) || (isLensCategory && hasLensFilters) || (isSpeakerCategory && hasSpeakerFilters);
+  // Pre-fetch detail for TVs, cameras, and lenses as soon as the category is selected (small catalogues, needed for filters).
+  // Pre-fetch detail for speakers only when a filter is active.
+  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || isCameraCategory || isLensCategory || (isSpeakerCategory && hasSpeakerFilters);
 
   // When spec filters are active, pre-fetch detail for items not yet cached.
   useEffect(() => {

@@ -356,10 +356,12 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
 
 type CameraSpecModel = { model: string; lensIncluded: string; launchYear: string; lensName: string };
 
+type TvSpecModel = { screenSize: string; productName: string };
+
 const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
-  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; draftRows?: unknown[]; specModelNos?: string[]; cameraSpecModels?: CameraSpecModel[] }
->(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, draftRows, specModelNos = [], cameraSpecModels = [] }, ref) {
+  { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; draftRows?: unknown[]; specModelNos?: string[]; cameraSpecModels?: CameraSpecModel[]; tvSpecSizes?: string[]; tvSpecModels?: TvSpecModel[] }
+>(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, draftRows, specModelNos = [], cameraSpecModels = [], tvSpecSizes = [], tvSpecModels = [] }, ref) {
   const [isIPhone, setIsIPhone] = useState(false);
   const isLens = isLensCategory(categorySlug);
   const isCamera = !isLens && isCameraCategory(categorySlug);
@@ -801,17 +803,56 @@ const ProductVariantsEditor = forwardRef<
         // Disable non-model fields when there's an active mismatch.
         const rowDisabled = disabled || (hasSpecModels && modelEntered && !modelMatched);
 
+        // TV-specific validation — spec screen sizes and product names must match variants.
+        // Normalise size by stripping inch symbols (" ″ ') before comparing.
+        const normTvSize = (v: string) => v.replace(/["""″''']/g, "").trim().toLowerCase();
+        const hasTvSpecSizes = isTV && tvSpecSizes.length > 0;
+        const hasTvSpecNames = isTV && tvSpecModels.some((m) => m.productName);
+        const tvSizeEntered = isTV && r.ram.trim() !== "";
+        const tvNameEntered = isTV && r.name.trim() !== "";
+        const tvSizeMatched = !hasTvSpecSizes || !tvSizeEntered ||
+          tvSpecModels.some((m) => normTvSize(m.screenSize) === normTvSize(r.ram));
+        const tvNameMatched = !hasTvSpecNames || !tvNameEntered ||
+          tvSpecModels.some((m) => m.productName.trim().toLowerCase() === r.name.trim().toLowerCase());
+        const showTvSizeAlert = hasTvSpecSizes && tvSizeEntered && !tvSizeMatched;
+        const showTvNameAlert = hasTvSpecNames && tvNameEntered && !tvNameMatched;
+        const tvRowDisabled = disabled || showTvSizeAlert || showTvNameAlert;
+
         return isTV ? (
           /* ── TV: multi-row card ───────────────────────────────── */
-          <div key={r.uid} className="border border-gray-200 rounded-xl p-3 bg-white space-y-3">
-            {/* Product Name — full width */}
+          <div key={r.uid} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+            {(showTvNameAlert || showTvSizeAlert) && (
+              <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700">
+                <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  {showTvNameAlert
+                    ? <>Product Name <strong>&ldquo;{r.name}&rdquo;</strong> doesn&apos;t match any product name in the Specifications section. Fix it here or update the Specifications first.</>
+                    : <>Size <strong>&ldquo;{r.ram}&rdquo;</strong> doesn&apos;t match any screen size in the Specifications section. Fix it here or add this size to the Specifications first.</>
+                  } Other fields are locked until it matches.
+                </span>
+              </div>
+            )}
+            <div className="p-3 space-y-3">
+            {/* Product Name — validates against spec names; auto-fills Size on match */}
             <Field label="Product Name">
               <input
                 value={r.name}
-                onChange={(e) => updateRow(r.uid, { name: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const updates: Partial<VariantRow> = { name: val };
+                  if (tvSpecModels.length > 0) {
+                    const matched = tvSpecModels.find(
+                      (m) => m.productName.trim().toLowerCase() === val.trim().toLowerCase(),
+                    );
+                    if (matched) {
+                      if (matched.screenSize) updates.ram = matched.screenSize;
+                    }
+                  }
+                  updateRow(r.uid, updates);
+                }}
                 placeholder='e.g. Samsung 43" Crystal 4K TV'
                 disabled={disabled}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                className={`w-full border rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] ${showTvNameAlert ? "border-red-400 bg-red-50" : "border-gray-200"}`}
               />
             </Field>
             {/* Row 1: Size + Model No. + delete */}
@@ -819,11 +860,21 @@ const ProductVariantsEditor = forwardRef<
               <Field label="Size (inch)">
                 <input
                   value={r.ram}
-                  onChange={(e) => updateRow(r.uid, { ram: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const updates: Partial<VariantRow> = { ram: val };
+                    if (tvSpecModels.length > 0) {
+                      const matched = tvSpecModels.find(
+                        (m) => normTvSize(m.screenSize) === normTvSize(val),
+                      );
+                      if (matched && matched.productName) updates.name = matched.productName;
+                    }
+                    updateRow(r.uid, updates);
+                  }}
                   list="variant-tv-size-presets"
                   placeholder='e.g. 43'
                   disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  className={`w-full border rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] ${showTvSizeAlert ? "border-red-400 bg-red-50" : "border-gray-200"}`}
                 />
               </Field>
               <Field label="Model No.">
@@ -831,8 +882,8 @@ const ProductVariantsEditor = forwardRef<
                   value={r.storage}
                   onChange={(e) => updateRow(r.uid, { storage: e.target.value })}
                   placeholder="e.g. UA43CUE60BKLXL"
-                  disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                  disabled={tvRowDisabled}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                 />
               </Field>
               <button
@@ -854,8 +905,8 @@ const ProductVariantsEditor = forwardRef<
                     value={r.dimWithoutStand}
                     onChange={(e) => updateRow(r.uid, { dimWithoutStand: e.target.value })}
                     placeholder='e.g. 972.4 × 562.8 × 74.2 mm'
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="W×H×D (with stand)">
@@ -863,8 +914,8 @@ const ProductVariantsEditor = forwardRef<
                     value={r.dimWithStand}
                     onChange={(e) => updateRow(r.uid, { dimWithStand: e.target.value })}
                     placeholder='e.g. 972.4 × 625.0 × 213.3 mm'
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="Weight">
@@ -872,16 +923,16 @@ const ProductVariantsEditor = forwardRef<
                     value={r.weight}
                     onChange={(e) => updateRow(r.uid, { weight: e.target.value })}
                     placeholder='e.g. 4.5 kg'
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="Launch Year">
                   <select
                     value={r.launchYear}
                     onChange={(e) => updateRow(r.uid, { launchYear: e.target.value })}
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
                   >
                     <option value="">— Year —</option>
                     {Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i).map((y) => (
@@ -900,8 +951,8 @@ const ProductVariantsEditor = forwardRef<
                     onChange={(e) => updateRow(r.uid, { color: e.target.value })}
                     list="variant-color-presets"
                     placeholder="e.g. Black"
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="Stock">
@@ -909,8 +960,8 @@ const ProductVariantsEditor = forwardRef<
                     type="number" min={0} step={1}
                     value={r.stock}
                     onChange={(e) => updateRow(r.uid, { stock: e.target.value })}
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="MRP (₹)">
@@ -919,8 +970,8 @@ const ProductVariantsEditor = forwardRef<
                     value={r.base}
                     onChange={(e) => updateRow(r.uid, { base: e.target.value })}
                     placeholder="0"
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="Selling (₹)">
@@ -932,8 +983,8 @@ const ProductVariantsEditor = forwardRef<
                       updateRow(r.uid, { price, ...calcGstFields(price, r.gst) });
                     }}
                     placeholder="= MRP"
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="GST (%)">
@@ -944,8 +995,8 @@ const ProductVariantsEditor = forwardRef<
                       const gst = e.target.value;
                       updateRow(r.uid, { gst, ...calcGstFields(r.price, gst) });
                     }}
-                    disabled={disabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
+                    disabled={tvRowDisabled}
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </Field>
                 <Field label="GST Amt (₹)">
@@ -962,6 +1013,7 @@ const ProductVariantsEditor = forwardRef<
                 </Field>
               </div>
             )}
+            </div>{/* end p-3 space-y-3 */}
           </div>
         ) : (
           /* ── non-TV: existing compact grid ───────────────────── */
