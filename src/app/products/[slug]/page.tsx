@@ -751,49 +751,14 @@ useEffect(() => {
     const pos = modelGroup.values.indexOf(selectedVal);
     return pos >= 0 ? pos : 0;
   })();
-  const sdModelAttrKey = isSmartDeviceProduct
-    ? variantGroups.find((g) => g.key === "model" || g.key === "ram")?.key
-    : undefined;
   const smartDeviceModelIdx = (() => {
     if (!isSmartDeviceProduct || !selectedVariant) return 0;
-    // Strategy 1: text-match variant's model attribute against spec "Model N" keys.
-    // This is reliable because admin stores the model no. in both attributes.model
-    // and specs["Model"] / specs["Model 2"] etc., so they should always match.
-    const modelAttr = selectedVariant.attributes?.model != null
-      ? String(selectedVariant.attributes.model).trim().toLowerCase()
-      : selectedVariant.attributes?.ram != null
-      ? String(selectedVariant.attributes.ram).trim().toLowerCase()
-      : "";
-    if (modelAttr) {
-      for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
-        const val = product.specs[multiModelKey("Model", i)];
-        if (val && String(val).trim().toLowerCase() === modelAttr) return i;
-      }
-    }
-    // Strategy 2: variant group position — only useful when there are multiple distinct
-    // model values (e.g. 2 models with different model nos). If all variants share the
-    // same model no., this always returns 0 and the spec section never changes.
-    if (sdModelAttrKey) {
-      const modelGroup = variantGroups.find((g) => g.key === sdModelAttrKey);
-      if (modelGroup && modelGroup.values.length > 1) {
-        const selectedVal = attrValue(selectedVariant, sdModelAttrKey);
-        const pos = modelGroup.values.indexOf(selectedVal);
-        if (pos >= 0) return pos;
-      }
-    }
-    // Strategy 3: variant position — handles the case where all variants share the same
-    // model no. but have per-variant spec sections (e.g. colour variants with distinct
-    // specs like White charger vs Black charger). Only use if spec data exists there.
+    // Always use variant position: the admin adds variants and spec sections in
+    // the same order (variant 1 → Model 1 specs, variant 2 → Model 2 specs, …),
+    // so every variant switch always shows a different title/description/specs
+    // regardless of model no., colour, or any other attribute.
     const variantPos = product.variants.findIndex((v) => v.id === selectedVariant.id);
-    if (variantPos > 0 && variantPos < MAX_MULTIMODEL_DISPLAY) {
-      if (
-        product.specs[multiModelKey("Product Name", variantPos)] != null ||
-        product.specs[multiModelKey("Description", variantPos)] != null
-      ) {
-        return variantPos;
-      }
-    }
-    return 0;
+    return variantPos >= 0 && variantPos < MAX_MULTIMODEL_DISPLAY ? variantPos : 0;
   })();
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
   const galleryImages = (() => {
