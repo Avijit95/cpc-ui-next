@@ -361,7 +361,7 @@ const ProductVariantsEditor = forwardRef<
   const [rows, setRows] = useState<VariantRow[]>(() => {
     const _attrCols = isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : [];
     if (draftRows && draftRows.length > 0) {
-      return (draftRows as VariantRow[]).map((r) => ({ name: "", attr1: "", attr2: "", attr3: "", ...r, uid: uid(), existingId: undefined }));
+      return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined, name: r.name ?? "", attr1: r.attr1 ?? "", attr2: r.attr2 ?? "", attr3: r.attr3 ?? "" }));
     }
     return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens, isSmartDevice, _attrCols);
   });
@@ -554,7 +554,7 @@ const ProductVariantsEditor = forwardRef<
       hasRows: () => rows.length > 0,
       getRows: () => rows as unknown[],
       setRows: (newRows: unknown[]) => setRows(
-        (newRows as VariantRow[]).map((r) => ({ name: "", ...r, uid: uid(), existingId: undefined }))
+        (newRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined, name: r.name ?? "" }))
       ),
       getMinSellingPrice: () => {
         const prices = rows.map((r) => Number(r.price)).filter((n) => !isNaN(n) && n > 0);
