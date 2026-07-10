@@ -721,20 +721,38 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
     }
 
     // Connectivity — handle alternate spellings (WiFi / Wi-Fi, USB-C / Type-C).
+    // Cameras often store connectivity in a combined field OR as individual boolean
+    // spec keys (e.g. "Wi-Fi": "Yes", "Bluetooth": "Yes", "NFC": "Yes").
     if (connOpts.length > 0) {
-      const raw = norm(
+      const combined = norm(
         specs["Connectivity"] ?? specs["Wireless Connectivity"] ??
         specs["Connectivity Technology"] ?? specs["connectivity"] ??
         specs["Wireless Features"] ?? specs["Wireless Communication"] ?? ""
       );
-      if (!connOpts.some((opt) => {
+      const matchesOpt = (opt: string): boolean => {
         const o = norm(opt);
-        if (raw.includes(o)) return true;
-        // Alternate spellings
-        if (o === "wi fi" && raw.includes("wifi")) return true;
-        if (o === "usb c" && (raw.includes("type c") || raw.includes("usb type c"))) return true;
+        // Check combined field first
+        if (combined.includes(o)) return true;
+        if (o === "wi fi" && combined.includes("wifi")) return true;
+        if (o === "usb c" && (combined.includes("type c") || combined.includes("usb type c"))) return true;
+        // Fall back: individual boolean spec fields (e.g. specs["Wi-Fi"] = "Yes")
+        const directKeys = [opt, opt.replace(/-/g, " "), opt.replace(/-/g, "")];
+        for (const key of directKeys) {
+          const v = norm(specs[key] ?? "");
+          if (v && v !== "no" && v !== "false" && v !== "not supported" && v !== "n/a") return true;
+        }
+        // Scan all spec key names for the connectivity keyword (e.g. key "NFC Support" → matches "NFC")
+        for (const [key, val] of Object.entries(specs)) {
+          const k = norm(key);
+          const v = norm(val);
+          if (!k.includes(o) && !(o === "wi fi" && k.includes("wifi")) && !(o === "usb c" && k.includes("type c"))) continue;
+          // Key matches — check the value is truthy (not explicitly "no")
+          if (!v || v === "no" || v === "false" || v === "not supported" || v === "n/a") continue;
+          return true;
+        }
         return false;
-      })) return false;
+      };
+      if (!connOpts.some(matchesOpt)) return false;
     }
 
     // Shutter Speed — flexible substring match after normalisation.
