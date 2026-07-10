@@ -758,23 +758,27 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     }
 
     // Free-form specs from the editor (authoritative — empty clears existing).
-    // Any spec key named "Slug" or "Slug N" must be kebab-case; auto-convert or drop if empty.
+    // Helper: convert any string to a valid kebab-case slug.
     const toKebab = (s: string) =>
       s.trim().toLowerCase()
         .replace(/[^a-z0-9\s-]/g, "")
         .replace(/\s+/g, "-")
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "");
+    // "Slug" / "Slug 2" / "Slug 3" spec keys are per-model slugs.
+    // Drop empty ones; convert non-empty ones to kebab to satisfy backend validation.
     const slugKeyRe = /^Slug(\s\d+)?$/;
     const specs: Record<string, unknown> = {};
     for (const r of specRows) {
       const key = r.key.trim();
       if (!key) continue;
       if (slugKeyRe.test(key)) {
+        // Always omit if empty; otherwise force to kebab-case.
         const val = r.value.trim();
-        if (!val) continue; // omit empty slug specs
+        if (!val) continue;
         const kebab = toKebab(val);
         if (kebab) specs[key] = kebab;
+        // If toKebab produces empty (all special chars), skip entirely.
       } else {
         specs[key] = r.value;
       }
@@ -796,7 +800,11 @@ export default function ProductForm({ mode }: { mode: Mode }) {
       stock: stockNum,
       status,
     };
-    if (form.slug.trim()) body.slug = form.slug.trim();
+    // Always send a pre-computed kebab slug so the backend never tries to
+    // auto-generate from a name that may contain special/Unicode chars.
+    // Prefer the user's explicit slug; fall back to generating from product name.
+    const _computedSlug = toKebab(form.slug.trim()) || toKebab(name);
+    if (_computedSlug) body.slug = _computedSlug;
     if (form.brand.trim()) body.brand = form.brand.trim();
     if (form.hsnCode.trim()) body.hsnCode = form.hsnCode.trim();
     body.specs = specs;
