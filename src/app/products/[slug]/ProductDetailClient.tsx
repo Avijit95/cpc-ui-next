@@ -833,7 +833,7 @@ useEffect(() => {
   // The currently selected color, looked up across all color keys
   const selectedColor = colorAttrKeys.map((k) => selectedAttrs[k]).find(Boolean) ?? null;
   // Informational TV variant attributes — stored per-variant but not selectable UI groups
-  const TV_HIDDEN_ATTR_KEYS = new Set(["dimensions", "dimWithStand", "dimWithoutStand", "weight"]);
+  const TV_HIDDEN_ATTR_KEYS = new Set(["dimensions", "dimWithStand", "dimWithoutStand", "weight", "model", "name"]);
   const nonColorGroups = variantGroups.filter((g) => {
     if (/^colou?r$/i.test(g.key)) return false;
     if (isTvProduct && TV_HIDDEN_ATTR_KEYS.has(g.key)) return false;
@@ -2700,11 +2700,6 @@ function buildTvHighlights(specs: Record<string, unknown>, sizeIdx: number, sele
 
   const power = s("Power Consumption");
   if (power) rows.push({ icon: <Zap size={18} />, label: "Power Consumption", text: power, accent: "bg-orange-100 text-orange-500" });
-
-  const modelNo = selectedVariant?.attributes?.model
-    ? String(selectedVariant.attributes.model)
-    : "";
-  if (modelNo) rows.push({ icon: <Hash size={18} />, label: "Model No.", text: modelNo, accent: "bg-[#e8f7fc] text-[#129cd3]" });
 
   return rows;
 }

@@ -1315,13 +1315,14 @@ useEffect(() => {
   const isLensCategory = !!selectedCategory?.toLowerCase().includes("lens");
   const isCameraCategory = !isLensCategory && !!selectedCategory?.toLowerCase().includes("camera");
   const isSpeakerCategory = !!selectedCategory?.toLowerCase().includes("speaker");
+  const isSmartDeviceCategory = !isTvCategory && !!selectedCategory?.toLowerCase().includes("smart");
   const hasCameraFilters = Object.values(cameraFilters).some((v) => v.length > 0);
   const hasLensFilters = Object.values(lensFilters).some((v) => v.length > 0);
   const hasSpeakerFilters = Object.values(speakerFilters).some((v) => v.length > 0);
   // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
-  // Pre-fetch detail for TVs, cameras, and lenses as soon as the category is selected (small catalogues, needed for filters).
-  // Pre-fetch detail for speakers only when a filter is active.
-  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || isCameraCategory || isLensCategory || (isSpeakerCategory && hasSpeakerFilters);
+  // Pre-fetch detail for TVs, cameras, lenses, speakers, and smart devices as soon as
+  // the category is selected — these use per-variant cards and need detail immediately.
+  const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || isCameraCategory || isLensCategory || isSpeakerCategory || isSmartDeviceCategory;
 
   // When spec filters are active, pre-fetch detail for items not yet cached.
   useEffect(() => {
@@ -1367,6 +1368,24 @@ useEffect(() => {
       : specFiltered;
   const total = data?.total ?? 0;
   const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
+
+  // Count visible cards: for products with fetched variants, count variant cards.
+  // Products not yet fetched count as 1 card each.
+  const visibleCardCount = items.reduce((sum, p) => {
+    const cached = detailCache.get(p.slug);
+    if (!cached || cached.variants.length === 0) return sum + 1;
+    // Camera: one card per lens-type group
+    const isCamera = cached.variants.some((v) => "lensIncluded" in v.attributes);
+    if (isCamera) {
+      const groups = new Set(cached.variants.map((v) =>
+        String(v.attributes.lensIncluded) === "Yes"
+          ? `lens:${String(v.attributes.lens ?? "")}`.toLowerCase()
+          : `body-only:${String(v.attributes.color ?? "").toLowerCase().trim()}`
+      ));
+      return sum + groups.size;
+    }
+    return sum + cached.variants.length;
+  }, 0);
 
   // Build a per-variant filter for TV size so ProductCardExpander shows only matching sizes
   const tvSizeOpts = tvFilters["screenSize"] ?? [];
@@ -1685,7 +1704,7 @@ useEffect(() => {
                 ) : (
                   <>
                     Showing{" "}
-                    <span className="font-semibold text-gray-800">{items.length}</span>
+                    <span className="font-semibold text-gray-800">{visibleCardCount}</span>
                     {total > items.length && (
                       <> of <span className="font-semibold text-gray-800">{total}</span></>
                     )}{" "}

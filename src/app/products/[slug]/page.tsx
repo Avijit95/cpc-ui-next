@@ -26,18 +26,24 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     imageUrl = sorted[0]?.url ?? null;
   }
 
+  // description: prefer product.description, fall back to specs["Description"]
+  const description =
+    product.description?.trim() ||
+    String(product.specs?.["Description"] ?? "").trim() ||
+    undefined;
+
   return {
     title: product.name,
-    description: product.description,
+    description,
     openGraph: {
       title: product.name,
-      description: product.description,
+      description,
       ...(imageUrl ? { images: [{ url: imageUrl }] } : {}),
     },
     twitter: {
       card: "summary_large_image",
       title: product.name,
-      description: product.description,
+      description,
       ...(imageUrl ? { images: [imageUrl] } : {}),
     },
   };
