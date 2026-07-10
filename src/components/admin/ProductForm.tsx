@@ -758,10 +758,26 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     }
 
     // Free-form specs from the editor (authoritative — empty clears existing).
+    // Any spec key named "Slug" or "Slug N" must be kebab-case; auto-convert or drop if empty.
+    const toKebab = (s: string) =>
+      s.trim().toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+    const slugKeyRe = /^Slug(\s\d+)?$/;
     const specs: Record<string, unknown> = {};
     for (const r of specRows) {
       const key = r.key.trim();
-      if (key) specs[key] = r.value;
+      if (!key) continue;
+      if (slugKeyRe.test(key)) {
+        const val = r.value.trim();
+        if (!val) continue; // omit empty slug specs
+        const kebab = toKebab(val);
+        if (kebab) specs[key] = kebab;
+      } else {
+        specs[key] = r.value;
+      }
     }
 
     if (status === "ACTIVE" && !form.hsnCode.trim()) {
