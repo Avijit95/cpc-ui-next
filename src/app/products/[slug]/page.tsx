@@ -1516,7 +1516,7 @@ useEffect(() => {
                         setAddState("error");
                         const msg = isApiError(err) ? err.displayMessage : "";
                         setAddError(
-                          msg.toLowerCase().includes("name must be")
+                          (msg.toLowerCase().includes("name must be") || msg.toLowerCase().includes("product name is required"))
                             ? "This product is missing required information. Please contact support."
                             : msg || "Could not add to cart",
                         );

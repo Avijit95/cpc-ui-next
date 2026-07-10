@@ -704,14 +704,17 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const _bIsSpeaker     = _bCatSlug.includes("speaker") || _bCatName.includes("speaker");
     const _bIsTv          = _bCatSlug.includes("tv") || _bCatName.includes("tv") || _bCatName.includes("television");
     const _bIsSmartDevice = !_bIsTv && (_bCatSlug.includes("smart") || _bCatName.includes("smart"));
-    const _bNameOptional  = _bIsSpeaker || _bIsTv || _bIsSmartDevice;
+    const _bNameOptional  = _bIsLens || _bIsSpeaker || _bIsTv || _bIsSmartDevice;
     // For smart devices the name comes from the first model's "Product Name" spec row.
     const _sdName = _bIsSmartDevice
       ? (specRows.find((r) => r.key === "Product Name")?.value ?? "").trim()
       : "";
-    const name = form.name.trim() || _sdName;
+    // For lens products, derive name from first variant's model (ram field) if product name is blank.
+    const _lensName = _bIsLens
+      ? ((variantsRef.current?.getRows() as { ram?: string }[])?.[0]?.ram ?? "").trim()
+      : "";
+    const name = form.name.trim() || _sdName || _lensName;
     if (!name && !_bNameOptional) return { error: "Product name is required." };
-    if (_bIsLens && !name) return { error: "Product name is required for lens products." };
     if (_bIsSmartDevice && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
     if (!form.categoryId) return { error: "Pick a category." };
 
