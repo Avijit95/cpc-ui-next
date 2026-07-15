@@ -470,17 +470,6 @@ function matchTvResolution(val: string, option: string): boolean {
   return false;
 }
 
-function matchTvConnectivity(val: string, option: string): boolean {
-  const v = val.toLowerCase();
-  if (option === "HDMI") return v.includes("hdmi");
-  if (option === "Wi-Fi") return v.includes("wi-fi") || v.includes("wifi") || v.includes("wireless");
-  if (option === "USB") return v.includes("usb");
-  if (option === "AV") return v.includes(" av") || v.startsWith("av") || v.includes("composite");
-  if (option === "Bluetooth") return v.includes("bluetooth");
-  if (option === "Ethernet") return v.includes("ethernet") || v.includes("lan");
-  if (option === "RF") return v.includes(" rf") || v.startsWith("rf") || v.includes("coaxial") || v.includes("antenna");
-  return false;
-}
 
 function extractTvInches(cached: ReturnType<typeof detailCache.get>, productName?: string): number | null {
   // Helper: try to parse inches out of a raw string value
@@ -1365,8 +1354,6 @@ useEffect(() => {
   const isSpeakerCategory = !!selectedCategory?.toLowerCase().includes("speaker");
   const isSmartDeviceCategory = !isTvCategory && !!selectedCategory?.toLowerCase().includes("smart");
   const hasCameraFilters = Object.values(cameraFilters).some((v) => v.length > 0);
-  const hasLensFilters = Object.values(lensFilters).some((v) => v.length > 0);
-  const hasSpeakerFilters = Object.values(speakerFilters).some((v) => v.length > 0);
   // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
   // Pre-fetch detail for TVs, cameras, lenses, speakers, and smart devices as soon as
   // the category is selected — these use per-variant cards and need detail immediately.

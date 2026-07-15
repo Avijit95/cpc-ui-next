@@ -146,7 +146,6 @@ export default function DealsSection() {
   const [dealDetails, setDealDetails] = useState<Record<string, ProductDetail>>({});
   const [loaded, setLoaded] = useState(false);
   const [dealIdx, setDealIdx] = useState(0);
-  const [thumbStart, setThumbStart] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const THUMB_VISIBLE = 4;
   const SWIPE_THRESHOLD = 50;
@@ -213,17 +212,6 @@ export default function DealsSection() {
   const liveDeals = deals.filter((d) => new Date(d.endsAt).getTime() > now);
   const safeIdx = liveDeals.length > 0 ? dealIdx % liveDeals.length : 0;
 
-  // Keep the thumbnail strip in sync: scroll thumbStart so the selected deal is always visible.
-  useEffect(() => {
-    if (liveDeals.length === 0) return;
-    setThumbStart((s) => {
-      if (safeIdx < s) return safeIdx;
-      if (safeIdx >= s + THUMB_VISIBLE) return Math.max(0, safeIdx - THUMB_VISIBLE + 1);
-      return s;
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [safeIdx, liveDeals.length]);
-
   if (!loaded) return null;
 
   const hasDeals = liveDeals.length > 0;
@@ -242,6 +230,12 @@ export default function DealsSection() {
 
   const deal = liveDeals[safeIdx];
   if (!deal) return null;
+
+  // Derive thumbStart so the selected deal is always centred in the strip.
+  const thumbStart = Math.max(
+    0,
+    Math.min(Math.max(0, liveDeals.length - THUMB_VISIBLE), safeIdx - Math.floor(THUMB_VISIBLE / 2)),
+  );
 
   const prevDeal = () => setDealIdx((i) => (i - 1 + liveDeals.length) % liveDeals.length);
   const nextDeal = () => setDealIdx((i) => (i + 1) % liveDeals.length);

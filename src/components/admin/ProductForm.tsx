@@ -546,6 +546,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   }, [cropModal, advanceCrop, processAndAdd, autoRemoveBg]);
 
   // Validate files and push them into the crop queue.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _onPickFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
@@ -576,6 +577,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     [remainingSlots],
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _removeImage = (id: string) => {
     setImages((curr) => {
       const removed = curr.find((it) => it.id === id);
@@ -585,6 +587,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   };
 
   // Move an image one slot earlier (dir -1) or later (dir +1) — its display rank.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _moveImage = (id: string, dir: -1 | 1) => {
     setImages((curr) => {
       const i = curr.findIndex((it) => it.id === id);
@@ -597,6 +600,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   };
 
   // Move any image to position 0 (makes it the main/display photo).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _setAsMain = (id: string) => {
     setImages((curr) => {
       const i = curr.findIndex((it) => it.id === id);
@@ -608,6 +612,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     });
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _toggleScraped = (url: string) => {
     setImageError(null);
     const target = scrapedImages.find((i) => i.url === url);
@@ -963,6 +968,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const busy = submitting !== null;
   const isEdit = mode.kind === "edit";
   const currentStatus = isEdit ? mode.initial.status : "DRAFT";
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _atImageLimit = totalImageCount >= MAX_IMAGES;
 
   // Show variants for all products so any category can manage stock via variants.

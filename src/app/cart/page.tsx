@@ -179,34 +179,6 @@ export default function CartPage() {
     [setBusy, adjustStock],
   );
 
-  const toggleCoupon = useCallback(
-    async (line: PricedCartLine, slot: "customer" | "retail", apply: boolean) => {
-      const id = line.cartItemId;
-      setLineErrors((e) => {
-        if (!e[id]) return e;
-        const rest = { ...e };
-        delete rest[id];
-        return rest;
-      });
-      setBusy(id, true);
-      try {
-        const updated = await cartApi.updateItem(id, {
-          ...(slot === "customer" ? { customerCouponApplied: apply } : {}),
-          ...(slot === "retail" ? { retailCouponApplied: apply } : {}),
-        });
-        setCart(updated);
-      } catch (err: unknown) {
-        setLineErrors((e) => ({
-          ...e,
-          [id]: isApiError(err) ? err.displayMessage : "Could not apply coupon",
-        }));
-      } finally {
-        setBusy(id, false);
-      }
-    },
-    [setBusy],
-  );
-
   const removeLine = useCallback(
     async (line: PricedCartLine) => {
       const id = line.cartItemId;
@@ -553,68 +525,6 @@ export default function CartPage() {
   );
 }
 
-function CouponChips({
-  line,
-  busy,
-  onToggle,
-}: {
-  line: PricedCartLine;
-  busy: boolean;
-  onToggle: (
-    line: PricedCartLine,
-    slot: "customer" | "retail",
-    apply: boolean,
-  ) => void;
-}) {
-  const customer = line.availableCoupons.customer;
-  const retail = line.availableCoupons.retail;
-  const customerApplied = !!line.appliedCoupons.customer;
-  const retailApplied = !!line.appliedCoupons.retail;
-  if (!customer && !retail) return null;
-
-  return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      {customer && (
-        <button
-          onClick={() => onToggle(line, "customer", !customerApplied)}
-          disabled={busy}
-          className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
-            customerApplied
-              ? "bg-[#e8f7fc] border-[#129cd3] text-[#129cd3]"
-              : "bg-white border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
-          } disabled:opacity-50`}
-        >
-          <input
-            type="checkbox"
-            readOnly
-            checked={customerApplied}
-            className="w-3 h-3 accent-[#129cd3] cursor-pointer"
-          />
-          Apply ₹{customer.value} off ({customer.name})
-        </button>
-      )}
-      {retail && (
-        <button
-          onClick={() => onToggle(line, "retail", !retailApplied)}
-          disabled={busy}
-          className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
-            retailApplied
-              ? "bg-[#e8f7fc] border-[#129cd3] text-[#129cd3]"
-              : "bg-white border-gray-300 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3]"
-          } disabled:opacity-50`}
-        >
-          <input
-            type="checkbox"
-            readOnly
-            checked={retailApplied}
-            className="w-3 h-3 accent-[#129cd3] cursor-pointer"
-          />
-          Apply {retail.value}% partner discount ({retail.name})
-        </button>
-      )}
-    </div>
-  );
-}
 
 function EmptyCart() {
   return (
