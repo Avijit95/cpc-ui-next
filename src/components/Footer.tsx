@@ -49,26 +49,7 @@ export default function Footer() {
               <span className="text-gray-300 font-semibold">IEC:</span> {SELLER_IEC}
             </p>
           )}
-          <div className="flex gap-2 mt-4 mb-4 justify-center xs:justify-start">
-            {["f", "𝕏", "in", "▶"].map((label, i) => (
-              <a
-                key={i}
-                href="#"
-                className="w-8 h-8 bg-gray-700 hover:bg-[#129cd3] rounded flex items-center justify-center transition-colors text-white text-xs font-bold"
-              >
-                {label}
-              </a>
-            ))}
-          </div>
-          <div className="flex gap-2 justify-center xs:justify-start">
-            <a href="#" className="bg-gray-700 hover:bg-[#129cd3] text-white text-xs px-3 py-1.5 rounded transition-colors">
-              App Store
-            </a>
-            <a href="#" className="bg-gray-700 hover:bg-[#129cd3] text-white text-xs px-3 py-1.5 rounded transition-colors">
-              Google Play
-            </a>
-          </div>
-          {/* MSME registration badge — white chip so the black logo stays legible on the dark footer */}
+{/* MSME registration badge — white chip so the black logo stays legible on the dark footer */}
           <div className="mt-4 inline-block bg-white rounded p-2">
             <Image
               src="/msme.png"

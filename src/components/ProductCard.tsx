@@ -69,8 +69,9 @@ function smartDeviceCardTitle(v: Variant): string | null {
   const attrs = v.attributes;
   if (!attrs.model || "ram" in attrs || "storage" in attrs || "lensIncluded" in attrs || "size" in attrs) return null;
   const parts: string[] = [String(attrs.model)];
+  const skipKeys = new Set(["model", "color", "gst", "__gstRate", "gstAmount", "basePrice", "netBase", "mrp", "sellingPrice"]);
   for (const [k, val] of Object.entries(attrs)) {
-    if (k !== "model" && k !== "color" && val != null && String(val).trim() !== "") {
+    if (!skipKeys.has(k) && val != null && String(val).trim() !== "") {
       parts.push(String(val));
     }
   }

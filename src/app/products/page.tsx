@@ -1676,8 +1676,7 @@ useEffect(() => {
       </CollapsibleSection>
 
       {/* Clear Filters */}
-      {(selectedCategory !== null ||
-        selectedBrand !== null ||
+      {(selectedBrand !== null ||
         minRating !== null ||
         minPrice !== PRICE_FLOOR ||
         maxPrice !== PRICE_CEIL ||
@@ -1686,7 +1685,6 @@ useEffect(() => {
         hasCameraFilters) && (
         <button
           onClick={() => {
-            selectCategory(null);
             setSelectedBrand(null);
             setMinRating(null);
             setMinPrice(PRICE_FLOOR);
@@ -1694,6 +1692,8 @@ useEffect(() => {
             setPhoneFilters({});
             setTvFilters({});
             setCameraFiltersState({});
+            setLensFiltersState({});
+            setSpeakerFiltersState({});
           }}
           className="w-full py-2 border border-[#129cd3] text-[#129cd3] text-sm rounded hover:bg-[#e8f7fc] transition-colors"
         >
