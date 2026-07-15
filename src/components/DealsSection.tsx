@@ -210,9 +210,22 @@ export default function DealsSection() {
     return () => clearInterval(t);
   }, []);
 
+  const liveDeals = deals.filter((d) => new Date(d.endsAt).getTime() > now);
+  const safeIdx = liveDeals.length > 0 ? dealIdx % liveDeals.length : 0;
+
+  // Keep the thumbnail strip in sync: scroll thumbStart so the selected deal is always visible.
+  useEffect(() => {
+    if (liveDeals.length === 0) return;
+    setThumbStart((s) => {
+      if (safeIdx < s) return safeIdx;
+      if (safeIdx >= s + THUMB_VISIBLE) return Math.max(0, safeIdx - THUMB_VISIBLE + 1);
+      return s;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeIdx, liveDeals.length]);
+
   if (!loaded) return null;
 
-  const liveDeals = deals.filter((d) => new Date(d.endsAt).getTime() > now);
   const hasDeals = liveDeals.length > 0;
 
   if (!hasDeals && bestSellers.length === 0) return null;
@@ -227,7 +240,6 @@ export default function DealsSection() {
     );
   }
 
-  const safeIdx = dealIdx % liveDeals.length;
   const deal = liveDeals[safeIdx];
   if (!deal) return null;
 
@@ -336,7 +348,7 @@ export default function DealsSection() {
                 {/* Title block */}
                 <Link href={`/products/${deal.product.slug}`} className="block group mb-3">
                   <h3
-                    className="font-extrabold text-gray-900 group-hover:text-[#129cd3] transition-colors duration-200 tracking-tight"
+                    className="font-extrabold text-gray-900 group-hover:text-[#129cd3] transition-colors duration-200 tracking-tight line-clamp-2"
                     style={{ fontSize: "24px", lineHeight: "normal" }}
                   >
                     {deal.product.name}
@@ -489,18 +501,16 @@ export default function DealsSection() {
             <div className="mt-3 flex items-center gap-2">
               {/* Prev */}
               <button
-                onClick={() => {
-                  setThumbStart((s) => Math.max(0, s - 1));
-                }}
-                disabled={thumbStart === 0}
+                onClick={prevDeal}
+                disabled={liveDeals.length <= 1}
                 className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-                aria-label="Previous thumbnails"
+                aria-label="Previous deal"
               >
                 <ChevronLeft size={14} />
               </button>
 
               {/* Visible thumbnails */}
-              <div className="flex gap-2 flex-1 overflow-hidden">
+              <div className="flex gap-2 flex-1 overflow-hidden pt-1.5 pb-0.5 px-1.5">
                 {liveDeals.slice(thumbStart, thumbStart + THUMB_VISIBLE).map((d, rel) => {
                   const i = thumbStart + rel;
                   return (
@@ -529,7 +539,7 @@ export default function DealsSection() {
                           -{d.percentOff}%
                         </span>
                       </div>
-                      <p className={`text-[11px] truncate mt-1.5 text-center font-medium ${i === safeIdx ? "text-[#129cd3]" : "text-gray-600"}`}>
+                      <p className={`text-[11px] line-clamp-2 mt-1.5 text-center font-medium leading-tight ${i === safeIdx ? "text-[#129cd3]" : "text-gray-600"}`}>
                         {d.product.name}
                       </p>
                     </button>
@@ -539,12 +549,10 @@ export default function DealsSection() {
 
               {/* Next */}
               <button
-                onClick={() => {
-                  setThumbStart((s) => Math.min(liveDeals.length - THUMB_VISIBLE, s + 1));
-                }}
-                disabled={thumbStart + THUMB_VISIBLE >= liveDeals.length}
+                onClick={nextDeal}
+                disabled={liveDeals.length <= 1}
                 className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-[#129cd3] hover:text-white text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-                aria-label="Next thumbnails"
+                aria-label="Next deal"
               >
                 <ChevronRight size={14} />
               </button>

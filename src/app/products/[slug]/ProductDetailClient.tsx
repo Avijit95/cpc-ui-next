@@ -144,6 +144,7 @@ function buildVariantGroups(variants: Variant[]): VariantGroup[] {
   const keys: string[] = [];
   for (const v of variants) {
     for (const k of Object.keys(v.attributes)) {
+      if (k.startsWith("__")) continue; // skip internal metadata keys (e.g. __gstRate)
       if (!keys.includes(k)) keys.push(k);
     }
   }

@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   addressesApi,
   cartApi,
+  catalogApi,
   checkoutApi,
   paymentsApi,
   isApiError,
@@ -143,6 +144,8 @@ function CheckoutContent() {
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
+  const [variantGstRates, setVariantGstRates] = useState<Record<string, number>>({});
+
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [shortages, setShortages] = useState<StockShortage[] | null>(null);
@@ -166,6 +169,23 @@ function CheckoutContent() {
         if (cancelled) return;
         setCart(cartResp);
         setAddresses(addrResp);
+
+        // Fetch product details to read variant __gstRate for correct GST display.
+        const slugs = [...new Set(cartResp.items.map((l) => l.slug))];
+        Promise.allSettled(slugs.map((s) => catalogApi.getProduct(s))).then((results) => {
+          if (cancelled) return;
+          const rates: Record<string, number> = {};
+          results.forEach((r) => {
+            if (r.status === "fulfilled") {
+              r.value.variants.forEach((v) => {
+                const rate = v.attributes?.__gstRate;
+                if (rate != null) rates[v.id] = Number(rate);
+              });
+            }
+          });
+          setVariantGstRates(rates);
+        });
+
         const def = addrResp.find((a) => a.isDefault);
         if (def) setSelectedAddressId(def.id);
         else if (addrResp.length > 0) setSelectedAddressId(addrResp[0].id);
@@ -328,6 +348,40 @@ function CheckoutContent() {
     };
   }, [cart, cartItemIds]);
 
+  // Recompute pricing to match the cart page display.
+  // The backend treats the stored price as a GST-exclusive base and adds 18% on top,
+  // but the admin enters prices as GST-inclusive (selling price). So lineSubtotal
+  // (= unitPrice × qty = stored price × qty) is the correct GST-inclusive selling total,
+  // while lineGrandTotal is inflated by the extra backend GST.
+  // We use lineSubtotal as the actual selling price and extract GST using __gstRate.
+  const displayView = useMemo(() => {
+    if (!view) return null;
+    const items = view.items.map((line) => {
+      // Use admin-set __gstRate if available; fall back to backend's ratePercent.
+      const gstRate = line.variantId != null
+        ? (variantGstRates[line.variantId] ?? line.gst.ratePercent)
+        : line.gst.ratePercent;
+      // lineSubtotal = unitPrice × qty = the selling price admin entered × qty (GST-inclusive).
+      const sellTotal = line.lineSubtotal;
+      const lineGst = sellTotal * gstRate / (100 + gstRate);
+      const lineBase = sellTotal - lineGst;
+      return {
+        ...line,
+        unitPrice: line.qty > 0 ? lineBase / line.qty : 0,
+        lineSubtotal: lineBase,
+        gst: { ...line.gst, ratePercent: gstRate, total: lineGst },
+        lineGrandTotal: sellTotal, // what customer actually pays = admin's selling price
+      };
+    });
+    return {
+      ...view,
+      items,
+      subtotal: items.reduce((s, l) => s + l.lineSubtotal, 0),
+      gstTotal: items.reduce((s, l) => s + l.gst.total, 0),
+      grandTotal: items.reduce((s, l) => s + l.lineGrandTotal, 0),
+    };
+  }, [view, variantGstRates]);
+
   const isEmpty = !loading && view !== null && view.items.length === 0;
   const selectedAddress =
     addresses.find((a) => a.id === selectedAddressId) ?? null;
@@ -378,7 +432,7 @@ function CheckoutContent() {
                 Browse Products
               </Link>
             </div>
-          ) : view ? (
+          ) : view && displayView ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Left: address + items */}
               <div className="lg:col-span-2 space-y-5">
@@ -461,7 +515,7 @@ function CheckoutContent() {
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                     <h2 className="font-bold text-gray-800 text-sm">
-                      Order Items ({view.items.length})
+                      Order Items ({displayView.items.length})
                     </h2>
                     <Link
                       href="/cart"
@@ -471,7 +525,7 @@ function CheckoutContent() {
                     </Link>
                   </div>
                   <div className="divide-y divide-gray-100">
-                    {view.items.map((line) => {
+                    {displayView.items.map((line) => {
                       const discountTotal = line.discount.total;
                       return (
                         <div
@@ -501,7 +555,7 @@ function CheckoutContent() {
                   </div>
                 </div>
 
-                {view.staleApplications.length > 0 && (
+                {displayView.staleApplications.length > 0 && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-xs text-yellow-800 flex items-start gap-2">
                     <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
                     <div>
@@ -514,7 +568,7 @@ function CheckoutContent() {
                   </div>
                 )}
 
-                {view.stockWarnings.length > 0 && (
+                {displayView.stockWarnings.length > 0 && (
                   <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-xs text-orange-800 flex items-start gap-2">
                     <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
                     <div>
@@ -535,24 +589,24 @@ function CheckoutContent() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal</span>
-                      <span className="text-gray-800">{formatPrice(view.subtotal)}</span>
+                      <span className="text-gray-800">{formatPrice(displayView.subtotal)}</span>
                     </div>
-                    {view.discountTotal > 0 && (
+                    {displayView.discountTotal > 0 && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Discount</span>
                         <span className="text-green-600">
-                          −{formatPrice(view.discountTotal)}
+                          −{formatPrice(displayView.discountTotal)}
                         </span>
                       </div>
                     )}
                     <div className="flex justify-between">
                       <span className="text-gray-600">GST</span>
-                      <span className="text-gray-800">{formatPrice(view.gstTotal)}</span>
+                      <span className="text-gray-800">{formatPrice(displayView.gstTotal)}</span>
                     </div>
                     <div className="flex justify-between pt-3 border-t border-gray-100">
                       <span className="font-bold text-gray-800">Grand Total</span>
                       <span className="font-bold text-lg text-[#129cd3]">
-                        {formatPrice(view.grandTotal)}
+                        {formatPrice(displayView.grandTotal)}
                       </span>
                     </div>
                   </div>
@@ -590,7 +644,7 @@ function CheckoutContent() {
                     disabled={
                       placing ||
                       !selectedAddressId ||
-                      view.stockWarnings.length > 0
+                      displayView.stockWarnings.length > 0
                     }
                     className="mt-4 w-full flex items-center justify-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-colors"
                   >
@@ -600,7 +654,7 @@ function CheckoutContent() {
                       </>
                     ) : (
                       <>
-                        Place Order {selectedAddress ? `(${formatPrice(view.grandTotal)})` : ""}
+                        Place Order {selectedAddress ? `(${formatPrice(displayView.grandTotal)})` : ""}
                       </>
                     )}
                   </button>
