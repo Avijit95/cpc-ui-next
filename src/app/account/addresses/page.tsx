@@ -512,10 +512,11 @@ export default function AddressesPage() {
 
       {/* Add / Edit Address Modal */}
       {modalMode !== "closed" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="absolute inset-0 bg-black/50" onClick={() => !saving && closeModal()} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
+          <div className="flex min-h-full items-start justify-center p-4 pt-20 pb-8">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-800">
                 {modalMode === "create" ? "Add New Address" : "Edit Address"}
               </h2>
@@ -528,7 +529,7 @@ export default function AddressesPage() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 px-6 pt-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   Label <span className="font-normal text-gray-400">(optional)</span>
@@ -630,12 +631,12 @@ export default function AddressesPage() {
             </div>
 
             {formError && (
-              <div className="mt-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <div className="mt-4 mx-6 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 {formError}
               </div>
             )}
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 mt-6 px-6 pb-6">
               <button
                 onClick={handleSave}
                 disabled={saving}
@@ -652,6 +653,7 @@ export default function AddressesPage() {
                 Cancel
               </button>
             </div>
+          </div>
           </div>
         </div>
       )}
