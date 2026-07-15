@@ -228,6 +228,8 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     if (r.storage.trim()) a.storage = r.storage.trim();
   }
   if (r.color.trim()) a.color = r.color.trim();
+  const gstNum = Number(r.gst);
+  if (!isNaN(gstNum) && gstNum >= 0) a.__gstRate = gstNum;
   // Strip empty-string attributes — backend rejects them with minLength validation errors.
   return Object.fromEntries(Object.entries(a).filter(([, v]) => v !== ""));
 }
@@ -247,7 +249,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
   return variants.map((v) => {
     const base = v.basePrice != null ? String(v.basePrice) : "";
     const price = v.priceOverride != null ? String(v.priceOverride) : "";
-    const gst = "18";
+    const gst = v.attributes.__gstRate != null ? String(v.attributes.__gstRate) : "18";
     const { gstAmount, netBase } = calcGstFields(price, gst);
     // Camera → model/lens; TV → size/model; Speaker/SmartDevice → model; Lens → model (fallback ram); default → ram/storage.
     const ramVal = isCamera
@@ -684,18 +686,18 @@ const ProductVariantsEditor = forwardRef<
         <h3 className="font-bold text-gray-800 text-sm">Variants</h3>
         <p className="text-[12px] text-gray-500 mt-0.5">
           {isLens
-            ? "Add each Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price."
+            ? "Add each Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above."
             : isCamera
             ? "Add each Model No. / Color / Launch Year combination. Select Lens Included — if yes, enter the lens name. Stock and prices are per variant. Images: Camera: [Color] sections for body-only variants per color, Lens sections for each included lens."
             : isTV
-            ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per size."
+            ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per size."
             : isSpeaker
-            ? "Add each Model No. / Watt / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            ? "Add each Model No. / Watt / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per color."
             : isSmartDevice
-            ? "Add each Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
+            ? "Add each Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per color."
             : hideRam
-            ? "Add each ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."
-            : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price. Images are shared per color."}
+            ? "Add each ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per color."
+            : "Add each RAM / ROM / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per color."}
         </p>
         {isPhone && (
           <label className="flex items-center gap-2 mt-2 cursor-pointer select-none w-fit">

@@ -1394,6 +1394,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 Required when publishing (status = ACTIVE).
               </p>
             </div>
+
           </section>
 
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
