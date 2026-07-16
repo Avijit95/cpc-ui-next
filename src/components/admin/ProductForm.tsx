@@ -75,6 +75,15 @@ function clearDraft(key: string) {
   try { localStorage.removeItem(key); } catch { /* ignore */ }
 }
 
+/** Converts any string to a SEO-friendly kebab-case slug. */
+function toKebab(s: string) {
+  return s.trim().toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 function draftAge(savedAt: number): string {
   const mins = Math.floor((Date.now() - savedAt) / 60000);
   if (mins < 1) return "just now";
@@ -296,6 +305,9 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const draftKey = mode.kind === "create" ? DRAFT_KEY : `${DRAFT_KEY}-edit-${mode.productId}`;
 
   const [form, setForm] = useState<FormState>(buildInitialForm(initial));
+  // Track whether the user has manually edited the slug field.
+  // In edit mode the product already has a slug, so we lock auto-generation immediately.
+  const slugEditedRef = useRef(mode.kind === "edit" && !!initial?.slug);
   const [categories, setCategories] = useState<AdminCategoryListItem[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
   const [catsError, setCatsError] = useState<string | null>(null);
@@ -440,8 +452,18 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode.kind]);
 
-  const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
+  const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    if (key === "slug") {
+      // If user clears the slug, resume auto-generation; otherwise lock it.
+      slugEditedRef.current = (value as string).length > 0;
+      setForm((f) => ({ ...f, slug: value as string }));
+    } else if (key === "name" && !slugEditedRef.current) {
+      // Auto-generate slug from name while the user hasn't manually set one.
+      setForm((f) => ({ ...f, name: value as string, slug: toKebab(value as string) }));
+    } else {
+      setForm((f) => ({ ...f, [key]: value }));
+    }
+  };
 
   const noCategories = !loadingCats && categories.length === 0;
 
@@ -763,13 +785,6 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     }
 
     // Free-form specs from the editor (authoritative — empty clears existing).
-    // Helper: convert any string to a valid kebab-case slug.
-    const toKebab = (s: string) =>
-      s.trim().toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "");
     // "Slug" / "Slug 2" / "Slug 3" spec keys are per-model slugs.
     // Drop empty ones; convert non-empty ones to kebab to satisfy backend validation.
     const slugKeyRe = /^Slug(\s\d+)?$/;
@@ -1047,6 +1062,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               type="button"
               onClick={() => {
                 const d = pendingDraft;
+                if (d.form.slug) slugEditedRef.current = true;
                 setForm(d.form);
                 setSpecRows(d.specRows.map((r) => ({ id: uid(), key: r.key, value: r.value })));
                 // Pass draft rows directly to editor via prop (no timing issues).
@@ -1138,7 +1154,9 @@ export default function ProductForm({ mode }: { mode: Mode }) {
             const _siIsTv          = _siCatSlug.includes("tv") || _siCatName.includes("tv") || _siCatName.includes("television");
             const _siIsSmartDevice = !_siIsTv && (_siCatSlug.includes("smart") || _siCatName.includes("smart"));
             const _siIsCamera      = !_siIsLens && (_siCatSlug.includes("camera") || _siCatName.includes("camera"));
-            if (_siIsLens || _siIsSpeaker || _siIsTv || _siIsSmartDevice || _siIsCamera) return null;
+            const _siIsPhone       = _siCatSlug.includes("phone") || _siCatName.includes("phone");
+            const _siSpecOnly = _siIsLens || _siIsSpeaker || _siIsTv || _siIsSmartDevice || _siIsCamera;
+            if (_siSpecOnly) return null;
             return (
           <section className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <h3 className="font-bold text-gray-800 text-sm">Basic Information</h3>
@@ -1153,56 +1171,51 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3]"
               />
             </div>
-            {(() => {
-              const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
-              const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
-              const _isLens        = _cs.includes("lens") || _cn.includes("lens");
-              const _isSpeaker     = _cs.includes("speaker") || _cn.includes("speaker");
-              const _isTv          = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
-              const _isCamera      = !_isLens && (_cs.includes("camera") || _cn.includes("camera"));
-              const _isSmartDevice = !_isTv && (_cs.includes("smart") || _cn.includes("smart"));
-              const _hideSlug      = _isLens || _isSpeaker || _isTv || _isCamera || _isSmartDevice;
-              return _hideSlug ? null : (
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Slug</label>
-                  <input
-                    value={form.slug}
-                    onChange={(e) => onChange("slug", e.target.value)}
-                    placeholder={`auto-generated from name if empty · ${catPlaceholders.slugHint}`}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
-                  />
+            {_siIsPhone && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-gray-600">Slug</label>
+                  {!slugEditedRef.current && form.slug && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#129cd3] bg-blue-50 px-1.5 py-0.5 rounded">
+                      Auto
+                    </span>
+                  )}
+                  {slugEditedRef.current && (
+                    <button
+                      type="button"
+                      onClick={() => { slugEditedRef.current = false; onChange("name", form.name); }}
+                      className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+                    >
+                      Reset to auto
+                    </button>
+                  )}
                 </div>
-              );
-            })()}
-            {(() => {
-              const _cs = categories.find((c) => c.id === form.categoryId)?.slug?.toLowerCase() ?? "";
-              const _cn = categories.find((c) => c.id === form.categoryId)?.name?.toLowerCase() ?? "";
-              const _isLens        = _cs.includes("lens") || _cn.includes("lens");
-              const _isSpeaker     = _cs.includes("speaker") || _cn.includes("speaker");
-              const _isTv          = _cs.includes("tv") || _cn.includes("tv") || _cn.includes("television");
-              const _isCamera      = !_isLens && (_cs.includes("camera") || _cn.includes("camera"));
-              const _isSmartDevice = !_isTv && (_cs.includes("smart") || _cn.includes("smart"));
-              return !_isLens && !_isSpeaker && !_isTv && !_isSmartDevice && !_isCamera ? (
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                    Description
-                  </label>
-                  <textarea
-                    rows={6}
-                    value={form.description}
-                    onChange={(e) =>
-                      onChange("description", e.target.value.slice(0, 10_000))
-                    }
-                    placeholder="Describe key features, specs and what makes this product great…"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] resize-y"
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Up to 10,000 characters. (
-                    {form.description.length.toLocaleString("en-IN")}/10,000)
-                  </p>
-                </div>
-              ) : null;
-            })()}
+                <input
+                  value={form.slug}
+                  onChange={(e) => onChange("slug", e.target.value)}
+                  placeholder={catPlaceholders.slugHint}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
+                />
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+                Description
+              </label>
+              <textarea
+                rows={6}
+                value={form.description}
+                onChange={(e) =>
+                  onChange("description", e.target.value.slice(0, 10_000))
+                }
+                placeholder="Describe key features, specs and what makes this product great…"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] resize-y"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Up to 10,000 characters. (
+                {form.description.length.toLocaleString("en-IN")}/10,000)
+              </p>
+            </div>
           </section>
             );
           })()}
@@ -1830,7 +1843,23 @@ function TvSpecsEditor({
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
                   <input
                     value={get(tvSizeKey("Product Name", i))}
-                    onChange={(e) => set(tvSizeKey("Product Name", i), e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const nameKey = tvSizeKey("Product Name", i);
+                      const slugKey = tvSizeKey("Slug", i);
+                      const curSlug = get(slugKey);
+                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
+                      let next = rows.some(r => r.key === nameKey)
+                        ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
+                        : [...rows, { id: uid(), key: nameKey, value: v }];
+                      if (shouldAutoSlug) {
+                        const newSlug = toKebab(v);
+                        next = next.some(r => r.key === slugKey)
+                          ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                          : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                      }
+                      onChange(next);
+                    }}
                     placeholder='e.g. Samsung 43" 4K QLED Smart TV'
                     disabled={disabled}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -2188,10 +2217,37 @@ function CameraSpecsEditor({
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
                   <input
                     value={get(cameraModelKey("Product Name", i))}
-                    onChange={(e) => set(cameraModelKey("Product Name", i), e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const nameKey = cameraModelKey("Product Name", i);
+                      const slugKey = cameraModelKey("Slug", i);
+                      const curSlug = get(slugKey);
+                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
+                      let next = rows.some(r => r.key === nameKey)
+                        ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
+                        : [...rows, { id: uid(), key: nameKey, value: v }];
+                      if (shouldAutoSlug) {
+                        const newSlug = toKebab(v);
+                        next = next.some(r => r.key === slugKey)
+                          ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                          : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                      }
+                      onChange(next);
+                    }}
                     placeholder="e.g. Canon EOS 1500D DSLR Camera Body"
                     disabled={disabled}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                {/* Slug */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Slug</label>
+                  <input
+                    value={get(cameraModelKey("Slug", i))}
+                    onChange={(e) => set(cameraModelKey("Slug", i), e.target.value)}
+                    placeholder="e.g. canon-eos-1500d (auto-generated if empty)"
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] font-mono bg-white disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </div>
                 {/* Description */}
@@ -2507,7 +2563,23 @@ function CameraLensSpecsEditor({
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Lens Name (Product Name)</label>
                   <input
                     value={get(lensModelKey("Lens Name", i))}
-                    onChange={(e) => set(lensModelKey("Lens Name", i), e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const nameKey = lensModelKey("Lens Name", i);
+                      const slugKey = lensModelKey("Slug", i);
+                      const curSlug = get(slugKey);
+                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
+                      let next = rows.some(r => r.key === nameKey)
+                        ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
+                        : [...rows, { id: uid(), key: nameKey, value: v }];
+                      if (shouldAutoSlug) {
+                        const newSlug = toKebab(v);
+                        next = next.some(r => r.key === slugKey)
+                          ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                          : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                      }
+                      onChange(next);
+                    }}
                     placeholder="e.g. FE 200-600mm F5.6-6.3 G OSS"
                     disabled={disabled}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -2895,7 +2967,23 @@ function SpeakerSpecsEditor({
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
                   <input
                     value={get(speakerModelKey("Product Name", i))}
-                    onChange={(e) => set(speakerModelKey("Product Name", i), e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const nameKey = speakerModelKey("Product Name", i);
+                      const slugKey = speakerModelKey("Slug", i);
+                      const curSlug = get(slugKey);
+                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
+                      let next = rows.some(r => r.key === nameKey)
+                        ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
+                        : [...rows, { id: uid(), key: nameKey, value: v }];
+                      if (shouldAutoSlug) {
+                        const newSlug = toKebab(v);
+                        next = next.some(r => r.key === slugKey)
+                          ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                          : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                      }
+                      onChange(next);
+                    }}
                     placeholder="e.g. JBL Charge 5 Portable Bluetooth Speaker"
                     disabled={disabled}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -3194,7 +3282,23 @@ function SmartDeviceSpecsEditor({
                       <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
                       <input
                         value={get(smartDeviceModelKey("Product Name", i))}
-                        onChange={(e) => setVal(smartDeviceModelKey("Product Name", i), e.target.value)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const nameKey = smartDeviceModelKey("Product Name", i);
+                          const slugKey = smartDeviceModelKey("Slug", i);
+                          const curSlug = get(slugKey);
+                          const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
+                          let next = rows.some(r => r.key === nameKey)
+                            ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
+                            : [...rows, { id: uid(), key: nameKey, value: v }];
+                          if (shouldAutoSlug) {
+                            const newSlug = toKebab(v);
+                            next = next.some(r => r.key === slugKey)
+                              ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                              : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                          }
+                          onChange(next);
+                        }}
                         placeholder="e.g. Amazon Echo Dot (5th Gen)"
                         disabled={disabled}
                         className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"

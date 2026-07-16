@@ -140,7 +140,7 @@ function BestSellerRow({ product, imageUrl }: { product: ListCard; imageUrl: str
 }
 
 export default function DealsSection() {
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, user } = useAuth();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [bestSellers, setBestSellers] = useState<ListCard[]>([]);
   const [dealDetails, setDealDetails] = useState<Record<string, ProductDetail>>({});
@@ -157,13 +157,14 @@ export default function DealsSection() {
     if (authStatus === "loading") return;
 
     let cancelled = false;
-    // Authenticated users (admins) use the admin API which returns ALL live deals
-    // without deduplication by productId. Anonymous users fall back to the public
-    // endpoint which only returns one deal per product.
-    const fetchDeals: Promise<Deal[]> =
-      authStatus === "authenticated"
-        ? adminApi.listDeals({ status: "live", limit: 50 }).then((r) => r.items)
-        : dealsApi.getToday();
+    // Admin users: use the admin API which returns ALL live deals per variant,
+    // with no deduplication by productId.
+    // All other users (anonymous / customers): fall back to the public endpoint
+    // which returns the best deal per product.
+    const isAdmin = authStatus === "authenticated" && user?.role === "ADMIN";
+    const fetchDeals: Promise<Deal[]> = isAdmin
+      ? adminApi.listDeals({ status: "live", limit: 50 }).then((r) => r.items)
+      : dealsApi.getToday();
 
     Promise.allSettled([
       fetchDeals,
@@ -201,7 +202,7 @@ export default function DealsSection() {
     return () => {
       cancelled = true;
     };
-  }, [authStatus]);
+  }, [authStatus, user?.role]);
 
   // Tick once per second so the live list re-filters when a deal endsAt passes.
   useEffect(() => {
@@ -306,7 +307,7 @@ export default function DealsSection() {
 
                 {/* Product Image */}
                 <Link
-                  href={`/products/${deal.product.slug}`}
+                  href={`/products/${deal.product.slug}${deal.variantId ? `?variant=${deal.variantId}` : ""}`}
                   className="relative flex-shrink-0 w-[220px] h-[280px]"
                   onClick={(e) => { if (isDragging.current) e.preventDefault(); }}
                 >
@@ -340,7 +341,7 @@ export default function DealsSection() {
               <div className="flex-1 min-w-0 flex flex-col gap-0">
 
                 {/* Title block */}
-                <Link href={`/products/${deal.product.slug}`} className="block group mb-3">
+                <Link href={`/products/${deal.product.slug}${deal.variantId ? `?variant=${deal.variantId}` : ""}`} className="block group mb-3">
                   <h3
                     className="font-extrabold text-gray-900 group-hover:text-[#129cd3] transition-colors duration-200 tracking-tight line-clamp-2"
                     style={{ fontSize: "24px", lineHeight: "normal" }}

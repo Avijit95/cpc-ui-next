@@ -99,16 +99,61 @@ function variantTiers(
   return { base, selling };
 }
 
-// "8GB / 128GB / Black" from a variant's attributes, falling back to its SKU.
+// Human-readable label for a variant, matching what the storefront shows.
 function variantLabel(v: {
   sku: string;
   attributes: Record<string, unknown>;
 }): string {
+  const attrs = v.attributes;
+
+  // Camera: "Black · Body Only" or "Black · Body with 24-70mm"
+  if ("lensIncluded" in attrs) {
+    const color = attrs.color ? String(attrs.color) : "";
+    const lens =
+      String(attrs.lensIncluded) === "Yes" && attrs.lens
+        ? `Body with ${attrs.lens}`
+        : "Body Only";
+    return color ? `${color} · ${lens}` : lens;
+  }
+
+  // TV: size / launchYear / color (e.g. "43 inch / 2024 / Black")
+  if ("size" in attrs) {
+    const parts = ["size", "launchYear", "color"]
+      .map((k) => attrs[k])
+      .filter((x) => x != null && String(x).trim() !== "")
+      .map(String);
+    return parts.join(" / ") || v.sku;
+  }
+
+  // Speaker: model / watt / color
+  if ("watt" in attrs) {
+    const parts = ["model", "watt", "color"]
+      .map((k) => attrs[k])
+      .filter((x) => x != null && String(x).trim() !== "")
+      .map(String);
+    return parts.join(" / ") || v.sku;
+  }
+
+  // Smart device: model + custom attrs + color
+  if ("model" in attrs && !("ram" in attrs) && !("storage" in attrs)) {
+    const skip = new Set(["model", "color", "__gstRate", "launchYear"]);
+    const custom = Object.entries(attrs)
+      .filter(([k, val]) => !skip.has(k) && val != null && String(val).trim() !== "")
+      .map(([, val]) => String(val));
+    const parts = [
+      attrs.model ? String(attrs.model) : "",
+      ...custom,
+      attrs.color ? String(attrs.color) : "",
+    ].filter((x) => x.trim() !== "");
+    return parts.join(" / ") || v.sku;
+  }
+
+  // Phone / default: ram / storage / color
   const parts = ["ram", "storage", "color"]
-    .map((k) => v.attributes[k])
+    .map((k) => attrs[k])
     .filter((x) => x != null && String(x).trim() !== "")
     .map(String);
-  return parts.length > 0 ? parts.join(" / ") : v.sku;
+  return parts.join(" / ") || v.sku;
 }
 
 const STATUS_TABS: { value: DealLifecycle; label: string }[] = [
@@ -1263,9 +1308,9 @@ export default function AdminDealsPage() {
                   <p className="mt-1 text-[11px] text-gray-500">
                     {(() => {
                       const amt = Number(form.discountAmount);
-                      const base = form.productBasePrice ?? 0;
-                      if (amt > 0 && base > 0 && amt < base) {
-                        const pct = Math.round((amt / base) * 100);
+                      const ref = form.productBasePrice ?? 0;
+                      if (amt > 0 && ref > 0 && amt < ref) {
+                        const pct = Math.round((amt / ref) * 100);
                         return <>Discount of ₹{amt.toLocaleString("en-IN")} <span className="font-semibold text-[#129cd3]">({pct}% off)</span></>;
                       }
                       return "Enter discount amount in ₹ — percentage will be shown automatically.";
