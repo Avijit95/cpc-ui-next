@@ -2379,7 +2379,7 @@ function SpecsTable({
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
                   {humanizeSpecKey(key)}
                 </span>
-                <span className="text-sm font-medium text-gray-800 flex-1 leading-snug">
+                <span className="text-sm font-medium text-gray-800 flex-1 min-w-0 leading-snug break-words">
                   {formatSpecValue(value)}
                 </span>
               </div>
@@ -2488,7 +2488,7 @@ function SmartDeviceSpecsTable({
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 w-2/5 flex-shrink-0 pt-0.5 leading-relaxed">
                   {humanizeSpecKey(key)}
                 </span>
-                <span className="text-sm font-medium text-gray-800 flex-1 leading-snug">
+                <span className="text-sm font-medium text-gray-800 flex-1 min-w-0 leading-snug break-words">
                   {formatSpecValue(value)}
                 </span>
               </div>

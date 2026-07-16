@@ -2002,7 +2002,7 @@ const CAMERA_MODEL_BASE_KEYS = [
   "Model", "Product Name", "Description", "Slug",
   "Series", "Camera Type", "Launch Year",
   "Sensor Type", "Sensor Size", "Effective Resolution (MP)", "Image Processor", "ISO Range",
-  "Lens Mount", "Lens Included", "Lens Name", "Focal Length", "Aperture", "Autofocus",
+  "Lens Mount", "Lens Included", "Lens Name", "Focal Length", "Aperture", "Autofocus Points",
   "Aspect Ratio", "Screen Size", "Screen Type", "Touchscreen", "Vari-Angle Screen",
   "Built-in Flash", "Hot Shoe",
   "Memory Card Type", "Card Slots",
@@ -2061,7 +2061,7 @@ const CAMERA_SPEC_GROUPS: CameraSpecGroup[] = [
       { key: "Lens Name", placeholder: "e.g. 28–70 mm F3.5–5.6 OSS" },
       { key: "Focal Length", placeholder: "e.g. 28–70 mm", unit: "mm" },
       { key: "Aperture", placeholder: "e.g. f/1.8 – f/22" },
-      { key: "Autofocus", placeholder: "e.g. Phase Detection, Contrast Detection" },
+      { key: "Autofocus Points", placeholder: "e.g. 425", numeric: true },
     ],
   },
   {
