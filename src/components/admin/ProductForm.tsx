@@ -741,7 +741,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const _lensName = _bIsLens
       ? ((variantsRef.current?.getRows() as { ram?: string }[])?.[0]?.ram ?? "").trim()
       : "";
-    const name = form.name.trim() || _sdName || _lensName;
+    const name = _sdName || _lensName || form.name.trim();
     if (!name && !_bNameOptional) return { error: "Product name is required." };
     if (_bIsSmartDevice && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
     if (_bIsTv && !name) return { error: "Enter a Product Name for at least the first screen size in the Specifications section." };
@@ -1551,7 +1551,7 @@ const PHONE_SPEC_GROUPS: PhoneSpecGroup[] = [
     label: "Battery",
     icon: "🔋",
     fields: [
-      { key: "Battery", placeholder: "e.g. 5000 mAh, 67W fast charging" },
+      { key: "Battery", placeholder: "e.g. 5000", unit: "mAh", numeric: true },
     ],
   },
   {

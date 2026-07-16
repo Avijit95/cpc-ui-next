@@ -491,7 +491,15 @@ export function ProductCardExpander({
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(v);
     }
-    const cameraVariants = [...groups.values()].map(pickBestCameraVariant);
+    const cameraVariants = [...groups.values()]
+      .map(pickBestCameraVariant)
+      .filter((v) => {
+        const p = v.pricing.finalPrice;
+        if (priceMin && priceMin > 0 && p < priceMin) return false;
+        if (priceMax && p > priceMax) return false;
+        return true;
+      });
+    if (cameraVariants.length === 0) return null;
     return (
       <>
         {cameraVariants.map((v) => (

@@ -2268,10 +2268,60 @@ function humanizeSpecKey(key: string): string {
   return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : key;
 }
 
-function formatSpecValue(value: unknown): string {
-  if (Array.isArray(value)) return value.map(String).join(", ");
-  if (value && typeof value === "object") return JSON.stringify(value);
-  return String(value);
+// Maps base spec key (trailing " N" suffix stripped) → unit suffix.
+// Only keys where the admin enforces numeric input, so stored values are bare numbers.
+const SPEC_UNIT_MAP: Record<string, string> = {
+  // Phone / dimensions
+  "Display Size": "inches",
+  "Height": "mm",
+  "Width": "mm",
+  "Depth": "mm",
+  "Weight": "g",
+  "Battery": "mAh",
+  "Front Camera": "MP",
+  "Rear Camera": "MP",
+  // TV / AV
+  "Screen Size": "inches",
+  "Viewing Angle": "°",
+  "Refresh Rate": "Hz",
+  "Response Time": "ms",
+  "Power Consumption": "W",
+  "Speaker Output RMS": "W",
+  "RAM Capacity": "GB",
+  "Storage Memory": "GB",
+  // Camera
+  "Effective Resolution (MP)": "MP",
+  "Battery Life (Shots)": "shots",
+  "Autofocus Points": "pts",
+  // Lens
+  "Focal Length": "mm",
+  "Minimum Focus Distance": "m",
+  "Maximum Magnification": "×",
+  // Speaker
+  "Audio Output Power (RMS)": "W",
+  "Driver Size": "mm",
+  "Impedance": "Ω",
+  "Sensitivity": "dB",
+  "Signal-to-Noise Ratio": "dB",
+  "Battery Capacity": "mAh",
+};
+
+/** Strip trailing " 2", " 3" … suffix used for multi-model spec keys. */
+function baseSpecKey(key: string): string {
+  return key.replace(/ \d+$/, "");
+}
+
+function formatSpecValue(value: unknown, key?: string): string {
+  const raw = Array.isArray(value) ? value.map(String).join(", ")
+    : value && typeof value === "object" ? JSON.stringify(value)
+    : String(value);
+  if (!key) return raw;
+  const unit = SPEC_UNIT_MAP[baseSpecKey(key)];
+  if (!unit) return raw;
+  // Don't double-append if the value already ends with this unit
+  const trimmed = raw.trim();
+  if (trimmed.toLowerCase().endsWith(unit.toLowerCase())) return raw;
+  return `${trimmed} ${unit}`;
 }
 
 // Flipkart-style spec groups — matched by substring on the normalised (lowercase) key.
@@ -2380,7 +2430,7 @@ function SpecsTable({
                   {humanizeSpecKey(key)}
                 </span>
                 <span className="text-sm font-medium text-gray-800 flex-1 min-w-0 leading-snug break-words">
-                  {formatSpecValue(value)}
+                  {formatSpecValue(value, key)}
                 </span>
               </div>
             ))}
@@ -2489,7 +2539,7 @@ function SmartDeviceSpecsTable({
                   {humanizeSpecKey(key)}
                 </span>
                 <span className="text-sm font-medium text-gray-800 flex-1 min-w-0 leading-snug break-words">
-                  {formatSpecValue(value)}
+                  {formatSpecValue(value, key)}
                 </span>
               </div>
             ))}
@@ -2614,6 +2664,7 @@ function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
     const v = specs[key];
     return v ? String(v).trim() : "";
   };
+  const su = (key: string) => formatSpecValue(s(key), key);
 
   const rows: HighlightRow[] = [];
 
@@ -2635,26 +2686,26 @@ function buildHighlights(specs: Record<string, unknown>): HighlightRow[] {
 
   // Rear camera
   const rear = s("Rear Camera");
-  if (rear) rows.push({ icon: <Camera size={18} />, label: "Rear Camera", text: `${rear} Rear Camera`, accent: "bg-[#e8f7fc] text-[#129cd3]" });
+  if (rear) rows.push({ icon: <Camera size={18} />, label: "Rear Camera", text: `${su("Rear Camera")} Rear Camera`, accent: "bg-[#e8f7fc] text-[#129cd3]" });
 
   // Front camera
   const front = s("Front Camera");
-  if (front) rows.push({ icon: <Camera size={18} />, label: "Front Camera", text: `${front} Front Camera`, accent: "bg-pink-100 text-pink-500" });
+  if (front) rows.push({ icon: <Camera size={18} />, label: "Front Camera", text: `${su("Front Camera")} Front Camera`, accent: "bg-pink-100 text-pink-500" });
 
   // Display — combine available display fields
   const parts: string[] = [];
-  if (s("Display Size")) parts.push(s("Display Size"));
+  if (s("Display Size")) parts.push(su("Display Size"));
   if (s("Resolution")) parts.push(s("Resolution"));
   if (s("Screen Type")) parts.push(s("Screen Type"));
   if (parts.length) rows.push({ icon: <Smartphone size={18} />, label: "Display", text: `${parts.join(" · ")} Display`, accent: "bg-cyan-100 text-cyan-600" });
 
   // Battery
   const bat = s("Battery");
-  if (bat) rows.push({ icon: <BatteryMedium size={18} />, label: "Battery", text: bat, accent: "bg-green-100 text-green-600" });
+  if (bat) rows.push({ icon: <BatteryMedium size={18} />, label: "Battery", text: su("Battery"), accent: "bg-green-100 text-green-600" });
 
   // Weight
   const weight = s("Weight");
-  if (weight) rows.push({ icon: <HardDrive size={18} />, label: "Weight", text: weight, accent: "bg-gray-100 text-gray-500" });
+  if (weight) rows.push({ icon: <HardDrive size={18} />, label: "Weight", text: su("Weight"), accent: "bg-gray-100 text-gray-500" });
 
   // Fallback for non-phone products
   if (rows.length === 0) {
@@ -2673,6 +2724,7 @@ function buildTvHighlights(specs: Record<string, unknown>, sizeIdx: number, sele
     const v = specs[multiModelKey(base, sizeIdx)];
     return v ? String(v).trim() : "";
   };
+  const su = (base: string) => formatSpecValue(s(base), base);
   const rows: HighlightRow[] = [];
 
   const displayTech = s("Display Technology");
@@ -2682,7 +2734,7 @@ function buildTvHighlights(specs: Record<string, unknown>, sizeIdx: number, sele
   if (resolution) rows.push({ icon: <Smartphone size={18} />, label: "Resolution", text: resolution, accent: "bg-blue-100 text-blue-600" });
 
   const refreshRate = s("Refresh Rate");
-  if (refreshRate) rows.push({ icon: <Zap size={18} />, label: "Refresh Rate", text: refreshRate, accent: "bg-yellow-100 text-yellow-600" });
+  if (refreshRate) rows.push({ icon: <Zap size={18} />, label: "Refresh Rate", text: su("Refresh Rate"), accent: "bg-yellow-100 text-yellow-600" });
 
   const connectivity = s("Connectivity Technology");
   if (connectivity) rows.push({ icon: <Wifi size={18} />, label: "Connectivity", text: connectivity, accent: "bg-purple-100 text-purple-600" });
@@ -2696,11 +2748,11 @@ function buildTvHighlights(specs: Record<string, unknown>, sizeIdx: number, sele
 
   const tvWeight = selectedVariant?.attributes?.weight
     ? String(selectedVariant.attributes.weight)
-    : s("Weight");
+    : su("Weight");
   if (tvWeight) rows.push({ icon: <HardDrive size={18} />, label: "Weight", text: tvWeight, accent: "bg-gray-100 text-gray-500" });
 
   const power = s("Power Consumption");
-  if (power) rows.push({ icon: <Zap size={18} />, label: "Power Consumption", text: power, accent: "bg-orange-100 text-orange-500" });
+  if (power) rows.push({ icon: <Zap size={18} />, label: "Power Consumption", text: su("Power Consumption"), accent: "bg-orange-100 text-orange-500" });
 
   return rows;
 }
@@ -2710,6 +2762,7 @@ function buildCameraHighlights(specs: Record<string, unknown>, modelIdx = 0): Hi
     const v = specs[multiModelKey(key, modelIdx)];
     return v ? String(v).trim() : "";
   };
+  const su = (key: string) => formatSpecValue(s(key), key);
   const rows: HighlightRow[] = [];
 
   const lensMount = s("Lens Mount");
@@ -2735,9 +2788,9 @@ function buildCameraHighlights(specs: Record<string, unknown>, modelIdx = 0): Hi
 
   const dimParts: string[] = [];
   const w = s("Width"), d = s("Depth"), h = s("Height");
-  if (w && d && h) dimParts.push(`${w} × ${d} × ${h}`);
+  if (w && d && h) dimParts.push(`${w} × ${d} × ${h} mm`);
   const wt = s("Weight");
-  if (wt) dimParts.push(wt);
+  if (wt) dimParts.push(su("Weight"));
   if (dimParts.length > 0) rows.push({ icon: <Ruler size={18} />, label: "Dimensions", text: dimParts.join(" · "), accent: "bg-gray-100 text-gray-500" });
 
   return rows;
@@ -2773,6 +2826,7 @@ function buildSpeakerHighlights(specs: Record<string, unknown>, modelIdx = 0): H
     const v = specs[multiModelKey(base, modelIdx)];
     return v ? String(v).trim() : "";
   };
+  const su = (base: string) => formatSpecValue(s(base), base);
   const rows: HighlightRow[] = [];
 
   const bt = s("Bluetooth");
@@ -2781,7 +2835,7 @@ function buildSpeakerHighlights(specs: Record<string, unknown>, modelIdx = 0): H
   if (connectivity) rows.push({ icon: <Wifi size={18} />, label: "Connectivity", text: connectivity, accent: "bg-blue-100 text-blue-600" });
 
   const power = s("Audio Output Power (RMS)");
-  if (power) rows.push({ icon: <Zap size={18} />, label: "Audio Output", text: power, accent: "bg-orange-100 text-orange-600" });
+  if (power) rows.push({ icon: <Zap size={18} />, label: "Audio Output", text: su("Audio Output Power (RMS)"), accent: "bg-orange-100 text-orange-600" });
 
   const battery = s("Battery Life");
   if (battery) rows.push({ icon: <BatteryMedium size={18} />, label: "Battery Life", text: battery, accent: "bg-green-100 text-green-600" });

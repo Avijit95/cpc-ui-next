@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
@@ -38,10 +38,13 @@ const ratingOptions = [4, 3, 2, 1] as const;
 const PAGE_LIMIT = 24;
 
 const PRICE_FLOOR = 0;
-const PRICE_CEIL = 200000; // top of the slider; treated as open-ended (200000+)
+// PRICE_CEIL is the open-ended sentinel — prices at or above this value have no upper bound applied.
+// SLIDER_MAX is the visual maximum of the range slider (₹2L); the slider snaps to PRICE_CEIL when dragged to the end.
+const PRICE_CEIL = 100_000_000; // sentinel: "no upper bound"
+const SLIDER_MAX = 200000;      // visual top of the slider
 const PRICE_STEP = 1000;
 
-// Quick-pick ranges; the last bucket reaches PRICE_CEIL and so is open-ended.
+// Quick-pick ranges; "Above ₹2L" uses PRICE_CEIL so no upper bound is applied.
 const priceBuckets: { label: string; min: number; max: number }[] = [
   { label: "Below ₹10K", min: 0, max: 10000 },
   { label: "₹11K – ₹24.9K", min: 11000, max: 24900 },
@@ -49,7 +52,7 @@ const priceBuckets: { label: string; min: number; max: number }[] = [
   { label: "₹50K – ₹79.9K", min: 50000, max: 79900 },
   { label: "₹80K – ₹1.349L", min: 80000, max: 134900 },
   { label: "₹1.35L – ₹2L", min: 135000, max: 200000 },
-  { label: "Above ₹2L", min: 200000, max: 200000 },
+  { label: "Above ₹2L", min: 200001, max: PRICE_CEIL },
 ];
 
 // ── Phone-specific filter groups ──────────────────────────────────────────────
@@ -680,18 +683,18 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
       if (!typeOpts.some((opt) => vals.some((v) => v.includes(norm(opt))))) return false;
     }
 
-    // Autofocus Points — extract the first integer from spec; check across models.
+    // Autofocus Points — extract integers from ALL models and all AF keys.
     if (afOpts.length > 0) {
-      // Camera spec stores "Autofocus" as a text field, e.g. "9-point AF" or "425-point"
-      // or just "Phase Detection, Contrast Detection" (no number — don't exclude in that case).
-      const raw = specFirst(
+      const afKeys = [
         "Autofocus Points", "AF Points", "Number of Focus Points",
-        "Phase Detection AF Points", "Auto Focus Points", "Total Focus Points", "Autofocus"
-      );
-      const match = raw.match(/\d+/);
-      const num = match ? parseInt(match[0], 10) : NaN;
-      // Only exclude if a count was found AND doesn't match — skip if no count in spec.
-      if (!isNaN(num) && !afOpts.includes(String(num))) return false;
+        "Phase Detection AF Points", "Auto Focus Points", "Total Focus Points", "Autofocus",
+      ];
+      const nums = afKeys
+        .flatMap((k) => specAllModels(k))
+        .flatMap((v) => { const m = v.match(/\d+/g); return m ? m.map(Number) : []; })
+        .filter((n) => !isNaN(n));
+      // Only exclude if at least one AF count was found AND none match.
+      if (nums.length > 0 && !nums.some((n) => afOpts.includes(String(n)))) return false;
     }
 
     // Lens Mount — check across all models; "Other…" matches unrecognised mounts.
@@ -1328,9 +1331,13 @@ useEffect(() => {
     if (!isPriceActive) return true;
 
     if (p.lowestVariantPrice !== null) {
-      // Variant product: include as long as the cheapest variant doesn't exceed maxPrice.
-      // ProductCardExpander will filter individual variants against minPrice/maxPrice.
+      // Variant product: exclude only if the cheapest variant already exceeds maxPrice
+      // (means all variants are too expensive). We cannot exclude based on minPrice alone
+      // because there may be higher-priced variants in range — ProductCardExpander handles
+      // per-variant filtering. However, if finalPrice (the representative price shown on
+      // the list card) is also below minPrice, we can safely exclude.
       if (maxPrice < PRICE_CEIL && p.lowestVariantPrice > maxPrice) return false;
+      if (minPrice > PRICE_FLOOR && p.lowestVariantPrice < minPrice && p.finalPrice < minPrice) return false;
       return true;
     }
 
@@ -1379,6 +1386,115 @@ useEffect(() => {
 
   // cacheTick read to make React re-render after pre-fetch.
   void cacheTick;
+
+  // Dynamic camera filter options — derived from cached product specs so only real values appear.
+  const cameraFilterOptions = useMemo(() => {
+    const specAllFromSpecs = (specs: Record<string, unknown>, baseKey: string): string[] => {
+      const out: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const k = i === 0 ? baseKey : `${baseKey} ${i + 1}`;
+        if (specs[k]) out.push(String(specs[k]).trim());
+      }
+      return out.filter(Boolean);
+    };
+    const n = (v: string) => v.toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
+
+    const afNums    = new Set<number>();
+    const mounts    = new Set<string>();
+    const sensors   = new Set<string>();
+    const shutters  = new Set<string>();
+    const connFound = new Set<string>();
+    const resBkts   = new Set<string>();
+    const kitFound  = new Set<string>();
+
+    const CONN_OPTS = ["Wi-Fi", "Bluetooth", "NFC", "USB-C"];
+    const RES_BUCKETS: [string, (mp: number) => boolean][] = [
+      ["Under 20 MP", (mp) => mp < 20],
+      ["20\u201324 MP", (mp) => mp >= 20 && mp <= 24],
+      ["24\u201330 MP", (mp) => mp > 24 && mp <= 30],
+      ["30\u201345 MP", (mp) => mp > 30 && mp <= 45],
+      ["Above 45 MP", (mp) => mp > 45],
+    ];
+
+    for (const item of rawItems) {
+      const cached = detailCache.get(item.slug);
+      if (!cached) continue;
+      const specs = cached.specs;
+
+      // Autofocus Points
+      ["Autofocus Points", "AF Points", "Number of Focus Points",
+       "Phase Detection AF Points", "Auto Focus Points", "Total Focus Points"]
+        .flatMap((k) => specAllFromSpecs(specs, k))
+        .forEach((v) => { const ms = v.match(/\d+/g); if (ms) ms.forEach((m) => afNums.add(parseInt(m))); });
+
+      // Lens Mount
+      specAllFromSpecs(specs, "Lens Mount").forEach((v) => mounts.add(v));
+      if (specs["Mount"])              mounts.add(String(specs["Mount"]).trim());
+      if (specs["Mount Type"])         mounts.add(String(specs["Mount Type"]).trim());
+
+      // Sensor Technology
+      specAllFromSpecs(specs, "Sensor Type").forEach((v) => sensors.add(v));
+      if (specs["Image Sensor"])       sensors.add(String(specs["Image Sensor"]).trim());
+      if (specs["Sensor"])             sensors.add(String(specs["Sensor"]).trim());
+      if (specs["Image Sensor Type"])  sensors.add(String(specs["Image Sensor Type"]).trim());
+
+      // Shutter Speed
+      ["Shutter Speed", "Maximum Shutter Speed", "Shutter Speed Range", "Electronic Shutter"]
+        .flatMap((k) => specAllFromSpecs(specs, k))
+        .forEach((v) => shutters.add(v));
+
+      // Connectivity
+      for (const opt of CONN_OPTS) {
+        const o = n(opt);
+        const directKeys = [opt, opt.replace(/-/g, " "), opt.replace(/-/g, "")];
+        let found = directKeys.some((key) => {
+          const v = n(String(specs[key] ?? ""));
+          return v && v !== "no" && v !== "false" && v !== "not supported" && v !== "n/a";
+        });
+        if (!found) {
+          const combined = n(String(
+            specs["Connectivity"] ?? specs["Wireless Connectivity"] ??
+            specs["Connectivity Technology"] ?? specs["Wireless Features"] ?? ""
+          ));
+          found = combined.includes(o)
+            || (o === "wi fi" && combined.includes("wifi"))
+            || (o === "usb c" && (combined.includes("type c") || combined.includes("usb type c")));
+        }
+        if (!found && o === "usb c") {
+          const usbType = n(String(specs["USB Type"] ?? ""));
+          found = usbType.includes("type c") || usbType.includes("type-c");
+        }
+        if (found) connFound.add(opt);
+      }
+
+      // Resolution (Megapixels)
+      const mpRaw = ["Effective Resolution (MP)", "Maximum Resolution", "Effective Megapixels",
+        "Resolution", "Megapixels", "Sensor Resolution", "Effective Pixels", "Maximum Megapixels"]
+        .flatMap((k) => specAllFromSpecs(specs, k))
+        .find(Boolean) ?? "";
+      const mp = parseSpec(mpRaw);
+      if (mp !== null) RES_BUCKETS.forEach(([label, test]) => { if (test(mp)) resBkts.add(label); });
+
+      // Kit Type
+      const variants = cached.variants;
+      const lensVariants = variants.filter((v) => String(v.attributes.lensIncluded) === "Yes");
+      const uniqueLenses = new Set(lensVariants.map((v) => String(v.attributes.lens ?? "").toLowerCase().trim()));
+      if (variants.some((v) => String(v.attributes.lensIncluded) !== "Yes")) kitFound.add("Body Only");
+      if (uniqueLenses.size === 1) kitFound.add("With Kit Lens");
+      if (uniqueLenses.size >= 2)  kitFound.add("Twin Lens Kit");
+    }
+
+    return {
+      autofocusPoints: Array.from(afNums).sort((a, b) => a - b).map(String),
+      lensMount:       Array.from(mounts).filter(Boolean).sort(),
+      sensorTech:      Array.from(sensors).filter(Boolean).sort(),
+      shutterSpeed:    Array.from(shutters).filter(Boolean).sort(),
+      connectivity:    CONN_OPTS.filter((o) => connFound.has(o)),
+      resolution:      RES_BUCKETS.map(([l]) => l).filter((l) => resBkts.has(l)),
+      kitType:         ["Body Only", "With Kit Lens", "Twin Lens Kit"].filter((k) => kitFound.has(k)),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCameraCategory, rawItems, cacheTick]);
   const sortValue = sortOptions.find((o) => o.label === sortLabel)?.value;
   const specFiltered: ListCard[] = isPhoneCategory
     ? applyPhoneFilters(priceFilteredItems, phoneFilters)
@@ -1515,18 +1631,18 @@ useEffect(() => {
           <div
             className="absolute top-1/2 -translate-y-1/2 h-1 rounded bg-[#129cd3]"
             style={{
-              left: `${(minPrice / PRICE_CEIL) * 100}%`,
-              right: `${100 - (maxPrice / PRICE_CEIL) * 100}%`,
+              left: `${(Math.min(minPrice, SLIDER_MAX) / SLIDER_MAX) * 100}%`,
+              right: `${100 - (Math.min(maxPrice, SLIDER_MAX) / SLIDER_MAX) * 100}%`,
             }}
           />
           <input
             type="range"
             min={PRICE_FLOOR}
-            max={PRICE_CEIL}
+            max={SLIDER_MAX}
             step={PRICE_STEP}
-            value={minPrice}
+            value={Math.min(minPrice, SLIDER_MAX)}
             onChange={(e) =>
-              setMinPrice(Math.min(Number(e.target.value), maxPrice))
+              setMinPrice(Math.min(Number(e.target.value), Math.min(maxPrice, SLIDER_MAX)))
             }
             className="price-range absolute left-0 top-1/2 w-full -translate-y-1/2"
             style={{ zIndex: minPrice >= maxPrice ? 4 : 3 }}
@@ -1535,12 +1651,13 @@ useEffect(() => {
           <input
             type="range"
             min={PRICE_FLOOR}
-            max={PRICE_CEIL}
+            max={SLIDER_MAX}
             step={PRICE_STEP}
-            value={maxPrice}
-            onChange={(e) =>
-              setMaxPrice(Math.max(Number(e.target.value), minPrice))
-            }
+            value={Math.min(maxPrice, SLIDER_MAX)}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setMaxPrice(v >= SLIDER_MAX ? PRICE_CEIL : Math.max(v, minPrice));
+            }}
             className="price-range absolute left-0 top-1/2 w-full -translate-y-1/2"
             style={{ zIndex: 3 }}
             aria-label="Maximum price"
@@ -1554,7 +1671,7 @@ useEffect(() => {
           <span className="font-semibold text-[#129cd3]">
             {maxPrice >= PRICE_CEIL
               ? "₹2,00,000+"
-              : `₹${maxPrice.toLocaleString("en-IN")}`}
+              : `₹${Math.min(maxPrice, SLIDER_MAX).toLocaleString("en-IN")}`}
           </span>
         </div>
       </CollapsibleSection>
@@ -1609,15 +1726,19 @@ useEffect(() => {
       ))}
 
       {/* Camera-specific filters — shown only for camera category */}
-      {isCameraCategory && CAMERA_FILTER_GROUPS.map((group) => (
-        <FilterSection
-          key={group.key}
-          label={group.label}
-          options={group.options}
-          selected={cameraFilters[group.key] ?? []}
-          onChange={(vals) => setCameraFilter(group.key, vals)}
-        />
-      ))}
+      {isCameraCategory && CAMERA_FILTER_GROUPS.map((group) => {
+        const opts = (cameraFilterOptions as Record<string, string[]>)[group.key] ?? group.options;
+        if (opts.length === 0) return null;
+        return (
+          <FilterSection
+            key={group.key}
+            label={group.label}
+            options={opts}
+            selected={cameraFilters[group.key] ?? []}
+            onChange={(vals) => setCameraFilter(group.key, vals)}
+          />
+        );
+      })}
 
       {/* Lens-specific filters — shown only for lens category */}
       {isLensCategory && LENS_FILTER_GROUPS.map((group) => (
