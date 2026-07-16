@@ -307,7 +307,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const [form, setForm] = useState<FormState>(buildInitialForm(initial));
   // Track whether the user has manually edited the slug field.
   // In edit mode the product already has a slug, so we lock auto-generation immediately.
-  const slugEditedRef = useRef(mode.kind === "edit" && !!initial?.slug);
+  const [slugEdited, setSlugEdited] = useState(mode.kind === "edit" && !!initial?.slug);
   const [categories, setCategories] = useState<AdminCategoryListItem[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
   const [catsError, setCatsError] = useState<string | null>(null);
@@ -455,9 +455,9 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     if (key === "slug") {
       // If user clears the slug, resume auto-generation; otherwise lock it.
-      slugEditedRef.current = (value as string).length > 0;
+      setSlugEdited((value as string).length > 0);
       setForm((f) => ({ ...f, slug: value as string }));
-    } else if (key === "name" && !slugEditedRef.current) {
+    } else if (key === "name" && !slugEdited) {
       // Auto-generate slug from name while the user hasn't manually set one.
       setForm((f) => ({ ...f, name: value as string, slug: toKebab(value as string) }));
     } else {
@@ -1062,7 +1062,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               type="button"
               onClick={() => {
                 const d = pendingDraft;
-                if (d.form.slug) slugEditedRef.current = true;
+                if (d.form.slug) setSlugEdited(true);
                 setForm(d.form);
                 setSpecRows(d.specRows.map((r) => ({ id: uid(), key: r.key, value: r.value })));
                 // Pass draft rows directly to editor via prop (no timing issues).
@@ -1175,15 +1175,15 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-gray-600">Slug</label>
-                  {!slugEditedRef.current && form.slug && (
+                  {!slugEdited && form.slug && (
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-[#129cd3] bg-blue-50 px-1.5 py-0.5 rounded">
                       Auto
                     </span>
                   )}
-                  {slugEditedRef.current && (
+                  {slugEdited && (
                     <button
                       type="button"
-                      onClick={() => { slugEditedRef.current = false; onChange("name", form.name); }}
+                      onClick={() => { setSlugEdited(false); onChange("name", form.name); }}
                       className="text-[10px] text-gray-400 hover:text-gray-600 underline"
                     >
                       Reset to auto
