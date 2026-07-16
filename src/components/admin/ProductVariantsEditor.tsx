@@ -168,7 +168,7 @@ function comboKey(r: VariantRow, isCamera: boolean, isSmartDevice = false): stri
 }
 
 // For cameras images are grouped by model+color+launchYear+lensIncluded+lensName; for TVs by size+color+launchYear+model; lens by model+color; smart devices by model+color+custom attrs; all others by color.
-function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): string {
+function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = [], isSpeaker = false): string {
   if (isCamera) {
     const parts = [
       r.ram.trim(),
@@ -193,6 +193,11 @@ function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens =
     // Group by model + color + all custom attr values so each distinct config gets its own images.
     const attrVals = [r.attr1, r.attr2, r.attr3].slice(0, attrColumns.length).map((v) => v.trim()).filter(Boolean);
     const parts = [r.ram.trim(), r.color.trim(), ...attrVals].filter(Boolean);
+    return parts.join(" / ") || "";
+  }
+  if (isSpeaker) {
+    // Group by model + watt + color so each distinct SKU gets its own images.
+    const parts = [r.ram.trim(), r.storage.trim(), r.color.trim()].filter(Boolean);
     return parts.join(" / ") || "";
   }
   return r.color.trim();
@@ -301,7 +306,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
 
 // Variants sharing the same group key share one image set — take the first non-empty.
 // Camera: grouped by body/lens; TV: grouped by size+color; lens by model+color; all others: grouped by color.
-function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): Record<string, ColorImages> {
+function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = [], isSpeaker = false): Record<string, ColorImages> {
   const map: Record<string, ColorImages> = {};
   for (const v of variants) {
     let groupKey: string;
@@ -336,6 +341,12 @@ function initColorImages(variants: AdminVariant[], isTV: boolean, isCamera: bool
         return val != null ? String(val).trim() : "";
       }).filter(Boolean);
       const parts = [model, color, ...attrVals].filter(Boolean);
+      groupKey = parts.join(" / ") || "";
+    } else if (isSpeaker) {
+      const model = v.attributes.model != null ? String(v.attributes.model).trim() : "";
+      const watt  = v.attributes.watt  != null ? String(v.attributes.watt).trim()  : "";
+      const color = v.attributes.color != null ? String(v.attributes.color).trim() : "";
+      const parts = [model, watt, color].filter(Boolean);
       groupKey = parts.join(" / ") || "";
     } else {
       groupKey = v.attributes.color != null ? String(v.attributes.color).trim() : "";
@@ -383,14 +394,14 @@ const ProductVariantsEditor = forwardRef<
     return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens, isSmartDevice, _attrCols);
   });
   const [colorImages, setColorImages] = useState<Record<string, ColorImages>>(
-    () => initColorImages(initialVariants, isTV, isCamera, isLens, isSmartDevice, isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : []),
+    () => initColorImages(initialVariants, isTV, isCamera, isLens, isSmartDevice, isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : [], isSpeaker),
   );
 
   // Distinct image group keys (camera: body/lens; TV: size; smart device: model+color+attrs; others: color) — drives the image uploaders.
   const colors = useMemo(() => {
     const out: string[] = [];
     for (const r of rows) {
-      const c = imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns);
+      const c = imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns, isSpeaker);
       if (c && !out.includes(c)) out.push(c);
     }
     return out;
@@ -634,7 +645,7 @@ const ProductVariantsEditor = forwardRef<
               basePrice: r.base.trim() === "" ? null : Number(r.base),
               priceOverride: r.price.trim() === "" ? null : Number(r.price),
               stock: Number(r.stock),
-              imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns)] ?? [],
+              imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns, isSpeaker)] ?? [],
             };
             try {
               await adminApi.updateVariant(productId, existing.id, body);
@@ -672,7 +683,7 @@ const ProductVariantsEditor = forwardRef<
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
-            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns)] ?? [],
+            imagesObjectKeys: finalKeys[imageGroupKey(r, isTV, isCamera, isLens, isSmartDevice, attrColumns, isSpeaker)] ?? [],
           });
         }
       },
@@ -692,7 +703,7 @@ const ProductVariantsEditor = forwardRef<
             : isTV
             ? "Add each Size / Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per size."
             : isSpeaker
-            ? "Add each Model No. / Watt / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per color."
+            ? "Add each Model No. / Watt / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are per Model No. / Watt / Color combination."
             : isSmartDevice
             ? "Add each Model No. / Color combination with its own stock and prices. Enter MRP (original struck price) and Selling Price (GST-inclusive, what the customer pays). GST Amount and Base Price are auto-calculated from the Selling Price using the GST Rate set above. Images are shared per color."
             : hideRam
@@ -1278,7 +1289,7 @@ const ProductVariantsEditor = forwardRef<
       {colors.length > 0 && (
         <div className="space-y-4 pt-2 border-t border-gray-100">
           <p className="text-xs font-semibold text-gray-700">
-            {isCamera ? "Images by body / lens" : isTV ? "Images by size, color, year & model" : isSmartDevice ? "Images by model, color & attributes" : "Images by color"}
+            {isCamera ? "Images by body / lens" : isTV ? "Images by size, color, year & model" : isSmartDevice ? "Images by model, color & attributes" : isSpeaker ? "Images by model, watt & color" : "Images by color"}
           </p>
           {colors.map((color) => {
             const ci = colorImages[color] ?? { items: [], defaultId: null };

@@ -733,8 +733,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const _bIsSmartDevice = !_bIsTv && (_bCatSlug.includes("smart") || _bCatName.includes("smart"));
     const _bIsCamera      = !_bIsLens && (_bCatSlug.includes("camera") || _bCatName.includes("camera"));
     const _bNameOptional  = _bIsLens || _bIsSpeaker || _bIsTv || _bIsSmartDevice || _bIsCamera;
-    // For smart devices, cameras and TVs the name comes from the first model/size "Product Name" spec row.
-    const _sdName = (_bIsSmartDevice || _bIsCamera || _bIsTv)
+    // For smart devices, cameras, TVs, and speakers the name comes from the first model's "Product Name" spec row.
+    const _sdName = (_bIsSmartDevice || _bIsCamera || _bIsTv || _bIsSpeaker)
       ? (specRows.find((r) => r.key === "Product Name")?.value ?? "").trim()
       : "";
     // For lens products, derive name from first variant's model (ram field) if product name is blank.
@@ -745,6 +745,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     if (!name && !_bNameOptional) return { error: "Product name is required." };
     if (_bIsSmartDevice && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
     if (_bIsTv && !name) return { error: "Enter a Product Name for at least the first screen size in the Specifications section." };
+    if (_bIsSpeaker && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
     if (!form.categoryId) return { error: "Pick a category." };
 
     const description = form.description;
@@ -822,8 +823,16 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     };
     // Always send a pre-computed kebab slug so the backend never tries to
     // auto-generate from a name that may contain special/Unicode chars.
-    // Prefer the user's explicit slug; fall back to generating from product name.
-    const _computedSlug = toKebab(form.slug.trim()) || toKebab(name);
+    // For spec-based categories (speaker/TV/camera/lens/smart device) the slug comes from
+    // the per-model "Slug" spec row — form.slug is not shown and may be stale.
+    // For phones/generic the user types it directly into form.slug.
+    const _isSpecBased = _bIsSpeaker || _bIsCamera || _bIsTv || _bIsSmartDevice || _bIsLens;
+    const _specSlug = _isSpecBased
+      ? toKebab((specRows.find((r) => r.key === "Slug")?.value ?? "").trim())
+      : "";
+    const _computedSlug = _isSpecBased
+      ? (_specSlug || toKebab(name))
+      : (toKebab(form.slug.trim()) || toKebab(name));
     if (_computedSlug) body.slug = _computedSlug;
     if (form.brand.trim()) body.brand = form.brand.trim();
     if (form.hsnCode.trim()) body.hsnCode = form.hsnCode.trim();
