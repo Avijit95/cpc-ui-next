@@ -53,6 +53,7 @@ type DraftPayload = {
   variantRows: unknown[];
   pendingImageNames: string[]; // filenames of pending (not-yet-uploaded) images for reminder
   savedAt: number; // Date.now()
+  createdId?: string; // product ID set after first save in create mode (survives page refresh)
 };
 
 function loadDraft(key: string): DraftPayload | null {
@@ -375,7 +376,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   // Incremented on each restore to force the editor to remount and pick up draftInitRows.
   const [restoreKey, setRestoreKey] = useState(0);
 
-  // Auto-save whenever form, specRows, or images change (debounced 1 s).
+  // Auto-save whenever form, specRows, images, or createdId change (debounced 1 s).
   useEffect(() => {
     const id = setTimeout(() => {
       saveDraft(draftKey, {
@@ -386,11 +387,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           .filter((i) => i.kind === "pending")
           .map((i) => (i as Extract<typeof i, { kind: "pending" }>).file.name),
         savedAt: Date.now(),
+        createdId: createdId ?? undefined,
       });
     }, 1000);
     return () => clearTimeout(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, specRows, images]);
+  }, [form, specRows, images, createdId]);
 
   // Also save variant rows every 5 s (covers variant-only changes between form saves).
   useEffect(() => {
@@ -403,11 +405,12 @@ export default function ProductForm({ mode }: { mode: Mode }) {
           .filter((i) => i.kind === "pending")
           .map((i) => (i as Extract<typeof i, { kind: "pending" }>).file.name),
         savedAt: Date.now(),
+        createdId: createdId ?? undefined,
       });
     }, 5000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, specRows, images]);
+  }, [form, specRows, images, createdId]);
 
   // Cleanup object URLs on unmount.
   useEffect(() => {
@@ -929,13 +932,52 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     try {
       let productId: string;
       if (mode.kind === "create" && !createdId) {
-        const created = await adminApi.createProduct(built);
-        productId = created.id;
+        // Retry when the slug is already taken (common for spec-based categories where the slug
+        // is auto-generated from the Product Name and may collide with an existing product).
+        // Suffixes: -2, -3, then a timestamp-based suffix as a guaranteed-unique last resort.
+        let created: Awaited<ReturnType<typeof adminApi.createProduct>> | null = null;
+        const slugAttempt = built.slug ?? "";
+        const slugSuffixes = ["", "-2", "-3", `-${Date.now().toString(36)}`];
+        for (let attempt = 0; attempt < slugSuffixes.length; attempt++) {
+          try {
+            const slug = slugAttempt ? `${slugAttempt}${slugSuffixes[attempt]}` : undefined;
+            const body = attempt === 0 ? built : { ...built, slug };
+            created = await adminApi.createProduct(body);
+            break;
+          } catch (err) {
+            if (isApiError(err) && err.code === "PRODUCT_SLUG_TAKEN" && attempt < slugSuffixes.length - 1) continue;
+            throw err;
+          }
+        }
+        productId = created!.id;
         // Record immediately so any retry (e.g. after image failure) updates instead of re-creating.
-        setCreatedId(created.id);
+        setCreatedId(created!.id);
+        // Also persist to draft immediately — if the user refreshes during image upload,
+        // the draft will carry createdId so the next submit does updateProduct, not createProduct,
+        // avoiding a PRODUCT_SLUG_TAKEN error.
+        saveDraft(draftKey, {
+          form,
+          specRows: specRows.map(({ key, value }) => ({ key, value })),
+          variantRows: variantsRef.current?.getRows() ?? [],
+          pendingImageNames: [],
+          savedAt: Date.now(),
+          createdId: created!.id,
+        });
       } else {
         const existingId = mode.kind === "edit" ? mode.productId : createdId!;
-        await adminApi.updateProduct(existingId, built as UpdateProductBody);
+        const slugAttemptU = built.slug ?? "";
+        const slugSuffixesU = ["", "-2", "-3", `-${Date.now().toString(36)}`];
+        for (let attempt = 0; attempt < slugSuffixesU.length; attempt++) {
+          try {
+            const slug = slugAttemptU ? `${slugAttemptU}${slugSuffixesU[attempt]}` : undefined;
+            const body: UpdateProductBody = attempt === 0 ? (built as UpdateProductBody) : { ...(built as UpdateProductBody), slug };
+            await adminApi.updateProduct(existingId, body);
+            break;
+          } catch (err) {
+            if (isApiError(err) && err.code === "PRODUCT_SLUG_TAKEN" && attempt < slugSuffixesU.length - 1) continue;
+            throw err;
+          }
+        }
         productId = existingId;
       }
 
@@ -1074,14 +1116,19 @@ export default function ProductForm({ mode }: { mode: Mode }) {
                 if (d.form.slug) setSlugEdited(true);
                 setForm(d.form);
                 setSpecRows(d.specRows.map((r) => ({ id: uid(), key: r.key, value: r.value })));
-                // Pass draft rows directly to editor via prop (no timing issues).
-                // restoreKey forces a remount so the useState initialiser re-runs with draftInitRows.
+                // Always remount the spec editor so its internal useState re-initialises from the
+                // restored rows. Without this, SmartDeviceSpecsEditor (and other spec editors) keep
+                // their stale sectionsByModel/sections state from the initial empty mount, causing
+                // dynamic sections and field values to appear lost after draft restore.
+                setRestoreKey((k) => k + 1);
                 if (d.variantRows.length > 0) {
                   setDraftInitRows(d.variantRows);
-                  setRestoreKey((k) => k + 1);
                   // Clear after 3 s so future category changes start with empty rows.
                   setTimeout(() => setDraftInitRows(null), 3000);
                 }
+                // Restore createdId so a retry after page refresh uses updateProduct instead of
+                // createProduct, preventing PRODUCT_SLUG_TAKEN on products already saved.
+                if (d.createdId) setCreatedId(d.createdId);
                 setPendingDraft(null);
               }}
               className="px-3 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
@@ -1246,20 +1293,23 @@ export default function ProductForm({ mode }: { mode: Mode }) {
               const isCamera = !isLens && (catSlug.includes("camera") || catName.includes("camera"));
               const isSpeaker      = catSlug.includes("speaker") || catName.includes("speaker");
               const isSmartDevice  = !isTv && (catSlug.includes("smart") || catName.includes("smart"));
+              // specEditorKey includes restoreKey so the spec editor remounts on draft restore,
+              // re-running its internal useState initialisers with the freshly-restored rows.
+              const specEditorKey = `spec-${isEdit ? mode.productId : "new"}-${catSlug}-${restoreKey}`;
               return isPhone ? (
-                <PhoneSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <PhoneSpecsEditor key={specEditorKey} rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isTv ? (
-                <TvSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <TvSpecsEditor key={specEditorKey} rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isLens ? (
-                <CameraLensSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <CameraLensSpecsEditor key={specEditorKey} rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isCamera ? (
-                <CameraSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <CameraSpecsEditor key={specEditorKey} rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isSpeaker ? (
-                <SpeakerSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <SpeakerSpecsEditor key={specEditorKey} rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : isSmartDevice ? (
-                <SmartDeviceSpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <SmartDeviceSpecsEditor key={specEditorKey} rows={specRows} onChange={setSpecRows} disabled={busy} />
               ) : (
-                <SpecsEditor rows={specRows} onChange={setSpecRows} disabled={busy} />
+                <SpecsEditor key={specEditorKey} rows={specRows} onChange={setSpecRows} disabled={busy} />
               );
             })()}
           </section>
