@@ -363,7 +363,7 @@ function CheckoutContent() {
         : line.gst.ratePercent;
       // lineSubtotal = unitPrice × qty = the selling price admin entered × qty (GST-inclusive).
       const sellTotal = line.lineSubtotal;
-      const lineGst = sellTotal * gstRate / (100 + gstRate);
+      const lineGst = Math.round(sellTotal * gstRate / (100 + gstRate));
       const lineBase = sellTotal - lineGst;
       return {
         ...line,

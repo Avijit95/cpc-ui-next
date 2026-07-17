@@ -480,7 +480,7 @@ export default function DealsSection() {
                         // Prefer descriptive values (not just "Yes/No") over boolean flags
                         const descriptive = allRows.filter(([, v]) => !BORING.has(v.toLowerCase().trim()));
                         const boring = allRows.filter(([, v]) => BORING.has(v.toLowerCase().trim()));
-                        [...descriptive, ...boring].slice(0, 5).forEach(([fk, fv], idx) => {
+                        [...descriptive, ...boring].slice(0, 4).forEach(([fk, fv], idx) => {
                           highlights.push({ label: fk, text: fv, ...colors[idx % colors.length] });
                         });
                       }
@@ -490,7 +490,7 @@ export default function DealsSection() {
                       const SKIP = new Set(["Slug", "Product Name", "Description"]);
                       Object.entries(detail.specs)
                         .filter(([k, v]) => !k.startsWith("__") && !SKIP.has(k) && !/ \d+$/.test(k) && v && typeof v !== "object" && String(v).trim() !== "")
-                        .slice(0, 5)
+                        .slice(0, 4)
                         .forEach(([k, v], idx) => {
                           highlights.push({ label: k, text: String(v), ...colors[idx % colors.length] });
                         });
@@ -498,13 +498,13 @@ export default function DealsSection() {
                     if (highlights.length > 0) {
                       return (
                         <ul className="mb-4 space-y-2">
-                          {highlights.map((h, i) => (
+                          {highlights.slice(0, 4).map((h, i) => (
                             <li
                               key={i}
-                              className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${h.color}`}
+                              className={`flex items-start gap-3 px-3 py-2 rounded-lg border overflow-hidden ${h.color}`}
                             >
-                              <span className={`shrink-0 w-2 h-2 rounded-full ${h.dot}`} />
-                              <span style={{ lineHeight: "normal" }}>
+                              <span className={`shrink-0 w-2 h-2 rounded-full mt-1.5 ${h.dot}`} />
+                              <span className="min-w-0 flex-1 break-all" style={{ lineHeight: "normal" }}>
                                 <span className="font-bold text-gray-800" style={{ fontSize: "15px" }}>
                                   {h.label}:
                                 </span>{" "}

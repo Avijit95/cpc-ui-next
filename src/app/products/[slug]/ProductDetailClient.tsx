@@ -2896,18 +2896,18 @@ function ProductHighlights({ specs, isTv, isCamera, isLens, isSpeaker, isSmartDe
         {visible.map((row, i) => (
           <div
             key={i}
-            className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-[#129cd3]/30 transition-all"
+            className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md hover:border-[#129cd3]/30 transition-all overflow-hidden"
           >
             {/* Icon bubble */}
             <span className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${row.accent}`}>
               {row.icon}
             </span>
             {/* Text */}
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider leading-none mb-0.5">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider leading-none mb-0.5 truncate">
                 {row.label}
               </p>
-              <p className="text-xs font-semibold text-gray-800 leading-snug line-clamp-2">
+              <p className="text-xs font-semibold text-gray-800 leading-snug line-clamp-2 break-all">
                 {row.text}
               </p>
             </div>

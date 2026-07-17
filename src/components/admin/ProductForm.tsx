@@ -989,7 +989,7 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     }
   };
 
-  const busy = submitting !== null;
+  const busy = submitting !== null || processingCount > 0;
   const isEdit = mode.kind === "edit";
   const currentStatus = isEdit ? mode.initial.status : "DRAFT";
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
