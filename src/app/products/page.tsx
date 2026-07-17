@@ -926,28 +926,51 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
   const norm = (v: unknown) =>
     String(v ?? "").toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
 
-  // Parse first float from a string like "f/5.6-6.3" → 5.6
+  // Parse first float from "f/5.6", "f5.6", "5.6", "f/3.5-5.6" → first f-number
   const parseAperture = (v: unknown): number | null => {
-    const m = String(v ?? "").match(/f\/?([\d.]+)/i);
-    return m ? parseFloat(m[1]) : null;
+    const s = String(v ?? "");
+    const mf = s.match(/f\/?([\d.]+)/i);
+    if (mf) return parseFloat(mf[1]);
+    const mn = s.match(/^([\d.]+)/);
+    return mn ? parseFloat(mn[1]) : null;
   };
 
-  // Parse focal range from "200-600 mm" → {min: 200, max: 600}; "50 mm" → {min: 50, max: 50}
+  // Parse focal range: "200-600 mm" → {min:200,max:600}; "50mm" → {min:50,max:50}
   const parseFocal = (v: unknown): { min: number; max: number } | null => {
     const s = String(v ?? "");
-    const range = s.match(/([\d.]+)\s*[-–]\s*([\d.]+)/);
+    const range = s.match(/([\d.]+)\s*[-–to]+\s*([\d.]+)/i);
     if (range) return { min: parseFloat(range[1]), max: parseFloat(range[2]) };
     const single = s.match(/([\d.]+)/);
     if (single) { const f = parseFloat(single[1]); return { min: f, max: f }; }
     return null;
   };
 
+  // Aperture bucket: half-stop ranges around each preset value
+  const apertureBucket = (ap: number, opt: string): boolean => {
+    if (opt === "f/5.6 & Smaller") return ap > 4.8;
+    const target = parseAperture(opt);
+    if (target === null) return false;
+    const bounds: Record<number, [number, number]> = {
+      1.2: [0,   1.3],
+      1.4: [1.3, 1.6],
+      1.8: [1.6, 1.9],
+      2:   [1.9, 2.4],
+      2.8: [2.4, 3.4],
+      4:   [3.4, 4.8],
+    };
+    const b = bounds[target];
+    return b ? ap > b[0] && ap <= b[1] : Math.abs(ap - target) < 0.05;
+  };
+
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
-    if (!cached) return true; // Not yet fetched — show it until cache is ready
-    const specs  = cached?.specs ?? {};
+    if (!cached) return true; // Not yet fetched — show until cache is ready
+    const specs = cached?.specs ?? {};
 
-    // Helper: read across all multi-model indexes ("key", "key 2", "key 3"…)
+    // All spec values normalised — used for broad scanning when key names are unknown
+    const allSpecVals = Object.values(specs).map((v) => norm(v)).filter(Boolean);
+
+    // Helper: read spec key across all multi-model indexes ("key", "key 2" … "key 5")
     const specAllModels = (baseKey: string): string[] => {
       const out: string[] = [];
       for (let i = 0; i < 5; i++) {
@@ -956,6 +979,7 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
       }
       return out;
     };
+    // First non-empty value across a list of candidate key names
     const specFirst = (...baseKeys: string[]): string => {
       for (const base of baseKeys) {
         const vals = specAllModels(base);
@@ -964,80 +988,141 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
       return "";
     };
 
-    // Compatible Mountings — check across all models
+    // ── Compatible Mountings ─────────────────────────────────────────────────
+    // Scan ALL spec values so any key name the admin used is covered.
     if (mountOpts.length > 0) {
-      const knownMounts = ["canon rf", "canon ef", "canon ef s", "nikon z", "nikon f", "sony e", "sony fe", "fujifilm x"];
-      const allMountVals = [
-        ...specAllModels("Lens Mount"),
-        ...specAllModels("Compatible Camera"),
-      ].map(norm).filter(Boolean);
+      const knownMounts = [
+        "canon rf", "canon ef", "canon ef s", "nikon z", "nikon f",
+        "sony e", "sony fe", "fujifilm x", "fujifilm g", "l mount",
+        "micro four thirds", "leica m", "pentax k",
+      ];
       const nonOther = mountOpts.filter((o) => o !== "Other");
       const wantsOther = mountOpts.includes("Other");
       const matchesNamed = nonOther.some((opt) => {
         const o = norm(opt);
-        return allMountVals.some((raw) => {
-          if (o === "canon ef") return raw.includes("canon ef") && !raw.includes("canon ef s");
+        return allSpecVals.some((raw) => {
+          // Canon EF-S must not accidentally match Canon EF
+          if (o === "canon ef")  return (raw.includes("canon ef") || raw.includes("ef mount") || raw.includes("ef-mount")) && !raw.includes("canon ef s") && !raw.includes("efs");
+          if (o === "canon ef s") return raw.includes("canon ef s") || raw.includes("efs") || raw.includes("ef-s");
+          if (o === "canon rf")  return raw.includes("canon rf")  || raw.includes("rf mount");
+          if (o === "nikon z")   return raw.includes("nikon z")   || raw.includes("z mount");
+          if (o === "nikon f")   return (raw.includes("nikon f") && !raw.includes("nikon fx")) || raw.includes("f mount") || raw.includes("nikon f mount");
+          if (o === "sony e")    return (raw.includes("sony e") && !raw.includes("sony fe")) || raw === "e mount" || raw === "e";
+          if (o === "sony fe")   return raw.includes("sony fe") || raw.includes("fe mount") || raw === "fe";
+          if (o === "fujifilm x") return raw.includes("fujifilm x") || raw.includes("fujinon x") || raw.includes("fuji x") || raw.includes("x mount");
           return raw.includes(o);
         });
       });
       if (!matchesNamed) {
         if (wantsOther) {
-          const isKnown = allMountVals.some((raw) => knownMounts.some((m) => raw.includes(m)));
-          if (allMountVals.length === 0 || isKnown) return false;
+          const isKnown = allSpecVals.some((raw) => knownMounts.some((m) => raw.includes(m)));
+          if (allSpecVals.length === 0 || isKnown) return false;
         } else {
           return false;
         }
       }
     }
 
-    // Focal Length — check across all models
+    // ── Focal Length ─────────────────────────────────────────────────────────
+    // Try many candidate key names, then fall back to scanning all spec values
+    // for anything that looks like a focal length (digits + optional "mm").
     if (focalOpts.length > 0) {
-      const focalStr = specFirst("Focal Length");
+      let focalStr = specFirst(
+        "Focal Length", "Focal Length (mm)", "Focal Length Range",
+        "Focal Range", "Zoom Range", "Focal Length Range (mm)",
+        "Equivalent Focal Length", "35mm Equivalent Focal Length", "Focal"
+      );
+      // If no known key matched, search all spec values for a focal-length pattern
+      if (!focalStr) {
+        focalStr = allSpecVals.find((v) => /[\d.]+\s*(mm|to|[-–])\s*[\d.]/.test(v) || /^\d+\s*mm$/.test(v)) ?? "";
+      }
       const focal = parseFocal(focalStr);
       if (!focal) return false;
       if (!focalOpts.some((opt) => {
-        if (opt === "8–15 mm")         return focal.min <= 15 && focal.max >= 8;
-        if (opt === "16–24 mm")        return focal.min <= 24 && focal.max >= 16;
-        if (opt === "24–70 mm")        return focal.min <= 70 && focal.max >= 24;
-        if (opt === "70–200 mm")       return focal.min <= 200 && focal.max >= 70;
-        if (opt === "200–400 mm")      return focal.min <= 400 && focal.max >= 200;
+        if (opt === "8\u201315 mm")        return focal.min <= 15  && focal.max >= 8;
+        if (opt === "16\u201324 mm")       return focal.min <= 24  && focal.max >= 16;
+        if (opt === "24\u201370 mm")       return focal.min <= 70  && focal.max >= 24;
+        if (opt === "70\u2013200 mm")      return focal.min <= 200 && focal.max >= 70;
+        if (opt === "200\u2013400 mm")     return focal.min <= 400 && focal.max >= 200;
         if (opt === "400 mm & Above")  return focal.max >= 400;
         return false;
       })) return false;
     }
 
-    // Lens Type — check across all models
+    // ── Lens Type ────────────────────────────────────────────────────────────
+    // Check many key variants; also match common synonyms per type.
     if (typeOpts.length > 0) {
-      const vals = [...specAllModels("Lens Type"), ...specAllModels("Lens Series"), norm(item.name)].map(norm);
-      if (!typeOpts.some((opt) => vals.some((v) => v.includes(norm(opt))))) return false;
+      const typeVals = [
+        ...specAllModels("Lens Type"),
+        ...specAllModels("Type"),
+        ...specAllModels("Lens Series"),
+        ...specAllModels("Category"),
+        ...specAllModels("Lens Category"),
+        ...specAllModels("Lens Style"),
+        ...specAllModels("Optic Type"),
+        norm(item.name),
+      ].map(norm);
+
+      const matchType = (opt: string): boolean => {
+        const o = norm(opt);
+        return typeVals.some((v) => {
+          if (o === "wide angle" || o === "wide-angle")
+            return v.includes("wide") || v.includes("ultra wide") || v.includes("wideangle");
+          if (o === "telephoto")
+            return v.includes("telephoto") || (v.includes("tele") && !v.includes("wide"));
+          if (o === "standard")
+            return v.includes("standard") || v.includes("normal lens") || v.includes("normal zoom");
+          if (o === "macro")
+            return v.includes("macro");
+          if (o === "fisheye")
+            return v.includes("fisheye") || v.includes("fish eye");
+          return v.includes(o);
+        });
+      };
+
+      if (!typeOpts.some(matchType)) return false;
     }
 
-    // Autofocus / Focus Type — check across all models.
-    // "Focus Type" may store text like "Autofocus" / "Manual Focus".
-    // "Autofocus" may store "Yes" / "No" (boolean from admin spec editor).
+    // ── Autofocus ────────────────────────────────────────────────────────────
+    // "Focus Type" / "Focus Mode" / "Autofocus" are all common key names.
+    // Values may be "Autofocus", "AF/MF", "AF", "Yes", "Manual Focus", "No".
     if (focusOpts.length > 0) {
-      const focusTypeRaw = norm(specFirst("Focus Type"));
-      const afBool = norm(specFirst("Autofocus")); // "yes" or "no"
-      const hasAF = focusTypeRaw.includes("autofocus") || afBool === "yes";
-      const hasMF = focusTypeRaw.includes("manual")    || afBool === "no";
+      const focusRaw = norm(specFirst(
+        "Focus Type", "Focus Mode", "Focus", "Autofocus",
+        "Focusing System", "AF System", "Autofocus System",
+        "Autofocus Support", "Focus System"
+      ));
+      const hasAF = focusRaw.includes("autofocus") || focusRaw === "af"
+        || focusRaw.startsWith("af/") || focusRaw.startsWith("af ")
+        || focusRaw === "yes";
+      const hasMF = focusRaw.includes("manual") || focusRaw === "mf"
+        || focusRaw.endsWith("/mf") || focusRaw === "no";
+
       if (!focusOpts.some((opt) => {
         const o = norm(opt);
         if (o === "autofocus")    return hasAF;
         if (o === "manual focus") return hasMF;
-        // fallback: text match
-        return focusTypeRaw.includes(o);
+        return focusRaw.includes(o);
       })) return false;
     }
 
-    // Maximum Aperture — check across all models
+    // ── Maximum Aperture ─────────────────────────────────────────────────────
+    // Try common key names, then scan all spec values for "f/N.N" patterns.
     if (apertureOpts.length > 0) {
-      const ap = parseAperture(specFirst("Maximum Aperture", "Aperture"));
+      let ap = parseAperture(specFirst(
+        "Maximum Aperture", "Max Aperture", "Aperture",
+        "Aperture Range", "Maximum f Number", "Max f Number",
+        "Lens Aperture", "f Number", "Minimum f Number", "Aperture (Max)"
+      ));
+      // Fallback: scan all spec values for an aperture-like string
+      if (ap === null) {
+        for (const v of allSpecVals) {
+          const m = v.match(/f\/?([\d.]+)/i);
+          if (m) { ap = parseFloat(m[1]); break; }
+        }
+      }
       if (ap === null) return false;
-      if (!apertureOpts.some((opt) => {
-        if (opt === "f/5.6 & Smaller") return ap >= 5.6;
-        const target = parseAperture(opt);
-        return target !== null && Math.abs(ap - target) < 0.05;
-      })) return false;
+      if (!apertureOpts.some((opt) => apertureBucket(ap!, opt))) return false;
     }
 
     return true;
@@ -1322,26 +1407,50 @@ useEffect(() => {
   const rawItems: ListCard[] = data?.items ?? [];
 
   // Client-side price filter applied at the product level.
-  // For variant products we only check the max bound here (using lowestVariantPrice) so
-  // that a product with variants spanning multiple price tiers isn't wrongly excluded when
-  // only its cheapest variant is below minPrice. ProductCardExpander handles per-variant
-  // min/max filtering and hides individual out-of-range variant cards.
+  // ProductCardExpander handles per-variant min/max filtering and hides individual
+  // out-of-range variant cards, so the list-level filter only needs to coarsely exclude
+  // products where NO variant could possibly be in range.
+  //
+  // Key nuance for lens/camera products: the API's lowestVariantPrice = variant basePrice
+  // (net price after GST, not the selling price). The actual selling price lives in
+  // priceOverride and is only available after detail fetch. finalPrice from the list API
+  // is often 0 for these products. So we must not use finalPrice=0 as evidence that the
+  // product is below minPrice — we need the cached variant prices instead.
   const priceFilteredItems = rawItems.filter((p) => {
     const isPriceActive = minPrice > PRICE_FLOOR || maxPrice < PRICE_CEIL;
     if (!isPriceActive) return true;
 
-    if (p.lowestVariantPrice !== null) {
-      // Variant product: exclude only if the cheapest variant already exceeds maxPrice
-      // (means all variants are too expensive). We cannot exclude based on minPrice alone
-      // because there may be higher-priced variants in range — ProductCardExpander handles
-      // per-variant filtering. However, if finalPrice (the representative price shown on
-      // the list card) is also below minPrice, we can safely exclude.
-      if (maxPrice < PRICE_CEIL && p.lowestVariantPrice > maxPrice) return false;
-      if (minPrice > PRICE_FLOOR && p.lowestVariantPrice < minPrice && p.finalPrice < minPrice) return false;
-      return true;
+    // ── Highest-accuracy path: use actual selling prices from variant detail cache ──
+    // After the lens/camera/TV detail pre-fetch completes, cached variant finalPrices
+    // (from priceOverride) are available and should take precedence over list-level values.
+    const cached = detailCache.get(p.slug);
+    if (cached && cached.variants.length > 0) {
+      const variantPrices = cached.variants
+        .map((v) => v.pricing.finalPrice)
+        .filter((pr) => pr > 0);
+      if (variantPrices.length > 0) {
+        const lowestActual  = Math.min(...variantPrices);
+        const highestActual = Math.max(...variantPrices);
+        if (maxPrice < PRICE_CEIL && lowestActual > maxPrice) return false;
+        if (minPrice > PRICE_FLOOR && highestActual < minPrice) return false;
+        return true;
+      }
     }
 
-    // Single-price product: apply both bounds.
+    // ── Fallback: use list-API lowestVariantPrice (= net basePrice, not selling price) ──
+    if (p.lowestVariantPrice !== null) {
+      const lvp = p.lowestVariantPrice > 0 ? p.lowestVariantPrice : null;
+      if (lvp !== null) {
+        if (maxPrice < PRICE_CEIL && lvp > maxPrice) return false;
+        // Only exclude on minPrice when finalPrice > 0 independently confirms the price
+        // is low. When finalPrice = 0 (actual price is in priceOverride / not yet known),
+        // include the product and let ProductCardExpander filter at variant level.
+        if (minPrice > PRICE_FLOOR && lvp < minPrice && p.finalPrice > 0 && p.finalPrice < minPrice) return false;
+        return true;
+      }
+    }
+
+    // ── Single-price product path ─────────────────────────────────────────────────────
     const price = p.finalPrice > 0 ? p.finalPrice : null;
     if (!price) return true; // unknown price — include
     if (minPrice > PRICE_FLOOR && price < minPrice) return false;
@@ -1360,7 +1469,9 @@ useEffect(() => {
   const isCameraCategory = !isLensCategory && !!selectedCategory?.toLowerCase().includes("camera");
   const isSpeakerCategory = !!selectedCategory?.toLowerCase().includes("speaker");
   const isSmartDeviceCategory = !isTvCategory && !!selectedCategory?.toLowerCase().includes("smart");
-  const hasCameraFilters = Object.values(cameraFilters).some((v) => v.length > 0);
+  const hasCameraFilters  = Object.values(cameraFilters).some((v) => v.length > 0);
+  const hasLensFilters    = Object.values(lensFilters).some((v) => v.length > 0);
+  const hasSpeakerFilters = Object.values(speakerFilters).some((v) => v.length > 0);
   // Pre-fetch detail for phones only when a spec filter is active (large catalogue).
   // Pre-fetch detail for TVs, cameras, lenses, speakers, and smart devices as soon as
   // the category is selected — these use per-variant cards and need detail immediately.
@@ -1803,7 +1914,9 @@ useEffect(() => {
         maxPrice !== PRICE_CEIL ||
         hasPhoneFilters ||
         hasTvFilters ||
-        hasCameraFilters) && (
+        hasCameraFilters ||
+        hasLensFilters ||
+        hasSpeakerFilters) && (
         <button
           onClick={() => {
             setSelectedBrand(null);

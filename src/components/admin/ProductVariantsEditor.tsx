@@ -120,7 +120,7 @@ function initSmartDeviceAttrCols(variants: AdminVariant[]): string[] {
   const cols: string[] = [];
   for (const v of variants) {
     for (const key of Object.keys(v.attributes)) {
-      if (key !== "model" && key !== "color" && !seen.has(key) && cols.length < 3) {
+      if (key !== "model" && key !== "color" && key !== "__gstRate" && !seen.has(key) && cols.length < 3) {
         seen.add(key);
         cols.push(key);
       }

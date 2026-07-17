@@ -421,12 +421,79 @@ export default function DealsSection() {
                         if (val) highlights.push({ label, text: val, ...color });
                       }
                     }
-                    // Generic fallback — cap at 5
+                    // Smart device highlights — mirrors buildSmartDeviceHighlights on PDP (modelIdx=0)
                     if (highlights.length === 0) {
-                      Object.entries(detail.specs).slice(0, 5).forEach(([k, v], idx) => {
-                        if (v && typeof v !== "object")
+                      const SD_SKIP = new Set(["Product Name", "Product Type", "Slug", "Description", "Color", "Model", "Model Name", "Dial Color", "Strap Color", "Case Color", "Band Color", "ramOptions", "storageOptions", "colorOptions", "dimensions"]);
+                      const specEntries = Object.entries(detail.specs);
+                      // modelIdx=0: use only keys without numeric suffix (" 2", " 3" etc.)
+                      const modelEntries: [string, string][] = specEntries
+                        .filter(([k]) => !/ \d+$/.test(k))
+                        .map(([k, v]) => [k, String(v ?? "")]);
+                      const hasSDFormat = modelEntries.some(([k]) => /^__h\d+/.test(k));
+                      if (hasSDFormat) {
+                        const hasNewFormat = modelEntries.some(([k]) => /^__h\d+:/.test(k));
+                        type SDSec = { fields: [string, string][] };
+                        const sections: SDSec[] = [];
+                        if (hasNewFormat) {
+                          const bySection = new Map<number, [string, string][]>();
+                          for (const [key, value] of modelEntries) {
+                            const m = key.match(/^__h(\d+):(.+)$/);
+                            if (!m) continue;
+                            const si = +m[1];
+                            const fk = m[2];
+                            if (SD_SKIP.has(fk) || !fk.trim() || !value.trim()) continue;
+                            if (!bySection.has(si)) bySection.set(si, []);
+                            bySection.get(si)!.push([fk, value]);
+                          }
+                          // Preserve numeric section order (same as PDP: Array.from({length: maxSi+1}...))
+                          const maxSi = bySection.size > 0 ? Math.max(...bySection.keys()) : -1;
+                          for (let i = 0; i <= maxSi; i++) {
+                            const f = bySection.get(i);
+                            if (f && f.length > 0) sections.push({ fields: f });
+                          }
+                        } else {
+                          // Old format: __h{N} are section headings, remaining keys are fields
+                          let cur: [string, string][] = [];
+                          for (const [key, value] of modelEntries) {
+                            if (/^__h\d+$/.test(key)) {
+                              if (cur.length > 0) { sections.push({ fields: cur }); cur = []; }
+                            } else {
+                              if (SD_SKIP.has(key) || key.startsWith("__") || !key.trim() || !value.trim()) continue;
+                              cur.push([key, value]);
+                            }
+                          }
+                          if (cur.length > 0) sections.push({ fields: cur });
+                        }
+                        // Collect up to 2 fields per section (same as PDP), then sort:
+                        // prefer descriptive values (length > 3) over simple Yes/No booleans
+                        // Collect up to 2 fields per section; skip values that are too long (paragraphs, not highlights)
+                        const MAX_VAL_LEN = 120;
+                        const BORING = new Set(["yes", "no", "none", "n/a", "na", "true", "false"]);
+                        const allRows: [string, string][] = [];
+                        for (const sec of sections) {
+                          for (const [fk, fv] of sec.fields) {
+                            if (fv.length > MAX_VAL_LEN) continue; // skip paragraph-length values
+                            allRows.push([fk, fv]);
+                            if (allRows.length >= 10) break; // collect enough to sort from
+                          }
+                        }
+                        // Prefer descriptive values (not just "Yes/No") over boolean flags
+                        const descriptive = allRows.filter(([, v]) => !BORING.has(v.toLowerCase().trim()));
+                        const boring = allRows.filter(([, v]) => BORING.has(v.toLowerCase().trim()));
+                        [...descriptive, ...boring].slice(0, 5).forEach(([fk, fv], idx) => {
+                          highlights.push({ label: fk, text: fv, ...colors[idx % colors.length] });
+                        });
+                      }
+                    }
+                    // Generic fallback for non-smart-device products — cap at 5
+                    if (highlights.length === 0) {
+                      const SKIP = new Set(["Slug", "Product Name", "Description"]);
+                      Object.entries(detail.specs)
+                        .filter(([k, v]) => !k.startsWith("__") && !SKIP.has(k) && !/ \d+$/.test(k) && v && typeof v !== "object" && String(v).trim() !== "")
+                        .slice(0, 5)
+                        .forEach(([k, v], idx) => {
                           highlights.push({ label: k, text: String(v), ...colors[idx % colors.length] });
-                      });
+                        });
                     }
                     if (highlights.length > 0) {
                       return (

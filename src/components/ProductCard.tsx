@@ -495,8 +495,10 @@ export function ProductCardExpander({
       .map(pickBestCameraVariant)
       .filter((v) => {
         const p = v.pricing.finalPrice;
-        if (priceMin && priceMin > 0 && p < priceMin) return false;
-        if (priceMax && p > priceMax) return false;
+        if (p > 0) {
+          if (priceMin && priceMin > 0 && p < priceMin) return false;
+          if (priceMax && p > priceMax) return false;
+        }
         return true;
       });
     if (cameraVariants.length === 0) return null;
@@ -517,11 +519,14 @@ export function ProductCardExpander({
       )
     : variants;
 
-  // Filter variants by price range and/or any additional caller-supplied filter
+  // Filter variants by price range and/or any additional caller-supplied filter.
+  // Skip price check when finalPrice is 0 (unknown/unset — actual price may be in priceOverride).
   const visibleVariants = sortedVariants.filter((v) => {
     const p = v.pricing.finalPrice;
-    if (priceMin && priceMin > 0 && p < priceMin) return false;
-    if (priceMax && p > priceMax) return false;
+    if (p > 0) {
+      if (priceMin && priceMin > 0 && p < priceMin) return false;
+      if (priceMax && p > priceMax) return false;
+    }
     if (variantFilter && !variantFilter(v)) return false;
     return true;
   });

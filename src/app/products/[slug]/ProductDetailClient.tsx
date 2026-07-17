@@ -760,12 +760,15 @@ useEffect(() => {
   })();
   const smartDeviceModelIdx = (() => {
     if (!isSmartDeviceProduct || !selectedVariant) return 0;
-    // Always use variant position: the admin adds variants and spec sections in
-    // the same order (variant 1 → Model 1 specs, variant 2 → Model 2 specs, …),
-    // so every variant switch always shows a different title/description/specs
-    // regardless of model no., colour, or any other attribute.
+    // Use variant position only if specs actually exist at that position.
+    // Products with colour-only variants share a single spec set (index 0),
+    // while products with multiple distinct models have per-model spec sets
+    // (keys suffixed " 2", " 3", … for indices 1, 2, …).
     const variantPos = product.variants.findIndex((v) => v.id === selectedVariant.id);
-    return variantPos >= 0 && variantPos < MAX_MULTIMODEL_DISPLAY ? variantPos : 0;
+    if (variantPos <= 0 || variantPos >= MAX_MULTIMODEL_DISPLAY) return 0;
+    const suffix = ` ${variantPos + 1}`;
+    const hasSpecs = Object.keys(product.specs).some((k) => k.endsWith(suffix) && String(product.specs[k] ?? "").trim() !== "");
+    return hasSpecs ? variantPos : 0;
   })();
   const productImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
   const galleryImages = (() => {
