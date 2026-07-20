@@ -2289,20 +2289,36 @@ useEffect(() => {
       {/* Lightbox modal */}
       {lightboxOpen && product && (
         <div
-          className="fixed inset-0 z-[9999] bg-black/90 flex items-stretch"
+          className="fixed inset-0 z-[9999] bg-black/90 flex flex-col md:flex-row items-stretch"
           onClick={() => setLightboxOpen(false)}
         >
-          {/* Left: large image + prev/next */}
+          {/* Mobile top bar: close + title */}
           <div
-            className="flex-1 flex items-center justify-center relative p-10"
+            className="flex md:hidden items-center justify-between px-4 py-3 bg-white flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold text-gray-800 line-clamp-1 flex-1 mr-3">
+              {displayTitle}
+            </p>
+            <button
+              onClick={() => setLightboxOpen(false)}
+              className="w-9 h-9 rounded-full border border-gray-200 hover:bg-gray-100 flex items-center justify-center text-gray-600 flex-shrink-0 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Image area */}
+          <div
+            className="flex-1 flex items-center justify-center relative p-4 md:p-10 min-h-0"
             onClick={(e) => e.stopPropagation()}
           >
             {lightboxIdx > 0 && (
               <button
                 onClick={() => setLightboxIdx((i) => i - 1)}
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
+                className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
               >
-                <ChevronLeft size={22} />
+                <ChevronLeft size={20} />
               </button>
             )}
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2310,24 +2326,42 @@ useEffect(() => {
               src={galleryImages[lightboxIdx]?.url ?? ""}
               alt={product.name}
               className="max-h-full max-w-full object-contain select-none"
-              style={{ maxHeight: "calc(100vh - 40px)" }}
+              style={{ maxHeight: "calc(100vh - 120px)" }}
             />
             {lightboxIdx < galleryImages.length - 1 && (
               <button
                 onClick={() => setLightboxIdx((i) => i + 1)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
+                className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
               >
-                <ChevronRight size={22} />
+                <ChevronRight size={20} />
               </button>
             )}
           </div>
 
-          {/* Right: title + thumbnails */}
+          {/* Mobile bottom thumbnails */}
           <div
-            className="w-72 bg-white flex flex-col p-5 overflow-y-auto"
+            className="flex md:hidden gap-2 px-4 py-3 bg-white overflow-x-auto flex-shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close button — top right of the panel */}
+            {galleryImages.map((img, i) => (
+              <button
+                key={img.objectKey}
+                onClick={() => setLightboxIdx(i)}
+                className={`w-14 h-14 flex-shrink-0 rounded-lg border-2 overflow-hidden transition-all ${
+                  i === lightboxIdx ? "border-[#129cd3]" : "border-gray-200"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.url ?? undefined} alt={product.name} className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+
+          {/* Desktop right panel: close + title + thumbnails grid */}
+          <div
+            className="hidden md:flex w-64 lg:w-72 bg-white flex-col p-5 overflow-y-auto flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-end mb-3 flex-shrink-0">
               <button
                 onClick={() => setLightboxOpen(false)}
