@@ -222,6 +222,8 @@ export type ListAdminOrdersQuery = AdminListSortFilter & {
 export type PatchOrderStatusBody = {
   toStatus: OrderStatus;
   note?: string;
+  deliveryCode?: string;
+  deliveryUrl?: string;
 };
 
 export type CreateAdminOrderItem = {

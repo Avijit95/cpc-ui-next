@@ -371,6 +371,76 @@ export default function ProductDetailClient() {
   const toggleSection = (name: string) => setOpenSections((p) => ({ ...p, [name]: !p[name] }));
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [thumbOffset, setThumbOffset] = useState(0);
+  const zoomContainerRef = useRef<HTMLDivElement>(null);
+  const zoomImgRef = useRef<HTMLImageElement>(null);
+  const zoomPanelRef = useRef<HTMLDivElement>(null);
+  const zoomLensRef = useRef<HTMLDivElement>(null);
+
+  // Lens covers this fraction of the container — determines zoom level (1/fraction)
+  const ZOOM_LENS_FRACTION = 0.50;
+
+  const handleZoomEnter = useCallback(() => {
+    const lens = zoomLensRef.current;
+    if (lens) lens.style.display = "block";
+  }, []);
+
+  const handleZoomMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const container = zoomContainerRef.current;
+    const panel = zoomPanelRef.current;
+    const lens = zoomLensRef.current;
+    const img = zoomImgRef.current;
+    if (!container || !panel || !lens || !img) return;
+
+    const rect = container.getBoundingClientRect();
+    const lensW = rect.width * ZOOM_LENS_FRACTION;
+    const lensH = rect.height * ZOOM_LENS_FRACTION;
+
+    // Cursor position clamped 0–1
+    const fx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const fy = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+
+    // Lens top-left clamped so it stays within the container
+    const lensX = Math.max(0, Math.min(rect.width - lensW, fx * rect.width - lensW / 2));
+    const lensY = Math.max(0, Math.min(rect.height - lensH, fy * rect.height - lensH / 2));
+    lens.style.width = `${lensW}px`;
+    lens.style.height = `${lensH}px`;
+    lens.style.left = `${lensX}px`;
+    lens.style.top = `${lensY}px`;
+
+    // Show panel only when there is space to the right
+    const panelW = 800;
+    const panelH = 600;
+    const panelLeft = rect.right + 16;
+    if (panelLeft + panelW + 8 > window.innerWidth) {
+      panel.style.display = "none";
+      return;
+    }
+    panel.style.display = "block";
+    panel.style.left = `${panelLeft}px`;
+    panel.style.top = `${Math.max(8, rect.top + (rect.height - panelH) / 2)}px`;
+    panel.style.width = `${panelW}px`;
+    panel.style.height = `${panelH}px`;
+
+    // Background-position: maps lens corner to image region
+    const bgX = (lensX / (rect.width - lensW)) * 100;
+    const bgY = (lensY / (rect.height - lensH)) * 100;
+    panel.style.backgroundImage = `url(${img.src})`;
+    panel.style.backgroundSize = `${(1 / ZOOM_LENS_FRACTION) * 100}%`;
+    panel.style.backgroundRepeat = "no-repeat";
+    panel.style.backgroundPosition = `${bgX}% ${bgY}%`;
+  }, [ZOOM_LENS_FRACTION]);
+
+  const handleZoomLeave = useCallback(() => {
+    const panel = zoomPanelRef.current;
+    const lens = zoomLensRef.current;
+    if (panel) panel.style.display = "none";
+    if (lens) lens.style.display = "none";
+  }, []);
+
+  // Reset zoom when active image changes (thumbnail click)
+  useEffect(() => {
+    handleZoomLeave();
+  }, [activeImageIdx, handleZoomLeave]);
   const THUMB_PER_PAGE = 5;
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
   const [addState, setAddState] = useState<AddState>("idle");
@@ -993,10 +1063,18 @@ useEffect(() => {
             {/* Left: Image — sticky */}
             <div className="lg:w-2/5 flex-shrink-0 lg:sticky lg:top-20 lg:self-start">
               <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="relative bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center aspect-square border border-gray-100">
+              <div
+                ref={zoomContainerRef}
+                className="relative bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center aspect-square border border-gray-100"
+                onMouseEnter={activeImage?.url ? handleZoomEnter : undefined}
+                onMouseMove={activeImage?.url ? handleZoomMove : undefined}
+                onMouseLeave={activeImage?.url ? handleZoomLeave : undefined}
+                style={{ cursor: activeImage?.url ? "crosshair" : undefined }}
+              >
                 {activeImage?.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
+                    ref={zoomImgRef}
                     src={activeImage.url}
                     alt={product.name}
                     className="w-full h-full object-contain p-8"
@@ -1004,6 +1082,12 @@ useEffect(() => {
                 ) : (
                   <div className="w-full h-full" />
                 )}
+                {/* Zoom lens box */}
+                <div
+                  ref={zoomLensRef}
+                  className="absolute border-2 border-[#129cd3] bg-[#129cd3]/10 pointer-events-none"
+                  style={{ display: "none" }}
+                />
                 <div className="absolute top-3 right-3 flex flex-col gap-2">
                   <button
                     onClick={async () => {
@@ -1109,6 +1193,13 @@ useEffect(() => {
                 </div>
               )}
               </div>{/* end left image card */}
+
+              {/* Amazon-style zoom panel — fixed, appears to the right of the image block */}
+              <div
+                ref={zoomPanelRef}
+                className="fixed z-[300] rounded-xl border border-gray-200 shadow-2xl overflow-hidden bg-white pointer-events-none"
+                style={{ display: "none" }}
+              />
             </div>{/* end left sticky column */}
 
             {/* Right: Details — scrollable, contains product info + tabs */}

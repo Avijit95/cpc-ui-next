@@ -1697,9 +1697,8 @@ useEffect(() => {
                   type="radio"
                   name="category"
                   checked={selectedCategory === cat.slug}
-                  onChange={() =>
-                    selectCategory(selectedCategory === cat.slug ? null : cat.slug)
-                  }
+                  onChange={() => selectCategory(cat.slug)}
+                  onClick={() => selectCategory(selectedCategory === cat.slug ? null : cat.slug)}
                   className="w-4 h-4 accent-[#129cd3] cursor-pointer"
                 />
                 <span className="text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
@@ -1799,9 +1798,8 @@ useEffect(() => {
                   type="radio"
                   name="brand"
                   checked={selectedBrand === b.name}
-                  onChange={() =>
-                    setSelectedBrand(selectedBrand === b.name ? null : b.name)
-                  }
+                  onChange={() => setSelectedBrand(b.name)}
+                  onClick={() => setSelectedBrand(selectedBrand === b.name ? null : b.name)}
                   className="w-4 h-4 accent-[#129cd3] cursor-pointer"
                 />
                 <span className="text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
@@ -1885,7 +1883,8 @@ useEffect(() => {
                 type="radio"
                 name="rating"
                 checked={minRating === r}
-                onChange={() => setMinRating(minRating === r ? null : r)}
+                onChange={() => setMinRating(r)}
+                onClick={() => setMinRating(minRating === r ? null : r)}
                 className="w-4 h-4 accent-[#129cd3] cursor-pointer"
               />
               <span className="flex items-center gap-1 text-sm text-gray-600 group-hover:text-[#129cd3] transition-colors">
