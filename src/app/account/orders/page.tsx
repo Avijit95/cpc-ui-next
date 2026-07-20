@@ -242,22 +242,6 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* Status filter chips */}
-              <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap gap-2">
-                {STATUS_FILTERS.map((f) => (
-                  <button
-                    key={f.value}
-                    onClick={() => onFilterChange(f.value)}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
-                      statusFilter === f.value
-                        ? "bg-[#129cd3] text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
 
               {/* Body */}
               {loading ? (

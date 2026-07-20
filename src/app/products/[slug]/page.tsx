@@ -36,6 +36,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     title: product.name,
     description,
     openGraph: {
+      siteName: "CellPhone Crowd",
+      type: "website",
       title: product.name,
       description,
       ...(imageUrl ? { images: [{ url: imageUrl }] } : {}),

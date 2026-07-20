@@ -192,11 +192,11 @@ function formatReviewDate(iso: string) {
 function SimilarProducts({
   breadcrumbs,
   currentSlug,
-  brand,
+  variants,
 }: {
-  breadcrumbs: { id: string }[];
+  breadcrumbs: { id: string; slug: string; name: string }[];
   currentSlug: string;
-  brand?: string;
+  variants: Variant[];
 }) {
   const [items, setItems] = useState<ListCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,43 +204,78 @@ function SimilarProducts({
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Stable dep: join breadcrumb IDs into a string
-  const crumbIds = breadcrumbs.map((c) => c.id).join(",");
+  // Stable dep: join breadcrumb ids+slugs into a string
+  const crumbIds = breadcrumbs.map((c) => `${c.id}:${c.slug}`).join(",");
+
+  // Derive a search unit from non-color variant attribute values.
+  // e.g. "32 GB" → "GB", "20000 mAh" → "mAh", "50W" → "W"
+  // This lets us narrow "smart-devices" to storage devices, power banks, etc.
+  const variantSearchUnit = (() => {
+    const colorRe = /^colou?r$/i;
+    const unitRe = /\b(GB|MB|TB|mAh|W)\b/i;
+    for (const v of variants) {
+      for (const [key, val] of Object.entries(v.attributes)) {
+        if (colorRe.test(key)) continue;
+        const m = String(val ?? "").match(unitRe);
+        if (m) return m[1].toUpperCase() === "W" ? "W" : m[1]; // keep "W" as-is
+      }
+    }
+    return "";
+  })();
 
   useEffect(() => {
     const ctrl = new AbortController();
     const filter = (res: { items: ListCard[] }) =>
       res.items.filter((p) => p.slug !== currentSlug);
 
+    async function tryCategory(category: string, search?: string): Promise<ListCard[] | null> {
+      try {
+        const res = await catalogApi.listProducts({ category, ...(search ? { search } : {}), limit: 24 }, ctrl.signal);
+        const filtered = filter(res);
+        return filtered.length > 0 ? filtered : null;
+      } catch {
+        if (ctrl.signal.aborted) return null;
+        return null;
+      }
+    }
+
     async function load() {
-      // Try each breadcrumb level from deepest to shallowest
+      // Try each breadcrumb level from deepest to shallowest.
+      // For each level: if we have a variant search unit (e.g. "GB" for pendrives,
+      // "mAh" for power banks), try category+search first so broad categories like
+      // "smart-devices" return only the same product type instead of everything.
       const levels = [...breadcrumbs].reverse();
       for (const crumb of levels) {
-        try {
-          const res = await catalogApi.listProducts({ category: crumb.id, limit: 24 }, ctrl.signal);
-          const filtered = filter(res);
-          if (filtered.length > 0) {
-            setItems(filtered);
-            return;
-          }
-        } catch {
-          // abort or network error — stop
-          return;
+        const skip = !crumb.slug || ["products", "home", "all"].includes(crumb.slug);
+        if (skip) continue;
+
+        if (variantSearchUnit) {
+          const bySlugSearch = await tryCategory(crumb.slug, variantSearchUnit);
+          if (bySlugSearch) { setItems(bySlugSearch); return; }
+          if (ctrl.signal.aborted) return;
         }
-      }
-      // Final fallback: fetch by brand
-      if (brand) {
-        try {
-          const res = await catalogApi.listProducts({ brand, limit: 24 }, ctrl.signal);
-          setItems(filter(res));
-        } catch { /* ignore */ }
+
+        const bySlug = await tryCategory(crumb.slug);
+        if (bySlug) { setItems(bySlug); return; }
+        if (ctrl.signal.aborted) return;
+
+        if (crumb.id) {
+          if (variantSearchUnit) {
+            const byIdSearch = await tryCategory(crumb.id, variantSearchUnit);
+            if (byIdSearch) { setItems(byIdSearch); return; }
+            if (ctrl.signal.aborted) return;
+          }
+          const byId = await tryCategory(crumb.id);
+          if (byId) { setItems(byId); return; }
+          if (ctrl.signal.aborted) return;
+        }
       }
     }
 
     load().finally(() => setLoading(false));
     return () => ctrl.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crumbIds, currentSlug, brand]);
+  }, [crumbIds, currentSlug, variantSearchUnit]);
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -2149,7 +2184,7 @@ useEffect(() => {
       <SimilarProducts
         breadcrumbs={product.breadcrumbs}
         currentSlug={product.slug}
-        brand={product.brand ?? undefined}
+        variants={product.variants}
       />
 
       </div>{/* max-w-7xl */}

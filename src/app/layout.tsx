@@ -18,8 +18,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CellPhone Crowd — Smartphones, Cameras & Accessories",
+  title: {
+    default: "CellPhone Crowd — Smartphones, Cameras & Accessories",
+    template: "%s | CellPhone Crowd",
+  },
   description: "Shop the latest smartphones, cameras, speakers and accessories at the best prices. Genuine products with fast delivery.",
+  openGraph: {
+    siteName: "CellPhone Crowd",
+    title: "CellPhone Crowd — Smartphones, Cameras & Accessories",
+    description: "Shop the latest smartphones, cameras, speakers and accessories at the best prices. Genuine products with fast delivery.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CellPhone Crowd — Smartphones, Cameras & Accessories",
+    description: "Shop the latest smartphones, cameras, speakers and accessories at the best prices. Genuine products with fast delivery.",
+  },
 };
 
 export default function RootLayout({
