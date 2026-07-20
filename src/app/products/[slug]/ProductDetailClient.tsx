@@ -371,6 +371,8 @@ export default function ProductDetailClient() {
   const toggleSection = (name: string) => setOpenSections((p) => ({ ...p, [name]: !p[name] }));
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [thumbOffset, setThumbOffset] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
   const zoomContainerRef = useRef<HTMLDivElement>(null);
   const zoomImgRef = useRef<HTMLImageElement>(null);
   const zoomPanelRef = useRef<HTMLDivElement>(null);
@@ -1069,7 +1071,8 @@ useEffect(() => {
                 onMouseEnter={activeImage?.url ? handleZoomEnter : undefined}
                 onMouseMove={activeImage?.url ? handleZoomMove : undefined}
                 onMouseLeave={activeImage?.url ? handleZoomLeave : undefined}
-                style={{ cursor: activeImage?.url ? "crosshair" : undefined }}
+                onClick={activeImage?.url ? () => { handleZoomLeave(); setLightboxIdx(activeImageIdx); setLightboxOpen(true); } : undefined}
+                style={{ cursor: activeImage?.url ? "zoom-in" : undefined }}
               >
                 {activeImage?.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -2282,6 +2285,79 @@ useEffect(() => {
 
       </main>
       <Footer />
+
+      {/* Lightbox modal */}
+      {lightboxOpen && product && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/90 flex items-stretch"
+          onClick={() => setLightboxOpen(false)}
+        >
+          {/* Left: large image + prev/next */}
+          <div
+            className="flex-1 flex items-center justify-center relative p-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lightboxIdx > 0 && (
+              <button
+                onClick={() => setLightboxIdx((i) => i - 1)}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
+              >
+                <ChevronLeft size={22} />
+              </button>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={galleryImages[lightboxIdx]?.url ?? ""}
+              alt={product.name}
+              className="max-h-full max-w-full object-contain select-none"
+              style={{ maxHeight: "calc(100vh - 40px)" }}
+            />
+            {lightboxIdx < galleryImages.length - 1 && (
+              <button
+                onClick={() => setLightboxIdx((i) => i + 1)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
+              >
+                <ChevronRight size={22} />
+              </button>
+            )}
+          </div>
+
+          {/* Right: title + thumbnails */}
+          <div
+            className="w-72 bg-white flex flex-col p-5 overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button — top right of the panel */}
+            <div className="flex justify-end mb-3 flex-shrink-0">
+              <button
+                onClick={() => setLightboxOpen(false)}
+                className="w-9 h-9 rounded-full border border-gray-200 hover:bg-gray-100 flex items-center justify-center text-gray-600 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm font-semibold text-gray-800 mb-4 leading-snug">
+              {displayTitle}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {galleryImages.map((img, i) => (
+                <button
+                  key={img.objectKey}
+                  onClick={() => setLightboxIdx(i)}
+                  className={`aspect-square rounded-lg border-2 overflow-hidden transition-all ${
+                    i === lightboxIdx
+                      ? "border-[#129cd3] shadow-sm"
+                      : "border-gray-200 hover:border-[#8dd4ee]"
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.url} alt={product.name} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
