@@ -565,6 +565,8 @@ export type OrderAddressSnapshot = {
 
 export type OrderItemRow = {
   productName: string;
+  slug?: string | null;
+  primaryImageUrl?: string | null;
   variantSku?: string | null;
   variantAttributes?: Record<string, unknown> | null;
   hsnCode: string;

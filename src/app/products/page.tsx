@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard, { ProductCardExpander, ProductCardSkeleton, detailCache } from "@/components/ProductCard";
+import { apiLimiter } from "@/lib/apiLimiter";
 import { catalogApi, isApiError } from "@/lib/api";
 import type {
   BrandFacet,
@@ -269,7 +270,7 @@ const TV_FILTER_GROUPS: TvFilterGroup[] = [
   },
   {
     key: "resolution",
-    label: "Display Resolution",
+    label: "Resolution",
     options: ["8K", "4K", "1080p", "720p"],
   },
   {
@@ -381,7 +382,15 @@ function applyPhoneFilters(items: ListCard[], phoneFilters: Record<string, strin
       if (rams.length > 0) {
         if (!ramOpts.some((opt) => rams.some((gb) => matchRamGb(gb, opt)))) return false;
       } else {
-        const gb = nameRamGb(item.name);
+        // Fallback 1: spec field (covers products where RAM is a product-level spec)
+        const specGb =
+          parseSpec(cached?.specs["RAM"]) ??
+          parseSpec(cached?.specs["ram"]) ??
+          parseSpec(cached?.specs["Memory"]) ??
+          parseSpec(cached?.specs["Internal Memory"]);
+        // Fallback 2: product name regex
+        const nameGb = nameRamGb(item.name);
+        const gb = specGb ?? nameGb;
         if (gb === null) return false;
         if (!ramOpts.some((opt) => matchRamGb(gb, opt))) return false;
       }
@@ -393,7 +402,15 @@ function applyPhoneFilters(items: ListCard[], phoneFilters: Record<string, strin
       if (storages.length > 0) {
         if (!storOpts.some((opt) => storages.some((gb) => matchStorageGb(gb, opt)))) return false;
       } else {
-        const gb = nameStorageGb(item.name);
+        // Fallback 1: spec field
+        const specGb =
+          parseSpec(cached?.specs["Internal Storage"]) ??
+          parseSpec(cached?.specs["Storage"]) ??
+          parseSpec(cached?.specs["ROM"]) ??
+          parseSpec(cached?.specs["storage"]);
+        // Fallback 2: product name regex
+        const nameGb = nameStorageGb(item.name);
+        const gb = specGb ?? nameGb;
         if (gb === null) return false;
         if (!storOpts.some((opt) => matchStorageGb(gb, opt))) return false;
       }
@@ -465,11 +482,11 @@ function matchTvScreenSize(inch: number, option: string): boolean {
 }
 
 function matchTvResolution(val: string, option: string): boolean {
-  const v = val.toLowerCase();
-  if (option === "8K") return v.includes("8k") || v.includes("7680") || v.includes("8000");
-  if (option === "4K") return v.includes("4k") || v.includes("uhd") || v.includes("3840") || v.includes("2160");
-  if (option === "1080p") return v.includes("1080") || v.includes("full hd") || v.includes("fhd");
-  if (option === "720p") return v.includes("720") || v.includes("hd ready");
+  const v = val.toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ");
+  if (option === "8K")    return v.includes("8k") || v.includes("7680") || v.includes("4320") || v.includes("8000");
+  if (option === "4K")    return (v.includes("4k") || v.includes("uhd") || v.includes("ultra hd") || v.includes("3840") || v.includes("2160") || v.includes("4096")) && !v.includes("8k") && !v.includes("7680");
+  if (option === "1080p") return (v.includes("1080") || v.includes("full hd") || v.includes("fullhd") || v.includes("fhd")) && !v.includes("4k") && !v.includes("uhd") && !v.includes("2160") && !v.includes("8k");
+  if (option === "720p")  return (v.includes("720") || v.includes("hd ready") || v.includes("hdready")) && !v.includes("1080") && !v.includes("4k") && !v.includes("uhd");
   return false;
 }
 
@@ -579,12 +596,36 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
 
     // ── Resolution ────────────────────────────────────────────────────────────
     if (resOpts.length > 0) {
-      const raw =
-        cached?.specs["Resolution"] ??
-        cached?.specs["Display Resolution"] ??
-        cached?.specs["resolution"];
-      if (!raw) return false;
-      if (!resOpts.some((opt) => matchTvResolution(String(raw), opt))) return false;
+      const tvSpecs = cached.specs;
+      // Case-insensitive scan of ALL spec keys — any key whose name contains
+      // "resolution" is treated as a resolution field.
+      // This covers "Display Resolution", "display resolution", "Resolution 2",
+      // "Screen Resolution", "Native Resolution", etc.
+      const allResVals: string[] = [];
+      for (const [k, v] of Object.entries(tvSpecs)) {
+        if (!v) continue;
+        if (k.toLowerCase().includes("resolution")) {
+          allResVals.push(String(v));
+        }
+      }
+      // If no resolution-named key exists, scan spec values for resolution keywords
+      // but skip product name/description/model keys to avoid false matches
+      // (e.g. "Crystal 4K Vision AI...Ultra HD (4K)..." in a product name field
+      // would pollute allResVals when the actual Resolution spec is "8K").
+      if (allResVals.length === 0) {
+        const skipKeyPrefixes = ["product name", "description", "slug", "name", "model", "other"];
+        const resKeywords = ["8k", "4k", "uhd", "ultra hd", "fhd", "full hd", "hd ready", "1080", "720", "2160", "7680", "4320"];
+        for (const [k, v] of Object.entries(tvSpecs)) {
+          if (!v) continue;
+          const kl = k.toLowerCase();
+          if (skipKeyPrefixes.some((p) => kl.startsWith(p))) continue;
+          const s = String(v).toLowerCase();
+          if (resKeywords.some((kw) => s.includes(kw))) allResVals.push(String(v));
+        }
+      }
+      // If no resolution info found at all (specs empty/not yet loaded), let the
+      // product through rather than incorrectly hiding it.
+      if (allResVals.length > 0 && !allResVals.some((raw) => resOpts.some((opt) => matchTvResolution(raw, opt)))) return false;
     }
 
     // ── Connectivity ─────────────────────────────────────────────────────────
@@ -1483,9 +1524,14 @@ useEffect(() => {
     const uncached = priceFilteredItems.filter((item) => !detailCache.has(item.slug));
     if (uncached.length === 0) return;
     let cancelled = false;
+    // Use apiLimiter so we don't fire all detail fetches in parallel — a burst of
+    // parallel requests on a shared IP (CGNAT) triggers ThrottlerException, causing
+    // some fetches to fail silently and leaving specs uncached. Uncached products
+    // pass the resolution filter unconditionally (if (!cached) return true), making
+    // the filter appear broken even when resolution values are set in admin.
     Promise.all(
       uncached.map((item) =>
-        catalogApi.getProduct(item.slug).then((d) => {
+        apiLimiter(() => catalogApi.getProduct(item.slug)).then((d) => {
           detailCache.set(item.slug, { stock: d.stock, variants: d.variants, specs: d.specs ?? {} });
         }).catch(() => {})
       )
@@ -1659,6 +1705,24 @@ useEffect(() => {
         if (!m) return true;
         const inch = Number(m[1]);
         return tvSizeOpts.some((opt) => matchTvScreenSize(inch, opt));
+      }
+    : undefined;
+
+  // Build a per-variant filter for phones so ProductCardExpander shows only variants
+  // matching the selected RAM / storage options (other spec filters are product-level).
+  const phoneRamOpts = phoneFilters["ram"] ?? [];
+  const phoneStorOpts = phoneFilters["storage"] ?? [];
+  const phoneVariantFilter = isPhoneCategory && (phoneRamOpts.length > 0 || phoneStorOpts.length > 0)
+    ? (v: import("@/lib/api").Variant) => {
+        if (phoneRamOpts.length > 0) {
+          const r = parseGb(v.attributes["ram"]);
+          if (r !== null && !phoneRamOpts.some((opt) => matchRamGb(r, opt))) return false;
+        }
+        if (phoneStorOpts.length > 0) {
+          const s = parseGb(v.attributes["storage"]);
+          if (s !== null && !phoneStorOpts.some((opt) => matchStorageGb(s, opt))) return false;
+        }
+        return true;
       }
     : undefined;
 
@@ -2049,25 +2113,101 @@ useEffect(() => {
                   ))}
                 </div>
               ) : items.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                  <SlidersHorizontal size={48} className="mb-4 opacity-30" />
-                  <p className="text-lg font-medium">No products found</p>
-                  <p className="text-sm mt-1">Try adjusting your filters</p>
+                <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
+                  {/* Illustration */}
+                  <div className="mb-6">
+                    <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-auto opacity-60">
+                      <circle cx="60" cy="60" r="56" fill="#f0f9ff" stroke="#bae6fd" strokeWidth="2"/>
+                      <rect x="32" y="42" width="56" height="42" rx="4" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
+                      <rect x="38" y="50" width="20" height="3" rx="1.5" fill="#7dd3fc"/>
+                      <rect x="38" y="57" width="32" height="3" rx="1.5" fill="#bae6fd"/>
+                      <rect x="38" y="64" width="26" height="3" rx="1.5" fill="#bae6fd"/>
+                      <circle cx="80" cy="44" r="14" fill="#fff" stroke="#7dd3fc" strokeWidth="1.5"/>
+                      <line x1="74" y1="38" x2="86" y2="50" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round"/>
+                      <line x1="86" y1="38" x2="74" y2="50" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  {/* Heading */}
+                  <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                    {selectedCategory
+                      ? "No Products Available"
+                      : "No Products Found"}
+                  </h3>
+                  {/* Subtitle */}
+                  <p className="text-sm text-gray-400 max-w-xs mb-7">
+                    {(selectedBrand !== null || minRating !== null || minPrice !== PRICE_FLOOR || maxPrice !== PRICE_CEIL || hasPhoneFilters || hasTvFilters || hasCameraFilters || hasLensFilters || hasSpeakerFilters)
+                      ? "No products match your current filters. Try clearing some filters or browsing a different category."
+                      : selectedCategory
+                      ? "There are no products available in this category right now. Please check back later."
+                      : "We couldn't find any products. Try browsing our categories to discover what's available."}
+                  </p>
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {(selectedBrand !== null || minRating !== null || minPrice !== PRICE_FLOOR || maxPrice !== PRICE_CEIL || hasPhoneFilters || hasTvFilters || hasCameraFilters || hasLensFilters || hasSpeakerFilters) && (
+                      <button
+                        onClick={() => {
+                          setSelectedBrand(null);
+                          setMinRating(null);
+                          setMinPrice(PRICE_FLOOR);
+                          setMaxPrice(PRICE_CEIL);
+                          setPhoneFilters({});
+                          setTvFilters({});
+                          setCameraFiltersState({});
+                          setLensFiltersState({});
+                          setSpeakerFiltersState({});
+                        }}
+                        className="px-6 py-2.5 rounded-lg border border-[#129cd3] text-[#129cd3] text-sm font-medium hover:bg-[#e8f7fc] transition-colors"
+                      >
+                        Clear Filters
+                      </button>
+                    )}
+                    <Link
+                      href="/products"
+                      className="px-6 py-2.5 rounded-lg bg-[#129cd3] text-white text-sm font-medium hover:bg-[#0f87b8] transition-colors"
+                    >
+                      Browse All Products
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 xl:grid-cols-5" style={{ gap: "clamp(7px, 1vw, 16px)" }}>
                   {sortValue === "price-asc" || sortValue === "price-desc" ? (
                     <PriceSortedGrid products={items} dir={sortValue === "price-asc" ? "asc" : "desc"} />
                   ) : (
-                    items.map((product) => (
-                      <ProductCardExpander
-                        key={product.id}
-                        product={product}
-                        priceMin={minPrice > PRICE_FLOOR ? minPrice : undefined}
-                        priceMax={maxPrice < PRICE_CEIL ? maxPrice : undefined}
-                        variantFilter={tvVariantFilter}
-                      />
-                    ))
+                    items.map((product) => {
+                      // When a phone RAM/storage filter is active, render matching variant
+                      // cards directly from the cache instead of relying on prop propagation
+                      // through ProductCardExpander's internal variants state.
+                      if (phoneVariantFilter) {
+                        const cached = detailCache.get(product.slug);
+                        if (cached && cached.variants.length > 0) {
+                          const matched = cached.variants.filter(phoneVariantFilter);
+                          if (matched.length === 0) return null;
+                          // Wrap in a keyed Fragment so React can correctly reconcile this
+                          // group against the previous ProductCardExpander (same key).
+                          return (
+                            <React.Fragment key={product.id}>
+                              {matched.map((v) => (
+                                <ProductCard
+                                  key={v.id}
+                                  product={product}
+                                  variantOverride={v}
+                                />
+                              ))}
+                            </React.Fragment>
+                          );
+                        }
+                      }
+                      return (
+                        <ProductCardExpander
+                          key={product.id}
+                          product={product}
+                          priceMin={minPrice > PRICE_FLOOR ? minPrice : undefined}
+                          priceMax={maxPrice < PRICE_CEIL ? maxPrice : undefined}
+                          variantFilter={tvVariantFilter ?? phoneVariantFilter}
+                        />
+                      );
+                    })
                   )}
                 </div>
               )}

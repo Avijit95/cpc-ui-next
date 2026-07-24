@@ -145,6 +145,7 @@ function CheckoutContent() {
   const [addError, setAddError] = useState<string | null>(null);
 
   const [variantGstRates, setVariantGstRates] = useState<Record<string, number>>({});
+  const [variantImages, setVariantImages] = useState<Record<string, string>>({});
 
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
@@ -170,20 +171,30 @@ function CheckoutContent() {
         setCart(cartResp);
         setAddresses(addrResp);
 
-        // Fetch product details to read variant __gstRate for correct GST display.
+        // Fetch product details to read variant __gstRate, variant images, and product-level images.
         const slugs = [...new Set(cartResp.items.map((l) => l.slug))];
         Promise.allSettled(slugs.map((s) => catalogApi.getProduct(s))).then((results) => {
           if (cancelled) return;
           const rates: Record<string, number> = {};
-          results.forEach((r) => {
-            if (r.status === "fulfilled") {
-              r.value.variants.forEach((v) => {
-                const rate = v.attributes?.__gstRate;
-                if (rate != null) rates[v.id] = Number(rate);
-              });
-            }
+          // imgs keyed by variantId OR slug — checked in that order during render.
+          const imgs: Record<string, string> = {};
+          results.forEach((r, i) => {
+            if (r.status !== "fulfilled") return;
+            const detail = r.value;
+            const slug = slugs[i];
+            // Product-level image (fallback for non-variant lines).
+            const productImg = detail.images?.find((img) => img.url)?.url ?? null;
+            if (productImg && slug) imgs[slug] = productImg;
+            // Per-variant image + GST rate.
+            detail.variants.forEach((v) => {
+              const rate = v.attributes?.__gstRate;
+              if (rate != null) rates[v.id] = Number(rate);
+              const imgUrl = v.images[0]?.url;
+              if (imgUrl) imgs[v.id] = imgUrl;
+            });
           });
           setVariantGstRates(rates);
+          setVariantImages(imgs);
         });
 
         const def = addrResp.find((a) => a.isDefault);
@@ -532,11 +543,28 @@ function CheckoutContent() {
                           key={line.cartItemId}
                           className="px-5 py-3 flex items-start gap-3"
                         >
-                          <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex-shrink-0" />
+                          <Link
+                            href={`/products/${line.slug}${line.variantId ? `?variant=${line.variantId}` : ""}`}
+                            className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex-shrink-0 overflow-hidden hover:opacity-80 transition-opacity"
+                          >
+                            {(() => {
+                              const imgSrc =
+                                (line.variantId && variantImages[line.variantId]) ||
+                                variantImages[line.slug] ||
+                                line.primaryImageUrl;
+                              return imgSrc ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={imgSrc} alt={line.name} className="w-full h-full object-contain p-1" />
+                              ) : null;
+                            })()}
+                          </Link>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 line-clamp-1">
+                            <Link
+                              href={`/products/${line.slug}${line.variantId ? `?variant=${line.variantId}` : ""}`}
+                              className="text-sm font-medium text-gray-800 line-clamp-1 hover:text-[#129cd3] transition-colors"
+                            >
                               {line.name}
-                            </p>
+                            </Link>
                             <p className="text-xs text-gray-500 mt-0.5">
                               {line.qty} × {formatPrice(line.unitPrice)}
                             </p>
@@ -582,8 +610,8 @@ function CheckoutContent() {
                 )}
               </div>
 
-              {/* Right: summary */}
-              <aside className="lg:col-span-1">
+              {/* Right: summary — z-[45] keeps it visible above the modal backdrop (z-40) */}
+              <aside className="lg:col-span-1 relative z-[45]">
                 <div className="bg-white rounded-xl border border-gray-200 p-5 sticky top-4">
                   <h2 className="font-bold text-gray-800 text-sm mb-4">Order Summary</h2>
                   <div className="space-y-2 text-sm">
@@ -685,9 +713,12 @@ function CheckoutContent() {
 
       {/* Add address modal — minimal inline version. Same shape as /account/addresses. */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={closeAdd} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10 max-h-[90vh] overflow-y-auto">
+        <>
+          {/* Backdrop at z-40 — Order Summary (z-[45]) sits above it */}
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={closeAdd} />
+          {/* Modal dialog at z-50 — above backdrop and above Order Summary */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto pointer-events-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-800">Add Delivery Address</h2>
               <button
@@ -698,6 +729,7 @@ function CheckoutContent() {
                 <X size={18} />
               </button>
             </div>
+
 
             <div className="space-y-4">
               <div>
@@ -822,7 +854,8 @@ function CheckoutContent() {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </>
   );

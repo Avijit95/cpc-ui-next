@@ -142,6 +142,16 @@ export default function AdminOrderDetailPage() {
       setTransitionError("Please add a reason for cancellation.");
       return;
     }
+    if (transitionTarget === "SHIPPED") {
+      if (!deliveryCode.trim()) {
+        setTransitionError("Delivery Code is required to mark the order as Shipped.");
+        return;
+      }
+      if (!deliveryUrl.trim()) {
+        setTransitionError("Delivery URL is required to mark the order as Shipped.");
+        return;
+      }
+    }
     setTransitionBusy(true);
     setTransitionError(null);
     try {
@@ -504,7 +514,7 @@ export default function AdminOrderDetailPage() {
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Delivery Code <span className="font-normal text-gray-400">(optional)</span>
+                    Delivery Code <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -516,7 +526,7 @@ export default function AdminOrderDetailPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Delivery URL <span className="font-normal text-gray-400">(optional)</span>
+                    Delivery URL <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="url"

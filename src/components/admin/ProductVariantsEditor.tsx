@@ -216,9 +216,9 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     if (r.storage.trim()) a.model = r.storage.trim();
     if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
     if (r.dimensions.trim()) a.dimensions = r.dimensions.trim();
-    if (r.weight.trim()) a.weight = r.weight.trim();
-    if (r.dimWithStand.trim()) a.dimWithStand = r.dimWithStand.trim();
-    if (r.dimWithoutStand.trim()) a.dimWithoutStand = r.dimWithoutStand.trim();
+    if (r.weight.trim()) a.weight = r.weight.trim() + " kg";
+    if (r.dimWithStand.trim()) a.dimWithStand = r.dimWithStand.trim() + " cm";
+    if (r.dimWithoutStand.trim()) a.dimWithoutStand = r.dimWithoutStand.trim() + " cm";
   } else if (isSpeaker || isSmartDevice) {
     if (r.ram.trim()) a.model = r.ram.trim();
     if (!isSmartDevice && r.storage.trim()) a.watt = r.storage.trim();
@@ -288,9 +288,9 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
       launchYear: (isTV || isCamera) && v.attributes.launchYear != null ? String(v.attributes.launchYear) : "",
       lensIncluded,
       dimensions: isTV && v.attributes.dimensions != null ? String(v.attributes.dimensions) : "",
-      weight: isTV && v.attributes.weight != null ? String(v.attributes.weight) : "",
-      dimWithStand: isTV && v.attributes.dimWithStand != null ? String(v.attributes.dimWithStand) : "",
-      dimWithoutStand: isTV && v.attributes.dimWithoutStand != null ? String(v.attributes.dimWithoutStand) : "",
+      weight: isTV && v.attributes.weight != null ? String(v.attributes.weight).replace(/\s*kg$/i, "").trim() : "",
+      dimWithStand: isTV && v.attributes.dimWithStand != null ? String(v.attributes.dimWithStand).replace(/\s*cm$/i, "").trim() : "",
+      dimWithoutStand: isTV && v.attributes.dimWithoutStand != null ? String(v.attributes.dimWithoutStand).replace(/\s*cm$/i, "").trim() : "",
       attr1: isSmartDevice && attrColumns[0] ? (v.attributes[attrColumns[0].toLowerCase()] != null ? String(v.attributes[attrColumns[0].toLowerCase()]) : "") : "",
       attr2: isSmartDevice && attrColumns[1] ? (v.attributes[attrColumns[1].toLowerCase()] != null ? String(v.attributes[attrColumns[1].toLowerCase()]) : "") : "",
       attr3: isSmartDevice && attrColumns[2] ? (v.attributes[attrColumns[2].toLowerCase()] != null ? String(v.attributes[attrColumns[2].toLowerCase()]) : "") : "",
@@ -389,7 +389,7 @@ const ProductVariantsEditor = forwardRef<
   const [rows, setRows] = useState<VariantRow[]>(() => {
     const _attrCols = isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : [];
     if (draftRows && draftRows.length > 0) {
-      return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), existingId: undefined, name: r.name ?? "", attr1: r.attr1 ?? "", attr2: r.attr2 ?? "", attr3: r.attr3 ?? "" }));
+      return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), name: r.name ?? "", attr1: r.attr1 ?? "", attr2: r.attr2 ?? "", attr3: r.attr3 ?? "" }));
     }
     return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens, isSmartDevice, _attrCols);
   });
@@ -914,31 +914,40 @@ const ProductVariantsEditor = forwardRef<
             {(r.ram.trim() || r.storage.trim()) && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Field label="W×H×D (without stand)">
-                  <input
-                    value={r.dimWithoutStand}
-                    onChange={(e) => updateRow(r.uid, { dimWithoutStand: e.target.value })}
-                    placeholder='e.g. 972.4 × 562.8 × 74.2 mm'
-                    disabled={tvRowDisabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
-                  />
+                  <div className="relative">
+                    <input
+                      value={r.dimWithoutStand}
+                      onChange={(e) => updateRow(r.uid, { dimWithoutStand: e.target.value })}
+                      placeholder='e.g. 97.2 × 56.2 × 7.4'
+                      disabled={tvRowDisabled}
+                      className="w-full border border-gray-200 rounded-lg pl-2.5 pr-10 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    <span className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center px-2.5 text-sm text-gray-500 bg-gray-50 border-l border-gray-200 rounded-r-lg">cm</span>
+                  </div>
                 </Field>
                 <Field label="W×H×D (with stand)">
-                  <input
-                    value={r.dimWithStand}
-                    onChange={(e) => updateRow(r.uid, { dimWithStand: e.target.value })}
-                    placeholder='e.g. 972.4 × 625.0 × 213.3 mm'
-                    disabled={tvRowDisabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
-                  />
+                  <div className="relative">
+                    <input
+                      value={r.dimWithStand}
+                      onChange={(e) => updateRow(r.uid, { dimWithStand: e.target.value })}
+                      placeholder='e.g. 97.2 × 62.5 × 21.3'
+                      disabled={tvRowDisabled}
+                      className="w-full border border-gray-200 rounded-lg pl-2.5 pr-10 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    <span className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center px-2.5 text-sm text-gray-500 bg-gray-50 border-l border-gray-200 rounded-r-lg">cm</span>
+                  </div>
                 </Field>
                 <Field label="Weight">
-                  <input
-                    value={r.weight}
-                    onChange={(e) => updateRow(r.uid, { weight: e.target.value })}
-                    placeholder='e.g. 4.5 kg'
-                    disabled={tvRowDisabled}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
-                  />
+                  <div className="relative">
+                    <input
+                      value={r.weight}
+                      onChange={(e) => updateRow(r.uid, { weight: e.target.value })}
+                      placeholder='e.g. 4.5'
+                      disabled={tvRowDisabled}
+                      className="w-full border border-gray-200 rounded-lg pl-2.5 pr-10 py-2 text-sm outline-none focus:border-[#129cd3] disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    <span className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center px-2.5 text-sm text-gray-500 bg-gray-50 border-l border-gray-200 rounded-r-lg">kg</span>
+                  </div>
                 </Field>
                 <Field label="Launch Year">
                   <select

@@ -515,7 +515,7 @@ export default function AddressesPage() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="absolute inset-0 bg-black/50" onClick={() => !saving && closeModal()} />
           <div className="flex min-h-full items-start justify-center p-4 pt-20 pb-8">
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10" style={{ top: "70px" }}>
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-800">
                 {modalMode === "create" ? "Add New Address" : "Edit Address"}
@@ -529,7 +529,7 @@ export default function AddressesPage() {
               </button>
             </div>
 
-            <div className="space-y-4 px-6 pt-4">
+            <div className="space-y-2 px-6 pt-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   Label <span className="font-normal text-gray-400">(optional)</span>
@@ -539,7 +539,7 @@ export default function AddressesPage() {
                   placeholder="Home, Office, etc."
                   value={form.label}
                   onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -549,7 +549,7 @@ export default function AddressesPage() {
                   placeholder="John Doe"
                   value={form.recipientName}
                   onChange={(e) => setForm((prev) => ({ ...prev, recipientName: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -559,7 +559,7 @@ export default function AddressesPage() {
                   placeholder="+919000000001"
                   value={form.phone}
                   onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
                 <p className="text-[10px] text-gray-400 mt-1">Include country code, no spaces.</p>
               </div>
@@ -570,7 +570,7 @@ export default function AddressesPage() {
                   placeholder="Street, Area, Landmark"
                   value={form.line1}
                   onChange={(e) => setForm((prev) => ({ ...prev, line1: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -582,7 +582,7 @@ export default function AddressesPage() {
                   placeholder="Apartment, suite, unit, etc."
                   value={form.line2}
                   onChange={(e) => setForm((prev) => ({ ...prev, line2: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -592,7 +592,7 @@ export default function AddressesPage() {
                   placeholder="Mumbai"
                   value={form.city}
                   onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -602,7 +602,7 @@ export default function AddressesPage() {
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, stateCode: e.target.value as StateCode }))
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 bg-white"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 bg-white"
                 >
                   {STATE_OPTIONS.map((s) => (
                     <option key={s.code} value={s.code}>
@@ -625,7 +625,7 @@ export default function AddressesPage() {
                       pincode: e.target.value.replace(/\D/g, ""),
                     }))
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
             </div>
@@ -636,7 +636,7 @@ export default function AddressesPage() {
               </div>
             )}
 
-            <div className="flex gap-3 mt-6 px-6 pb-6">
+            <div className="flex gap-3 mt-3 px-6 pb-4">
               <button
                 onClick={handleSave}
                 disabled={saving}

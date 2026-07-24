@@ -7,7 +7,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { cartApi, catalogApi, isApiError, reviewsApi } from "@/lib/api";
 import type { ProductDetail, Variant, Review, ReviewListResponse, ListCard } from "@/lib/api";
-import { ProductCardExpander, ProductCardSkeleton } from "@/components/ProductCard";
+import ProductCard, { ProductCardExpander, ProductCardSkeleton, detailCache } from "@/components/ProductCard";
+import { apiLimiter } from "@/lib/apiLimiter";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import { useCart } from "@/lib/cart/CartProvider";
@@ -189,27 +190,83 @@ function formatReviewDate(iso: string) {
   }
 }
 
+type SimilarCard = { product: ListCard; variantOverride?: Variant };
+
+function parseGb(val: unknown): number | null {
+  if (!val) return null;
+  const m = String(val).match(/^(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : null;
+}
+
+function ramBucket(gb: number): string {
+  if (gb <= 4) return "≤4";
+  if (gb <= 6) return "6";
+  return "8+";
+}
+
+// Expand a product + its fetched variants into the flat card list,
+// matching the same logic used by ProductCardExpander.
+function expandToCards(
+  product: ListCard,
+  fetchedVariants: Variant[],
+  excludeVariantId?: string,
+  variantFilter?: (v: Variant) => boolean,
+): SimilarCard[] {
+  let variants = excludeVariantId
+    ? fetchedVariants.filter((v) => v.id !== excludeVariantId)
+    : fetchedVariants;
+
+  if (variantFilter) variants = variants.filter(variantFilter);
+
+  if (variants.length === 0) return fetchedVariants.length === 0 ? [{ product }] : [];
+
+  const isCamera = variants.some((v) => "lensIncluded" in v.attributes);
+  if (isCamera) {
+    const groups = new Map<string, Variant[]>();
+    for (const v of variants) {
+      const key = String(v.attributes.lensIncluded) === "Yes"
+        ? `lens:${String(v.attributes.lens ?? "")}`.toLowerCase()
+        : `body-only:${String(v.attributes.color ?? "").toLowerCase().trim() || ""}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(v);
+    }
+    return [...groups.values()].map((group) => ({
+      product,
+      variantOverride:
+        group.find((v) => v.stock > 0 && v.images.length > 0) ??
+        group.find((v) => v.stock > 0) ??
+        group.find((v) => v.images.length > 0) ??
+        group[0],
+    }));
+  }
+
+  return variants.map((v) => ({ product, variantOverride: v }));
+}
+
 function SimilarProducts({
   breadcrumbs,
   currentSlug,
+  currentVariantId,
   variants,
+  currentProduct,
 }: {
   breadcrumbs: { id: string; slug: string; name: string }[];
   currentSlug: string;
+  currentVariantId?: string;
   variants: Variant[];
+  currentProduct: ProductDetail;
 }) {
-  const [items, setItems] = useState<ListCard[]>([]);
+  const [cards, setCards] = useState<SimilarCard[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [moreHref, setMoreHref] = useState("");
   const [loading, setLoading] = useState(true);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Stable dep: join breadcrumb ids+slugs into a string
   const crumbIds = breadcrumbs.map((c) => `${c.id}:${c.slug}`).join(",");
 
   // Derive a search unit from non-color variant attribute values.
-  // e.g. "32 GB" → "GB", "20000 mAh" → "mAh", "50W" → "W"
-  // This lets us narrow "smart-devices" to storage devices, power banks, etc.
   const variantSearchUnit = (() => {
     const colorRe = /^colou?r$/i;
     const unitRe = /\b(GB|MB|TB|mAh|W)\b/i;
@@ -217,7 +274,7 @@ function SimilarProducts({
       for (const [key, val] of Object.entries(v.attributes)) {
         if (colorRe.test(key)) continue;
         const m = String(val ?? "").match(unitRe);
-        if (m) return m[1].toUpperCase() === "W" ? "W" : m[1]; // keep "W" as-is
+        if (m) return m[1].toUpperCase() === "W" ? "W" : m[1];
       }
     }
     return "";
@@ -225,48 +282,148 @@ function SimilarProducts({
 
   useEffect(() => {
     const ctrl = new AbortController();
-    const filter = (res: { items: ListCard[] }) =>
-      res.items.filter((p) => p.slug !== currentSlug);
 
-    async function tryCategory(category: string, search?: string): Promise<ListCard[] | null> {
+    async function tryCategory(category: string, search?: string): Promise<{ items: ListCard[]; categorySlug: string } | null> {
       try {
-        const res = await catalogApi.listProducts({ category, ...(search ? { search } : {}), limit: 24 }, ctrl.signal);
-        const filtered = filter(res);
-        return filtered.length > 0 ? filtered : null;
+        // Fetch 20 products — enough to expand into 10+ variant cards.
+        const res = await catalogApi.listProducts({ category, ...(search ? { search } : {}), limit: 20 }, ctrl.signal);
+        return res.items.length > 0 ? { items: res.items, categorySlug: category } : null;
       } catch {
         if (ctrl.signal.aborted) return null;
         return null;
       }
     }
 
+    async function buildCards(items: ListCard[], categorySlug: string, search?: string) {
+      // Determine the current variant's RAM bucket so we can filter similar-product
+      // variants to the same bucket (avoids showing 8 GB cards when viewing a 6 GB variant).
+      const currentVariant = variants.find((v) => v.id === currentVariantId);
+      const currentRamGb = currentVariant ? parseGb(currentVariant.attributes["ram"]) : null;
+      const similarVariantFilter = currentRamGb !== null
+        ? (v: Variant) => {
+            const r = parseGb(v.attributes["ram"]);
+            return r === null || ramBucket(r) === ramBucket(currentRamGb);
+          }
+        : undefined;
+
+      // ── Step 1: Always build the current product's OTHER variant cards directly ──
+      const currentAsListCard: ListCard = {
+        id: currentProduct.id,
+        slug: currentProduct.slug,
+        name: currentProduct.name,
+        brand: currentProduct.brand,
+        basePrice: currentProduct.pricing.basePrice,
+        finalPrice: currentProduct.pricing.finalPrice,
+        lowestVariantPrice: null,
+        primaryImageUrl: currentProduct.images?.find((img) => img.url)?.url ?? null,
+        badges: [],
+        ratingAverage: null,
+        reviewCount: 0,
+        isBestSeller: false,
+        isFeatured: false,
+        deal: currentProduct.deal ?? null,
+        stock: currentProduct.stock ?? null,
+      };
+      const otherVariants = variants.filter((v) => v.id !== currentVariantId);
+      const currentProductCards: SimilarCard[] = expandToCards(currentAsListCard, otherVariants);
+
+      // ── Step 2: Fetch same-brand products from the same category ──
+      // brandKey: prefer the brand field; fall back to the first word of the product name.
+      const brandKey = currentProduct.brand?.trim() || currentProduct.name.split(/\s+/)[0];
+      let sameBrandItems: ListCard[] = [];
+
+      if (brandKey && !ctrl.signal.aborted) {
+        // Attempt 1: brand query param (exact match on backend)
+        try {
+          const brandRes = await catalogApi.listProducts(
+            { category: categorySlug, brand: brandKey, limit: 20 },
+            ctrl.signal,
+          );
+          sameBrandItems = brandRes.items.filter((p) => p.slug !== currentSlug);
+        } catch { /* non-fatal */ }
+      }
+
+      // Attempt 2: keyword search by brand name (catches cases where brand param is unsupported
+      // or brand field is null but product names contain the brand word).
+      if (sameBrandItems.length === 0 && brandKey && !ctrl.signal.aborted) {
+        try {
+          const searchRes = await catalogApi.listProducts(
+            { category: categorySlug, search: brandKey, limit: 20 },
+            ctrl.signal,
+          );
+          // Accept items whose brand matches OR whose name starts with the brand word.
+          const bk = brandKey.toLowerCase();
+          sameBrandItems = searchRes.items.filter((p) => {
+            if (p.slug === currentSlug) return false;
+            if ((p.brand ?? "").toLowerCase() === bk) return true;
+            if (p.name.toLowerCase().startsWith(bk)) return true;
+            return false;
+          });
+        } catch { /* non-fatal */ }
+      }
+      if (ctrl.signal.aborted) return;
+
+      // ── Step 3: Merge — same-brand first, then general category (de-duplicated) ──
+      const sameBrandSlugs = new Set(sameBrandItems.map((p) => p.slug));
+      const generalItems = items.filter(
+        (p) => p.slug !== currentSlug && !sameBrandSlugs.has(p.slug),
+      );
+      const mergedItems = [...sameBrandItems, ...generalItems];
+
+      const expanded = await Promise.all(
+        mergedItems.map(async (product) => {
+          if (ctrl.signal.aborted) return [] as SimilarCard[];
+          try {
+            const cached = detailCache.get(product.slug);
+            const detail = cached ?? await apiLimiter(() => catalogApi.getProduct(product.slug));
+            if (!cached) detailCache.set(product.slug, { stock: detail.stock, variants: detail.variants, specs: detail.specs ?? {} });
+            return expandToCards(product, detail.variants, undefined, similarVariantFilter);
+          } catch {
+            return [{ product }] as SimilarCard[];
+          }
+        })
+      );
+      if (ctrl.signal.aborted) return;
+
+      // Current product's other variants first (max 3), then one card per similar product.
+      const flat = [
+        ...currentProductCards.slice(0, 3),
+        ...expanded.map((cards) => cards[0]).filter(Boolean) as SimilarCard[],
+      ];
+
+      setCards(flat.slice(0, 10));
+      setHasMore(true);
+      setMoreHref(
+        search
+          ? `/products?category=${encodeURIComponent(categorySlug)}&search=${encodeURIComponent(search)}`
+          : `/products?category=${encodeURIComponent(categorySlug)}`
+      );
+    }
+
     async function load() {
-      // Try each breadcrumb level from deepest to shallowest.
-      // For each level: if we have a variant search unit (e.g. "GB" for pendrives,
-      // "mAh" for power banks), try category+search first so broad categories like
-      // "smart-devices" return only the same product type instead of everything.
       const levels = [...breadcrumbs].reverse();
       for (const crumb of levels) {
         const skip = !crumb.slug || ["products", "home", "all"].includes(crumb.slug);
         if (skip) continue;
 
         if (variantSearchUnit) {
-          const bySlugSearch = await tryCategory(crumb.slug, variantSearchUnit);
-          if (bySlugSearch) { setItems(bySlugSearch); return; }
+          const r = await tryCategory(crumb.slug, variantSearchUnit);
+          if (r) { await buildCards(r.items, r.categorySlug, variantSearchUnit); return; }
           if (ctrl.signal.aborted) return;
         }
 
         const bySlug = await tryCategory(crumb.slug);
-        if (bySlug) { setItems(bySlug); return; }
+        if (bySlug) { await buildCards(bySlug.items, bySlug.categorySlug); return; }
         if (ctrl.signal.aborted) return;
 
         if (crumb.id) {
           if (variantSearchUnit) {
-            const byIdSearch = await tryCategory(crumb.id, variantSearchUnit);
-            if (byIdSearch) { setItems(byIdSearch); return; }
+            const r = await tryCategory(crumb.id, variantSearchUnit);
+            if (r) { await buildCards(r.items, r.categorySlug, variantSearchUnit); return; }
             if (ctrl.signal.aborted) return;
           }
           const byId = await tryCategory(crumb.id);
-          if (byId) { setItems(byId); return; }
+          if (byId) { await buildCards(byId.items, byId.categorySlug); return; }
           if (ctrl.signal.aborted) return;
         }
       }
@@ -292,12 +449,21 @@ function SimilarProducts({
     scrollRef.current?.scrollBy({ left: -500, behavior: "smooth" });
   };
 
-  if (!loading && items.length === 0) return null;
+  if (!loading && cards.length === 0) return null;
 
   return (
     <section className="border-t border-gray-200 pt-8 pb-4">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-5">Similar Products</h2>
+      <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-gray-900">Similar Products</h2>
+          {hasMore && (
+            <Link
+              href={moreHref}
+              className="text-sm font-semibold text-[#129cd3] hover:underline flex items-center gap-1"
+            >
+              More <ChevronRight size={16} />
+            </Link>
+          )}
+        </div>
         <div className="relative">
         <div
           ref={scrollRef}
@@ -310,11 +476,12 @@ function SimilarProducts({
                   <ProductCardSkeleton />
                 </div>
               ))
-            : items.map((p) => (
-                <ProductCardExpander
-                  key={p.id}
-                  product={p}
-                  cardClassName="flex-shrink-0 w-[230px]"
+            : cards.map((c, i) => (
+                <ProductCard
+                  key={c.variantOverride?.id ?? `${c.product.id}-${i}`}
+                  product={c.product}
+                  variantOverride={c.variantOverride}
+                  className="flex-shrink-0 w-[230px]"
                 />
               ))}
         </div>
@@ -337,7 +504,6 @@ function SimilarProducts({
           </button>
         )}
         </div>
-      </div>
     </section>
   );
 }
@@ -535,7 +701,7 @@ export default function ProductDetailClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, variantParam]);
 
-  // Seed coupons: try embedded → cart line → dedicated public endpoint.
+  // Seed coupons: try embedded → cart line → dedicated endpoint.
   useEffect(() => {
     if (!product) return;
     let cancelled = false;
@@ -546,28 +712,36 @@ export default function ProductDetailClient() {
       if (!cancelled && (ac.customer || ac.retail)) setProductCoupons(ac);
     };
 
+    const isPartner = user?.role === "PARTNER";
+
     // 1. Use coupons already embedded in the product detail response.
+    // For partners, skip early-return if only customer coupon is present (needs auth fetch for retail).
     const embedded = product.availableCoupons;
     if (embedded?.customer || embedded?.retail) {
-      apply(embedded as CouponMap);
-      return;
+      if (!isPartner || embedded?.retail) {
+        apply(embedded as CouponMap);
+        return;
+      }
     }
 
     // 2. Check if product is already in the cart — use its availableCoupons.
     const existingLine = cartItems.find((l) => l.slug === product.slug);
     if (existingLine?.availableCoupons?.customer || existingLine?.availableCoupons?.retail) {
-      apply(existingLine.availableCoupons as CouponMap);
-      return;
+      if (!isPartner || existingLine.availableCoupons?.retail) {
+        apply(existingLine.availableCoupons as CouponMap);
+        return;
+      }
     }
 
-    // 3. Fetch directly from the dedicated public coupons endpoint (no auth required).
+    // 3. Fetch from the coupons endpoint (sends auth token when logged in so backend
+    //    can return the retail coupon for verified partners).
     catalogApi.getProductCoupons(product.slug)
       .then((coupons) => { if (!cancelled) apply(coupons as CouponMap); })
       .catch(() => {});
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.id]);
+  }, [product?.id, user?.role]);
 
   // Fetch reviews when slug resolves (public endpoint, doesn't depend on auth).
   useEffect(() => {
@@ -1751,17 +1925,17 @@ useEffect(() => {
               {(() => {
                 const cartLineCoupons = cartItems.find((l) => l.slug === product.slug)?.availableCoupons ?? null;
                 const coupons = productCoupons ?? cartLineCoupons ?? product.availableCoupons ?? null;
-                const hasCoupons = !!(coupons?.customer || coupons?.retail);
-
+                const isPartner = user?.role === "PARTNER";
+                const hasCoupons = isPartner ? !!coupons?.retail : !!coupons?.customer;
                 const couponList: { key: "customer" | "retail"; name: string; label: string; isSelected: boolean; setSelected: () => void }[] = [];
-                if (coupons?.customer) couponList.push({
+                if (!isPartner && coupons?.customer) couponList.push({
                   key: "customer",
                   name: coupons.customer.name,
                   label: `₹${coupons.customer.value.toLocaleString("en-IN")} OFF`,
                   isSelected: customerCouponSelected,
                   setSelected: () => setCustomerCouponSelected((v) => !v),
                 });
-                if (coupons?.retail) couponList.push({
+                if (isPartner && coupons?.retail) couponList.push({
                   key: "retail",
                   name: coupons.retail.name,
                   label: `${coupons.retail.value}% OFF`,
@@ -2278,7 +2452,9 @@ useEffect(() => {
       <SimilarProducts
         breadcrumbs={product.breadcrumbs}
         currentSlug={product.slug}
+        currentVariantId={selectedVariant?.id}
         variants={product.variants}
+        currentProduct={product}
       />
 
       </div>{/* max-w-7xl */}

@@ -53,7 +53,7 @@ export const catalogApi = {
   getProductCoupons(idOrSlug: string, signal?: AbortSignal) {
     return request<{ customer?: CouponPreview; retail?: CouponPreview }>(
       `/products/${encodeURIComponent(idOrSlug)}/coupons`,
-      { anonymous: true, signal },
+      { signal },
     );
   },
 };

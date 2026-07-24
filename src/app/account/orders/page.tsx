@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isApiError, ordersApi } from "@/lib/api";
+import { catalogApi, isApiError, ordersApi } from "@/lib/api";
 import type { OrderListItem, OrderStatus } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -105,6 +105,7 @@ export default function OrdersPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [extraImages, setExtraImages] = useState<Record<string, string>>({});
 
   // Auth gate.
   useEffect(() => {
@@ -152,6 +153,74 @@ export default function OrdersPage() {
       cancelled = true;
     };
   }, [status, statusFilter, searchQuery, offset]);
+
+  // Backfill images for orders where the API returned null primaryImageUrl.
+  // 1. Fetch order detail → if item has primaryImageUrl/slug, use that.
+  // 2. Otherwise suggest by product name (use first 4 words to avoid over-specificity).
+  useEffect(() => {
+    const missing = items.filter((o) => !o.primaryImageUrl);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      missing.map(async (order) => {
+        try {
+          const detail = await ordersApi.get(order.id);
+          const firstItem = detail.items[0];
+          // eslint-disable-next-line no-console
+          console.debug("[OrderImages] order", order.orderNumber, "items:", detail.items.length, "first:", firstItem?.productName, "slug:", firstItem?.slug, "img:", firstItem?.primaryImageUrl);
+          if (!firstItem) return [order.id, null] as const;
+
+          // If backend already sends image on the item row, use it directly.
+          if (firstItem.primaryImageUrl) return [order.id, firstItem.primaryImageUrl] as const;
+
+          // If backend sends slug, fetch full product to get image.
+          if (firstItem.slug) {
+            const product = await catalogApi.getProduct(firstItem.slug);
+            const url = product.images?.find((img) => img.url)?.url ?? null;
+            return [order.id, url] as const;
+          }
+
+          // Last resort: search catalog by the first 3 words of the product name.
+          const query = firstItem.productName.split(/\s+/).slice(0, 3).join(" ");
+          // eslint-disable-next-line no-console
+          console.debug("[OrderImages] searching catalog for:", query);
+          // Try suggest first (faster); fall back to listProducts for broader matching.
+          const suggestions = await catalogApi.suggest(query, 3);
+          // eslint-disable-next-line no-console
+          console.debug("[OrderImages] suggest results:", suggestions.map(s => ({ name: s.name, img: s.primaryImageUrl })));
+          for (const s of suggestions) {
+            if (s.primaryImageUrl) return [order.id, s.primaryImageUrl] as const;
+            const p = await catalogApi.getProduct(s.slug);
+            const u = p.images?.find((img) => img.url)?.url ?? null;
+            if (u) return [order.id, u] as const;
+          }
+          // Fall back to full product list search.
+          const listResp = await catalogApi.listProducts({ search: query, limit: 3 });
+          // eslint-disable-next-line no-console
+          console.debug("[OrderImages] listProducts results:", listResp.items.map(c => ({ name: c.name, img: c.primaryImageUrl })));
+          for (const card of listResp.items) {
+            if (card.primaryImageUrl) return [order.id, card.primaryImageUrl] as const;
+            const p = await catalogApi.getProduct(card.slug);
+            const u = p.images?.find((img) => img.url)?.url ?? null;
+            if (u) return [order.id, u] as const;
+          }
+          return [order.id, null] as const;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("[OrderImages] failed for order", order.orderNumber, err);
+          return [order.id, null] as const;
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      const imgs: Record<string, string> = {};
+      for (const [id, url] of results) {
+        if (id && url) imgs[id] = url;
+      }
+      if (Object.keys(imgs).length > 0) setExtraImages((prev) => ({ ...prev, ...imgs }));
+    });
+    return () => { cancelled = true; };
+  }, [items]);
 
   const onFilterChange = (next: OrderStatus | "ALL") => {
     if (next === statusFilter) return;
@@ -291,11 +360,13 @@ export default function OrdersPage() {
                             </td>
                             <td className="px-6 py-4 text-gray-700">
                               <div className="flex items-center gap-3">
-                                {order.primaryImageUrl ? (
+                                {(order.primaryImageUrl ?? extraImages[order.id]) ? (
                                   // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={order.primaryImageUrl} alt="" className="w-10 h-10 object-cover rounded border border-gray-200" />
+                                  <img src={(order.primaryImageUrl ?? extraImages[order.id])!} alt="" className="w-10 h-10 object-cover rounded border border-gray-200" />
                                 ) : (
-                                  <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200" />
+                                  <div className="w-10 h-10 bg-gray-50 rounded border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                    <Package size={18} className="text-gray-300" />
+                                  </div>
                                 )}
                                 <span className="text-xs text-gray-500">
                                   {order.itemCount} item{order.itemCount === 1 ? "" : "s"}
@@ -329,11 +400,13 @@ export default function OrdersPage() {
                   <div className="min-[740px]:hidden divide-y divide-gray-100">
                     {items.map((order) => (
                       <div key={order.id} className="flex items-center gap-2 xxs:gap-3 px-3 xxs:px-4 py-2.5 xxs:py-3 hover:bg-gray-50 transition-colors">
-                        {order.primaryImageUrl ? (
+                        {(order.primaryImageUrl ?? extraImages[order.id]) ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={order.primaryImageUrl} alt="" className="w-9 h-9 xxs:w-12 xxs:h-12 object-cover rounded border border-gray-200 flex-shrink-0" />
+                          <img src={(order.primaryImageUrl ?? extraImages[order.id])!} alt="" className="w-9 h-9 xxs:w-12 xxs:h-12 object-cover rounded border border-gray-200 flex-shrink-0" />
                         ) : (
-                          <div className="w-9 h-9 xxs:w-12 xxs:h-12 bg-gray-100 rounded border border-gray-200 flex-shrink-0" />
+                          <div className="w-9 h-9 xxs:w-12 xxs:h-12 bg-gray-50 rounded border border-gray-200 flex-shrink-0 flex items-center justify-center">
+                            <Package size={16} className="text-gray-300" />
+                          </div>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] xxs:text-xs font-semibold text-[#129cd3] truncate">{order.orderNumber}</p>

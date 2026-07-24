@@ -38,7 +38,8 @@ export default function CategorySlider({ items }: { items: Category[] }) {
             <button
               onClick={() => slide("next")}
               aria-label="Next categories"
-              className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
+              disabled={items.length === 0}
+              className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
               <ChevronRight size={13} />
             </button>

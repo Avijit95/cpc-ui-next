@@ -19,15 +19,20 @@ type TokenSetter = (token: string | null) => void;
 let getAccessToken: TokenGetter = () => null;
 let setAccessToken: TokenSetter = () => {};
 let onUnauthorized: () => void = () => {};
+// Returns true when there is plausibly a session (has_session marker cookie present).
+// Prevents the 401→refresh path from firing for anonymous visitors who have no session at all.
+let shouldRefresh: () => boolean = () => true;
 
 export function configureApiClient(opts: {
   getAccessToken: TokenGetter;
   setAccessToken: TokenSetter;
   onUnauthorized?: () => void;
+  shouldRefresh?: () => boolean;
 }) {
   getAccessToken = opts.getAccessToken;
   setAccessToken = opts.setAccessToken;
   if (opts.onUnauthorized) onUnauthorized = opts.onUnauthorized;
+  if (opts.shouldRefresh) shouldRefresh = opts.shouldRefresh;
 }
 
 export function getApiBaseUrl() {
@@ -134,7 +139,14 @@ export async function request<T>(
 
   let res = await fetch(url, init);
 
-  if (res.status === 401 && !opts.skipAuthRefresh && !opts.anonymous) {
+  // If the backend throttles us, wait and retry once before giving up.
+  if (res.status === 429) {
+    const retryAfterMs = Number(res.headers.get("Retry-After") ?? 0) * 1000 || 1500;
+    await new Promise((r) => setTimeout(r, retryAfterMs));
+    res = await fetch(url, init);
+  }
+
+  if (res.status === 401 && !opts.skipAuthRefresh && !opts.anonymous && shouldRefresh()) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       headers["Authorization"] = `Bearer ${refreshed.accessToken}`;

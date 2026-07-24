@@ -143,8 +143,10 @@ export default function ProductCard({
       });
       return;
     }
-    apiLimiter(() => catalogApi.getProduct(product.slug))
+    const ac = new AbortController();
+    apiLimiter(() => catalogApi.getProduct(product.slug, ac.signal))
       .then((d) => {
+        if (ac.signal.aborted) return;
         const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);
         const effective = effectiveProductStock(d.stock, d.variants);
@@ -158,6 +160,7 @@ export default function ProductCard({
         });
       })
       .catch(() => {});
+    return () => ac.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -461,8 +464,10 @@ export function ProductCardExpander({
       });
       return;
     }
-    apiLimiter(() => catalogApi.getProduct(product.slug))
+    const ac = new AbortController();
+    apiLimiter(() => catalogApi.getProduct(product.slug, ac.signal))
       .then((d) => {
+        if (ac.signal.aborted) return;
         const entry: CachedDetail = { stock: d.stock, variants: d.variants, specs: d.specs ?? {} };
         detailCache.set(product.slug, entry);
         if (stocks[`p:${product.slug}`] === undefined) {
@@ -474,6 +479,7 @@ export function ProductCardExpander({
         setVariants(d.variants);
       })
       .catch(() => {});
+    return () => ac.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
