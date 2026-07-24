@@ -93,10 +93,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Skip refresh if:
     //   - no marker (never logged in via this browser), AND
     //   - migration check already done (not a pre-marker legacy session)
-    if (!hasSessionMarker() && migrationChecked()) {
-      setState({ user: null, status: "unauthenticated" });
-      return;
-    }
+  if (!hasSessionMarker() && migrationChecked()) {
+  const markUnauthenticated = () => setState({ user: null, status: "unauthenticated" });
+  markUnauthenticated();  // ✅
+  return;
+}
 
     let cancelled = false;
     (async () => {
