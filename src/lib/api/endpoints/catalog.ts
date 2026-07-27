@@ -39,7 +39,6 @@ export const catalogApi = {
   },
   getProduct(slug: string, signal?: AbortSignal) {
     return request<ProductDetail>(`/products/${encodeURIComponent(slug)}`, {
-      anonymous: true,
       signal,
     });
   },

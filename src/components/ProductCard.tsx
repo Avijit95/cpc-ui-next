@@ -94,10 +94,12 @@ type AddState = "idle" | "busy" | "added" | "error";
 export default function ProductCard({
   product,
   variantOverride,
+  titleOverride,
   className,
 }: {
   product: ListCard;
   variantOverride?: Variant;
+  titleOverride?: string;
   className?: string;
 }) {
   const [addState, setAddState] = useState<AddState>("idle");
@@ -195,6 +197,8 @@ export default function ProductCard({
   const variantAttrLabel = variantOverride ? variantLabel(variantOverride) : null;
   const cameraTitleSuffix = variantOverride ? variantTitleSuffix(variantOverride) : null;
   const sdTitle = variantOverride ? smartDeviceCardTitle(variantOverride) : null;
+  // variantName: direct name attribute on the variant (e.g. set explicitly in admin)
+  const variantName = variantOverride?.attributes.name ? String(variantOverride.attributes.name) : null;
 
   const isOutOfStock = stockValue !== null && stockValue === 0;
   const isCriticalStock = stockValue !== null && stockValue > 0 && stockValue < 5;
@@ -312,7 +316,7 @@ export default function ProductCard({
         )}
         <Link href={productLink}>
           <h3 className="text-xs max-[499px]:text-[13px] max-[499px]:leading-normal font-semibold text-gray-800 mb-1 max-[499px]:mb-[5px] line-clamp-2 leading-snug hover:text-[#129cd3] transition-colors cursor-pointer">
-            {sdTitle ?? (product.name + (cameraTitleSuffix ? ` ${cameraTitleSuffix}` : ""))}
+            {titleOverride ?? variantName ?? sdTitle ?? (product.name + (cameraTitleSuffix ? ` ${cameraTitleSuffix}` : ""))}
           </h3>
         </Link>
         {variantAttrLabel && (
@@ -439,6 +443,7 @@ export function ProductCardExpander({
   priceMax,
   variantFilter,
   cardClassName,
+  onFetched,
 }: {
   product: ListCard;
   priceSortDir?: "asc" | "desc";
@@ -446,10 +451,14 @@ export function ProductCardExpander({
   priceMax?: number;
   variantFilter?: (v: Variant) => boolean;
   cardClassName?: string;
+  onFetched?: () => void;
 }) {
   const { stocks, setStock } = useStock();
   const [variants, setVariants] = useState<Variant[]>(
     () => detailCache.get(product.slug)?.variants ?? []
+  );
+  const [specs, setSpecs] = useState<Record<string, unknown>>(
+    () => detailCache.get(product.slug)?.specs ?? {}
   );
 
   useEffect(() => {
@@ -477,6 +486,8 @@ export function ProductCardExpander({
           if (stocks[`v:${v.id}`] === undefined) setStock(`v:${v.id}`, v.stock);
         });
         setVariants(d.variants);
+        setSpecs(entry.specs);
+        onFetched?.();
       })
       .catch(() => {});
     return () => ac.abort();
@@ -486,6 +497,27 @@ export function ProductCardExpander({
   if (variants.length === 0) {
     return <ProductCard product={product} className={cardClassName} />;
   }
+
+  // Resolve a variant-specific display title from specs (mirrors detail page logic).
+  // Priority: variant.attributes.name → model-number match in "Product Name N" →
+  //           variant position → screen-size number match → null (falls back to product.name).
+  const resolveTitle = (v: Variant): string | undefined => {
+    if (v.attributes.name) return String(v.attributes.name);
+    const specName = (i: number) =>
+      String(specs[i === 0 ? "Product Name" : `Product Name ${i + 1}`] ?? "").trim();
+    const modelStr = String(v.attributes?.model ?? "").trim().toLowerCase();
+    if (modelStr) {
+      for (let i = 0; i < 5; i++) { const n = specName(i); if (n && n.toLowerCase().includes(modelStr)) return n; }
+    }
+    const pos = variants.findIndex((a) => a.id === v.id);
+    if (pos >= 0 && pos < 5) { const n = specName(pos); if (n) return n; }
+    const sizeNum = String(v.attributes?.size ?? "").replace(/[^0-9]/g, "");
+    if (sizeNum) {
+      const re = new RegExp(`(?<![0-9])${sizeNum}(?![0-9])`);
+      for (let i = 0; i < 5; i++) { const n = specName(i); if (n && re.test(n)) return n; }
+    }
+    return undefined;
+  };
 
   // Camera: one card per lens type (Body Only, Body with each lens).
   // Colors are selected on the detail page.
@@ -511,7 +543,7 @@ export function ProductCardExpander({
     return (
       <>
         {cameraVariants.map((v) => (
-          <ProductCard key={v.id} product={product} variantOverride={v} className={cardClassName} />
+          <ProductCard key={v.id} product={product} variantOverride={v} titleOverride={resolveTitle(v)} className={cardClassName} />
         ))}
       </>
     );
@@ -542,7 +574,7 @@ export function ProductCardExpander({
   return (
     <>
       {visibleVariants.map((v) => (
-        <ProductCard key={v.id} product={product} variantOverride={v} className={cardClassName} />
+        <ProductCard key={v.id} product={product} variantOverride={v} titleOverride={resolveTitle(v)} className={cardClassName} />
       ))}
     </>
   );

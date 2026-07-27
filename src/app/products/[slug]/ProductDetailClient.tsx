@@ -735,9 +735,13 @@ export default function ProductDetailClient() {
 
     // 3. Fetch from the coupons endpoint (sends auth token when logged in so backend
     //    can return the retail coupon for verified partners).
-    catalogApi.getProductCoupons(product.slug)
-      .then((coupons) => { if (!cancelled) apply(coupons as CouponMap); })
-      .catch(() => {});
+    console.log("[Coupons] fetching for product.id:", product.id, "role:", user?.role);
+    catalogApi.getProductCoupons(product.id)
+      .then((coupons) => {
+        console.log("[Coupons] response:", JSON.stringify(coupons));
+        if (!cancelled) apply(coupons as CouponMap);
+      })
+      .catch((err) => { console.error("[Coupons] fetch error:", err); });
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps

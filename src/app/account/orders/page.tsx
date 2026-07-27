@@ -154,9 +154,9 @@ export default function OrdersPage() {
     };
   }, [status, statusFilter, searchQuery, offset]);
 
-  // Backfill images for orders where the API returned null primaryImageUrl.
-  // 1. Fetch order detail → if item has primaryImageUrl/slug, use that.
-  // 2. Otherwise suggest by product name (use first 4 words to avoid over-specificity).
+  // Backfill images for orders where the list API returned null primaryImageUrl.
+  // Strategy: fetch order detail → use item's image/slug → search listProducts/suggest by name.
+  // Avoids chained getProduct() calls inside loops (those can throw and abort the whole order).
   useEffect(() => {
     const missing = items.filter((o) => !o.primaryImageUrl);
     if (missing.length === 0) return;
@@ -166,48 +166,33 @@ export default function OrdersPage() {
         try {
           const detail = await ordersApi.get(order.id);
           const firstItem = detail.items[0];
-          // eslint-disable-next-line no-console
-          console.debug("[OrderImages] order", order.orderNumber, "items:", detail.items.length, "first:", firstItem?.productName, "slug:", firstItem?.slug, "img:", firstItem?.primaryImageUrl);
           if (!firstItem) return [order.id, null] as const;
 
-          // If backend already sends image on the item row, use it directly.
+          // 1. Direct image on item row
           if (firstItem.primaryImageUrl) return [order.id, firstItem.primaryImageUrl] as const;
 
-          // If backend sends slug, fetch full product to get image.
-          if (firstItem.slug) {
-            const product = await catalogApi.getProduct(firstItem.slug);
-            const url = product.images?.find((img) => img.url)?.url ?? null;
-            return [order.id, url] as const;
-          }
+          // 2. Search by product name via listProducts (ListCard has reliable primaryImageUrl)
+          const query = firstItem.productName.split(/\s+/).slice(0, 4).join(" ");
+          const listResp = await catalogApi.listProducts({ search: query, limit: 5 });
 
-          // Last resort: search catalog by the first 3 words of the product name.
-          const query = firstItem.productName.split(/\s+/).slice(0, 3).join(" ");
-          // eslint-disable-next-line no-console
-          console.debug("[OrderImages] searching catalog for:", query);
-          // Try suggest first (faster); fall back to listProducts for broader matching.
-          const suggestions = await catalogApi.suggest(query, 3);
-          // eslint-disable-next-line no-console
-          console.debug("[OrderImages] suggest results:", suggestions.map(s => ({ name: s.name, img: s.primaryImageUrl })));
-          for (const s of suggestions) {
-            if (s.primaryImageUrl) return [order.id, s.primaryImageUrl] as const;
-            const p = await catalogApi.getProduct(s.slug);
-            const u = p.images?.find((img) => img.url)?.url ?? null;
-            if (u) return [order.id, u] as const;
+          // Prefer exact slug match first
+          if (firstItem.slug) {
+            const exact = listResp.items.find((c) => c.slug === firstItem.slug);
+            if (exact?.primaryImageUrl) return [order.id, exact.primaryImageUrl] as const;
           }
-          // Fall back to full product list search.
-          const listResp = await catalogApi.listProducts({ search: query, limit: 3 });
-          // eslint-disable-next-line no-console
-          console.debug("[OrderImages] listProducts results:", listResp.items.map(c => ({ name: c.name, img: c.primaryImageUrl })));
+          // Any result with an image
           for (const card of listResp.items) {
             if (card.primaryImageUrl) return [order.id, card.primaryImageUrl] as const;
-            const p = await catalogApi.getProduct(card.slug);
-            const u = p.images?.find((img) => img.url)?.url ?? null;
-            if (u) return [order.id, u] as const;
           }
+
+          // 3. Try suggest as further fallback
+          const suggs = await catalogApi.suggest(query, 5);
+          for (const s of suggs) {
+            if (s.primaryImageUrl) return [order.id, s.primaryImageUrl] as const;
+          }
+
           return [order.id, null] as const;
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error("[OrderImages] failed for order", order.orderNumber, err);
+        } catch {
           return [order.id, null] as const;
         }
       }),

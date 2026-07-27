@@ -51,7 +51,7 @@ const priceBuckets: { label: string; min: number; max: number }[] = [
   { label: "₹11K – ₹24.9K", min: 11000, max: 24900 },
   { label: "₹25K – ₹49.9K", min: 25000, max: 49900 },
   { label: "₹50K – ₹79.9K", min: 50000, max: 79900 },
-  { label: "₹80K – ₹1.349L", min: 80000, max: 134900 },
+  { label: "₹80K – ₹1.34L", min: 80000, max: 134900 },
   { label: "₹1.35L – ₹2L", min: 135000, max: 200000 },
   { label: "Above ₹2L", min: 200001, max: PRICE_CEIL },
 ];
@@ -1679,10 +1679,12 @@ useEffect(() => {
 
   // Count visible cards: for products with fetched variants, count variant cards.
   // Products not yet fetched count as 1 card each.
+  // Applies the same price filter as ProductCardExpander so the count matches what renders.
+  const isPriceActive = minPrice > PRICE_FLOOR || maxPrice < PRICE_CEIL;
   const visibleCardCount = items.reduce((sum, p) => {
     const cached = detailCache.get(p.slug);
     if (!cached || cached.variants.length === 0) return sum + 1;
-    // Camera: one card per lens-type group
+    // Camera: one card per lens-type group (conservative — don't price-filter camera groups)
     const isCamera = cached.variants.some((v) => "lensIncluded" in v.attributes);
     if (isCamera) {
       const groups = new Set(cached.variants.map((v) =>
@@ -1692,7 +1694,16 @@ useEffect(() => {
       ));
       return sum + groups.size;
     }
-    return sum + cached.variants.length;
+    if (!isPriceActive) return sum + cached.variants.length;
+    const priceFiltered = cached.variants.filter((v) => {
+      const pr = v.pricing.finalPrice;
+      if (pr > 0) {
+        if (minPrice > PRICE_FLOOR && pr < minPrice) return false;
+        if (maxPrice < PRICE_CEIL && pr > maxPrice) return false;
+      }
+      return true;
+    });
+    return sum + priceFiltered.length;
   }, 0);
 
   // Build a per-variant filter for TV size so ProductCardExpander shows only matching sizes
@@ -2112,7 +2123,7 @@ useEffect(() => {
                     <ProductCardSkeleton key={i} />
                   ))}
                 </div>
-              ) : items.length === 0 ? (
+              ) : items.length === 0 || (visibleCardCount === 0 && items.every((p) => detailCache.has(p.slug))) ? (
                 <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
                   {/* Illustration */}
                   <div className="mb-6">
@@ -2161,12 +2172,25 @@ useEffect(() => {
                         Clear Filters
                       </button>
                     )}
-                    <Link
-                      href="/products"
+                    <button
+                      onClick={() => {
+                        setSelectedBrand(null);
+                        setMinRating(null);
+                        setMinPrice(PRICE_FLOOR);
+                        setMaxPrice(PRICE_CEIL);
+                        setPhoneFilters({});
+                        setTvFilters({});
+                        setCameraFiltersState({});
+                        setLensFiltersState({});
+                        setSpeakerFiltersState({});
+                        if (!selectedCategory) {
+                          router.push("/products");
+                        }
+                      }}
                       className="px-6 py-2.5 rounded-lg bg-[#129cd3] text-white text-sm font-medium hover:bg-[#0f87b8] transition-colors"
                     >
                       Browse All Products
-                    </Link>
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -2205,6 +2229,7 @@ useEffect(() => {
                           priceMin={minPrice > PRICE_FLOOR ? minPrice : undefined}
                           priceMax={maxPrice < PRICE_CEIL ? maxPrice : undefined}
                           variantFilter={tvVariantFilter ?? phoneVariantFilter}
+                          onFetched={() => setCacheTick((t) => t + 1)}
                         />
                       );
                     })
