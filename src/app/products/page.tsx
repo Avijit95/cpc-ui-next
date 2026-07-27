@@ -647,11 +647,15 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
     if (connOpts.length > 0) {
       const specs = cached.specs;
       // Check a spec key across all TV size slots (key, "key 2", "key 3"…)
+      const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false"]);
       const tvSpecAny = (base: string): string => {
         for (let i = 0; i < 5; i++) {
           const k = i === 0 ? base : `${base} ${i + 1}`;
           const v = specs[k];
-          if (v && String(v).trim().toLowerCase() !== "no") return String(v).toLowerCase();
+          if (v) {
+            const norm = String(v).trim().toLowerCase();
+            if (!TV_FALSY.has(norm)) return norm;
+          }
         }
         return "";
       };
@@ -671,7 +675,7 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
       const hasConn = (opt: string): boolean => {
         if (opt === "HDMI")      return !!tvSpecAny("HDMI Ports") || !!tvSpecAny("HDMI") || !!tvSpecAny("No. of HDMI") || freeText.includes("hdmi");
         if (opt === "USB")       return !!tvSpecAny("USB Ports") || !!tvSpecAny("USB") || !!tvSpecAny("No. of USB") || !!tvSpecAny("No. of USB Ports") || freeText.includes("usb");
-        if (opt === "Wi-Fi")     return !!tvSpecAny("Wi-Fi") || !!tvSpecAny("Wi-Fi Enabled") || !!tvSpecAny("Wireless") || !!tvSpecAny("WiFi") || !!tvSpecAny("Wi Fi") || freeText.includes("wi-fi") || freeText.includes("wifi") || freeText.includes("wireless");
+        if (opt === "Wi-Fi")     return !!tvSpecAny("Wi-Fi") || !!tvSpecAny("Wi-Fi Enabled") || !!tvSpecAny("Wireless") || !!tvSpecAny("WiFi") || !!tvSpecAny("Wi Fi") || !!tvSpecAny("Wi-Fi Type") || freeText.includes("wi-fi") || freeText.includes("wifi") || freeText.includes("wireless");
         if (opt === "Bluetooth") return !!tvSpecAny("Bluetooth") || !!tvSpecAny("Bluetooth Version") || !!tvSpecAny("Bluetooth Enabled") || freeText.includes("bluetooth");
         if (opt === "Ethernet")  return !!tvSpecAny("Ethernet") || !!tvSpecAny("LAN") || freeText.includes("ethernet") || freeText.includes("lan");
         if (opt === "AV")        return !!tvSpecAny("AV") || !!tvSpecAny("AV In") || freeText.includes(" av") || freeText.includes("composite");
@@ -942,15 +946,44 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
       })) return false;
     }
 
-    // Battery Life
+    // Battery Life — multi-strategy lookup
     if (battOpts.length > 0) {
-      const hrs = parseHours(specs["Battery Life"]);
-      if (hrs === null) return false;
+      const BATT_KEY_RE = /battery|playback|playtime|play\s*time|backup|hours|hour/i;
+      const SKIP_KEY_RE = /capacity|mah|price|weight|dimension|size|color|watt|power\s*output/i;
+      const HOUR_VAL_RE = /\d[\d.]*\s*(h\b|hr|hrs|hour)/i;
+
+      let hrs: number | null = null;
+
+      // Pass 1: key contains battery/playback/backup/hours AND value looks like duration
+      for (const [k, v] of Object.entries(specs)) {
+        const val = String(v ?? "");
+        if (BATT_KEY_RE.test(k) && !SKIP_KEY_RE.test(k)) {
+          const n = parseHours(v);
+          if (n !== null && n > 0 && n < 200) { hrs = n; break; }
+        }
+        void val;
+      }
+
+      // Pass 2: any spec value that looks like "28 hours" / "28 hrs" / "28H"
+      if (hrs === null) {
+        for (const [k, v] of Object.entries(specs)) {
+          if (SKIP_KEY_RE.test(k)) continue;
+          const val = String(v ?? "");
+          if (HOUR_VAL_RE.test(val)) {
+            const n = parseHours(v);
+            if (n !== null && n > 0 && n < 200) { hrs = n; break; }
+          }
+        }
+      }
+
+      // If battery info genuinely not found, pass the product through (don't exclude it)
+      if (hrs === null) return true;
+
       if (!battOpts.some((opt) => {
-        if (opt === "Up to 10 Hours") return hrs <= 10;
-        if (opt === "10\u201320 Hours") return hrs > 10 && hrs <= 20;
-        if (opt === "20\u201330 Hours") return hrs > 20 && hrs <= 30;
-        if (opt === "Above 30 Hours")  return hrs > 30;
+        if (opt === "Up to 10 Hours") return hrs! <= 10;
+        if (opt === "10\u201320 Hours") return hrs! > 10 && hrs! <= 20;
+        if (opt === "20\u201330 Hours") return hrs! > 20 && hrs! <= 30;
+        if (opt === "Above 30 Hours")  return hrs! > 30;
         return false;
       })) return false;
     }

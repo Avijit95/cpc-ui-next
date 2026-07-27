@@ -203,7 +203,7 @@ function imageGroupKey(r: VariantRow, isTV: boolean, isCamera: boolean, isLens =
   return r.color.trim();
 }
 
-function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = []): Record<string, unknown> {
+function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpeaker: boolean, isLens = false, isSmartDevice = false, attrColumns: string[] = [], isIPhone = false): Record<string, unknown> {
   const a: Record<string, unknown> = {};
   if (isCamera) {
     if (r.ram.trim()) a.model = r.ram.trim();
@@ -231,6 +231,7 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
   } else {
     if (r.ram.trim()) a.ram = r.ram.trim();
     if (r.storage.trim()) a.storage = r.storage.trim();
+    a.__isIphone = isIPhone;
   }
   if (r.color.trim()) a.color = r.color.trim();
   const gstNum = Number(r.gst);
@@ -375,7 +376,15 @@ const ProductVariantsEditor = forwardRef<
   ProductVariantsHandle,
   { productName: string; initialVariants: AdminVariant[]; disabled: boolean; categorySlug?: string; draftRows?: unknown[]; specModelNos?: string[]; cameraSpecModels?: CameraSpecModel[]; tvSpecSizes?: string[]; tvSpecModels?: TvSpecModel[] }
 >(function ProductVariantsEditor({ productName, initialVariants, disabled, categorySlug, draftRows, specModelNos = [], cameraSpecModels = [], tvSpecSizes = [], tvSpecModels = [] }, ref) {
-  const [isIPhone, setIsIPhone] = useState(false);
+  const [isIPhone, setIsIPhone] = useState(() => {
+    // 1. Explicit saved flag (new products saved after the fix).
+    if (initialVariants.length > 0 && "__isIphone" in initialVariants[0].attributes) {
+      return initialVariants[0].attributes.__isIphone === true;
+    }
+    // 2. Backward compat: auto-detect from product name for products saved before the fix.
+    if (initialVariants.length > 0 && /iphone/i.test(productName)) return true;
+    return false;
+  });
   const isLens = isLensCategory(categorySlug);
   const isCamera = !isLens && isCameraCategory(categorySlug);
   const isTV = isTvCategory(categorySlug);
@@ -641,7 +650,7 @@ const ProductVariantsEditor = forwardRef<
             const body = {
               // On update keep the original SKU to avoid backend uniqueness conflicts.
               sku: existing.sku,
-              attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens, isSmartDevice, attrColumns),
+              attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens, isSmartDevice, attrColumns, isIPhone),
               basePrice: r.base.trim() === "" ? null : Number(r.base),
               priceOverride: r.price.trim() === "" ? null : Number(r.price),
               stock: Number(r.stock),
@@ -679,7 +688,7 @@ const ProductVariantsEditor = forwardRef<
         for (const r of toCreate) {
           await adminApi.createVariant(productId, {
             sku: makeSku(productName, r, isCamera, isTV, isSmartDevice, attrColumns),
-            attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens, isSmartDevice, attrColumns),
+            attributes: buildAttributes(r, isCamera, isTV, isSpeaker, isLens, isSmartDevice, attrColumns, isIPhone),
             basePrice: r.base.trim() === "" ? null : Number(r.base),
             priceOverride: r.price.trim() === "" ? null : Number(r.price),
             stock: Number(r.stock),
