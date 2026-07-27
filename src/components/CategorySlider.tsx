@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -13,6 +13,24 @@ type Category = {
 
 export default function CategorySlider({ items }: { items: Category[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setAtStart(el.scrollLeft <= 0);
+    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    updateScrollState();
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateScrollState);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateScrollState]);
 
   const slide = (dir: "prev" | "next") => {
     const el = scrollRef.current;
@@ -31,15 +49,14 @@ export default function CategorySlider({ items }: { items: Category[] }) {
             <button
               onClick={() => slide("prev")}
               aria-label="Previous categories"
-              className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors"
+              className={`w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors ${atStart ? "invisible" : ""}`}
             >
               <ChevronLeft size={13} />
             </button>
             <button
               onClick={() => slide("next")}
               aria-label="Next categories"
-              disabled={items.length === 0}
-              className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              className={`w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:border-[#129cd3] hover:text-[#129cd3] text-gray-500 transition-colors ${atEnd ? "invisible" : ""}`}
             >
               <ChevronRight size={13} />
             </button>
@@ -48,6 +65,7 @@ export default function CategorySlider({ items }: { items: Category[] }) {
 
         <div
           ref={scrollRef}
+          onScroll={updateScrollState}
           className="category-slider flex gap-4 overflow-x-auto scroll-smooth"
         >
           {items.map((cat) => (

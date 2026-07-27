@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 function formatPrice(price: number) {
-  return "₹" + price.toLocaleString("en-IN");
+  return "₹" + Math.round(price).toLocaleString("en-IN");
 }
 
 export default function CartPage() {
@@ -300,8 +300,7 @@ export default function CartPage() {
                       <div className="flex-1 min-w-0">
                         <Link
                           href={`/products/${line.slug}${line.variantId ? `?variant=${line.variantId}` : ""}`}
-                          className="block"
-                        >
+                          className="block">
                           <h3 className="text-xs sm:text-sm font-semibold text-gray-800 mb-1 line-clamp-2 hover:text-[#129cd3] transition-colors">
                             {line.name}
                           </h3>
@@ -343,6 +342,13 @@ export default function CartPage() {
                             </button>
                           </div>
                           <button
+                            onClick={() => router.push(`/checkout?items=${id}`)}
+                            disabled={busy || lineStock === 0 || stockWarning?.available === 0}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            Buy Now
+                          </button>
+                          <button
                             onClick={() => removeLine(line)}
                             disabled={busy}
                             className="flex items-center gap-1.5 text-red-500 hover:text-red-700 text-xs font-medium transition-colors disabled:opacity-40"
@@ -357,11 +363,15 @@ export default function CartPage() {
                           )}
                         </div>
 
-
                         {(lineStock === 0 || stockWarning?.available === 0) && (
                           <p className="mt-2 text-xs font-semibold text-red-600 flex items-center gap-1.5">
                             <AlertTriangle size={13} />
                             Out of stock
+                          </p>
+                        )}
+                        {lineStock !== undefined && lineStock > 0 && lineStock < 10 && (
+                          <p className={`mt-2 text-xs font-semibold flex items-center gap-1 ${lineStock < 5 ? "text-red-500" : "text-orange-500"}`}>
+                            {lineStock < 5 ? `Only ${lineStock} left!` : "Few left"}
                           </p>
                         )}
                         {stockWarning && stockWarning.available > 0 && (

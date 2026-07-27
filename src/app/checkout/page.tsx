@@ -77,7 +77,7 @@ const stateName = (code: StateCode) =>
   STATE_OPTIONS.find((s) => s.code === code)?.name ?? code;
 
 function formatPrice(price: number) {
-  return "₹" + price.toLocaleString("en-IN");
+  return "₹" + Math.round(price).toLocaleString("en-IN");
 }
 
 type AddressForm = {
@@ -711,16 +711,14 @@ function CheckoutContent() {
       </main>
       <Footer />
 
-      {/* Add address modal — minimal inline version. Same shape as /account/addresses. */}
+      {/* Add address modal — same CSS as /account/addresses */}
       {showAddModal && (
-        <>
-          {/* Backdrop at z-40 — Order Summary (z-[45]) sits above it */}
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={closeAdd} />
-          {/* Modal dialog at z-50 — above backdrop and above Order Summary */}
-          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto pointer-events-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-800">Add Delivery Address</h2>
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !addBusy && closeAdd()} />
+          <div className="flex min-h-full items-start justify-center p-4 pt-20 pb-8">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10" style={{ top: "70px" }}>
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-800">Add New Address</h2>
               <button
                 onClick={closeAdd}
                 disabled={addBusy}
@@ -730,8 +728,7 @@ function CheckoutContent() {
               </button>
             </div>
 
-
-            <div className="space-y-4">
+            <div className="space-y-2 px-6 pt-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   Label <span className="font-normal text-gray-400">(optional)</span>
@@ -741,16 +738,17 @@ function CheckoutContent() {
                   placeholder="Home, Office, etc."
                   value={addForm.label}
                   onChange={(e) => setAddForm((prev) => ({ ...prev, label: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Full Name</label>
                 <input
                   type="text"
+                  placeholder="John Doe"
                   value={addForm.recipientName}
                   onChange={(e) => setAddForm((prev) => ({ ...prev, recipientName: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -760,7 +758,7 @@ function CheckoutContent() {
                   placeholder="+919000000001"
                   value={addForm.phone}
                   onChange={(e) => setAddForm((prev) => ({ ...prev, phone: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
                 <p className="text-[10px] text-gray-400 mt-1">Include country code, no spaces.</p>
               </div>
@@ -768,9 +766,10 @@ function CheckoutContent() {
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Address Line 1</label>
                 <input
                   type="text"
+                  placeholder="Street, Area, Landmark"
                   value={addForm.line1}
                   onChange={(e) => setAddForm((prev) => ({ ...prev, line1: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -779,18 +778,20 @@ function CheckoutContent() {
                 </label>
                 <input
                   type="text"
+                  placeholder="Apartment, suite, unit, etc."
                   value={addForm.line2}
                   onChange={(e) => setAddForm((prev) => ({ ...prev, line2: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">City</label>
                 <input
                   type="text"
+                  placeholder="Mumbai"
                   value={addForm.city}
                   onChange={(e) => setAddForm((prev) => ({ ...prev, city: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
               <div>
@@ -803,7 +804,7 @@ function CheckoutContent() {
                       stateCode: e.target.value as StateCode,
                     }))
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 bg-white"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 bg-white"
                 >
                   {STATE_OPTIONS.map((s) => (
                     <option key={s.code} value={s.code}>
@@ -818,6 +819,7 @@ function CheckoutContent() {
                   type="text"
                   inputMode="numeric"
                   maxLength={6}
+                  placeholder="400001"
                   value={addForm.pincode}
                   onChange={(e) =>
                     setAddForm((prev) => ({
@@ -825,18 +827,18 @@ function CheckoutContent() {
                       pincode: e.target.value.replace(/\D/g, ""),
                     }))
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                 />
               </div>
             </div>
 
             {addError && (
-              <div className="mt-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <div className="mt-4 mx-6 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 {addError}
               </div>
             )}
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 mt-3 px-6 pb-4">
               <button
                 onClick={handleSaveAddress}
                 disabled={addBusy}
@@ -855,7 +857,7 @@ function CheckoutContent() {
             </div>
           </div>
           </div>
-        </>
+        </div>
       )}
     </>
   );

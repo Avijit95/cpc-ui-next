@@ -341,7 +341,7 @@ export default function DealsSection() {
               <div className="flex-1 min-w-0 flex flex-col gap-0">
 
                 {/* Title block */}
-                <Link href={`/products/${deal.product.slug}${deal.variantId ? `?variant=${deal.variantId}` : ""}`} className="block group mb-3">
+                <Link href={`/products/${deal.product.slug}${deal.variantId ? `?variant=${deal.variantId}` : ""}`} className="block group mb-2">
                   <h3
                     className="font-extrabold text-gray-900 group-hover:text-[#129cd3] transition-colors duration-200 tracking-tight line-clamp-2"
                     style={{ fontSize: "24px", lineHeight: "normal" }}
@@ -349,6 +349,24 @@ export default function DealsSection() {
                     {deal.product.name}
                   </h3>
                 </Link>
+
+                {/* Variant RAM / Storage badge */}
+                {deal.variant && (() => {
+                  const attrs = deal.variant.attributes as Record<string, unknown>;
+                  const ram = attrs["RAM"] ?? attrs["ram"];
+                  const storage = attrs["ROM"] ?? attrs["Storage"] ?? attrs["storage"] ?? attrs["rom"];
+                  if (!ram && !storage) return null;
+                  const parts: string[] = [];
+                  if (ram) parts.push(`${String(ram)} RAM`);
+                  if (storage) parts.push(`${String(storage)} Storage`);
+                  return (
+                    <div className="mb-3">
+                      <span className="inline-flex items-center gap-2 bg-[#e8f7fc] border border-[#129cd3]/40 text-[#129cd3] text-sm font-bold px-4 py-1.5 rounded-full">
+                        {parts.join(" | ")}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Highlights */}
                 {(() => {

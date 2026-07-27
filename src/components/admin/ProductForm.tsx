@@ -1040,6 +1040,8 @@ export default function ProductForm({ mode }: { mode: Mode }) {
   // Show variants for all products so any category can manage stock via variants.
   const showVariants = true;
 
+
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">

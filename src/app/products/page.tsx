@@ -269,8 +269,8 @@ const TV_FILTER_GROUPS: TvFilterGroup[] = [
     ],
   },
   {
-    key: "resolution",
-    label: "Resolution",
+    key: "displayResolution",
+    label: "Display Resolution",
     options: ["8K", "4K", "1080p", "720p"],
   },
   {
@@ -486,7 +486,7 @@ function matchTvResolution(val: string, option: string): boolean {
   if (option === "8K")    return v.includes("8k") || v.includes("7680") || v.includes("4320") || v.includes("8000");
   if (option === "4K")    return (v.includes("4k") || v.includes("uhd") || v.includes("ultra hd") || v.includes("3840") || v.includes("2160") || v.includes("4096")) && !v.includes("8k") && !v.includes("7680");
   if (option === "1080p") return (v.includes("1080") || v.includes("full hd") || v.includes("fullhd") || v.includes("fhd")) && !v.includes("4k") && !v.includes("uhd") && !v.includes("2160") && !v.includes("8k");
-  if (option === "720p")  return (v.includes("720") || v.includes("hd ready") || v.includes("hdready")) && !v.includes("1080") && !v.includes("4k") && !v.includes("uhd");
+  if (option === "720p")  return (v.includes("720") || v.includes("768") || v.includes("hd ready") || v.includes("hdready")) && !v.includes("1080") && !v.includes("full hd") && !v.includes("fhd") && !v.includes("4k") && !v.includes("uhd");
   return false;
 }
 
@@ -562,7 +562,8 @@ function extractTvInches(cached: ReturnType<typeof detailCache.get>, productName
 
 function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>): ListCard[] {
   const sizeOpts = tvFilters["screenSize"]   ?? [];
-  const resOpts  = tvFilters["resolution"]   ?? [];
+  // Accept both "resolution" and "displayResolution" filter keys so either label works.
+  const resOpts  = [...(tvFilters["resolution"] ?? []), ...(tvFilters["displayResolution"] ?? [])];
   const connOpts = tvFilters["connectivity"] ?? [];
 
   const hasAny = [sizeOpts, resOpts, connOpts].some((a) => a.length > 0);
@@ -623,6 +624,18 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
           if (resKeywords.some((kw) => s.includes(kw))) allResVals.push(String(v));
         }
       }
+      // Also check variant attributes for resolution (some TVs store it per-variant).
+      if (allResVals.length === 0 && cached.variants.length > 0) {
+        for (const v of cached.variants) {
+          for (const [ak, av] of Object.entries(v.attributes)) {
+            if (!av) continue;
+            const akl = ak.toLowerCase();
+            if (akl.includes("resolution") || akl.includes("display")) {
+              allResVals.push(String(av));
+            }
+          }
+        }
+      }
       // If no resolution info found at all (specs empty/not yet loaded), let the
       // product through rather than incorrectly hiding it.
       if (allResVals.length > 0 && !allResVals.some((raw) => resOpts.some((opt) => matchTvResolution(raw, opt)))) return false;
@@ -642,21 +655,27 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
         }
         return "";
       };
-      // Free-text fields that may contain connectivity info
+      // Free-text fields that may contain connectivity info.
+      // "Other Convenience Features" and "Supported Devices for Casting" are per-size
+      // keys — join ALL five possible size slots so Bluetooth in slot 2+ is not missed.
+      const joinSlots = (base: string) =>
+        Array.from({ length: 5 }, (_, i) =>
+          String(specs[i === 0 ? base : `${base} ${i + 1}`] ?? "").toLowerCase()
+        ).join(" ");
       const freeText = [
-        specs["Other Convenience Features"],
-        specs["Supported Devices for Casting"],
-        specs["Wi-Fi Type"],
-      ].map((v) => String(v ?? "").toLowerCase()).join(" ");
+        joinSlots("Other Convenience Features"),
+        joinSlots("Supported Devices for Casting"),
+        String(specs["Wi-Fi Type"] ?? "").toLowerCase(),
+      ].join(" ");
 
       const hasConn = (opt: string): boolean => {
-        if (opt === "HDMI")      return !!tvSpecAny("HDMI Ports");
-        if (opt === "USB")       return !!tvSpecAny("USB Ports");
-        if (opt === "Wi-Fi")     return !!tvSpecAny("Wi-Fi");
-        if (opt === "Bluetooth") return !!tvSpecAny("Bluetooth") || freeText.includes("bluetooth");
-        if (opt === "Ethernet")  return !!tvSpecAny("Ethernet")  || freeText.includes("ethernet") || freeText.includes("lan");
-        if (opt === "AV")        return !!tvSpecAny("AV")        || freeText.includes(" av") || freeText.includes("composite");
-        if (opt === "RF")        return !!tvSpecAny("RF")        || freeText.includes("antenna") || freeText.includes("coaxial");
+        if (opt === "HDMI")      return !!tvSpecAny("HDMI Ports") || !!tvSpecAny("HDMI") || !!tvSpecAny("No. of HDMI") || freeText.includes("hdmi");
+        if (opt === "USB")       return !!tvSpecAny("USB Ports") || !!tvSpecAny("USB") || !!tvSpecAny("No. of USB") || !!tvSpecAny("No. of USB Ports") || freeText.includes("usb");
+        if (opt === "Wi-Fi")     return !!tvSpecAny("Wi-Fi") || !!tvSpecAny("Wi-Fi Enabled") || !!tvSpecAny("Wireless") || !!tvSpecAny("WiFi") || !!tvSpecAny("Wi Fi") || freeText.includes("wi-fi") || freeText.includes("wifi") || freeText.includes("wireless");
+        if (opt === "Bluetooth") return !!tvSpecAny("Bluetooth") || !!tvSpecAny("Bluetooth Version") || !!tvSpecAny("Bluetooth Enabled") || freeText.includes("bluetooth");
+        if (opt === "Ethernet")  return !!tvSpecAny("Ethernet") || !!tvSpecAny("LAN") || freeText.includes("ethernet") || freeText.includes("lan");
+        if (opt === "AV")        return !!tvSpecAny("AV") || !!tvSpecAny("AV In") || freeText.includes(" av") || freeText.includes("composite");
+        if (opt === "RF")        return !!tvSpecAny("RF") || !!tvSpecAny("RF In") || freeText.includes("antenna") || freeText.includes("coaxial");
         return false;
       };
       if (!connOpts.some(hasConn)) return false;
@@ -1519,9 +1538,14 @@ useEffect(() => {
   const needsDetailFetch = (isPhoneCategory && hasPhoneFilters) || isTvCategory || isCameraCategory || isLensCategory || isSpeakerCategory || isSmartDeviceCategory;
 
   // When spec filters are active, pre-fetch detail for items not yet cached.
+  // NOTE: priceFilteredItems is intentionally NOT in the dep array — it's a new
+  // array ref every render and would cause this effect to restart constantly,
+  // setting cancelled=true before fetches complete and preventing setCacheTick
+  // from ever firing. Instead we use rawItems (stable ref between API calls) and
+  // re-run only when the category or the API data changes.
   useEffect(() => {
-    if (!needsDetailFetch || priceFilteredItems.length === 0) return;
-    const uncached = priceFilteredItems.filter((item) => !detailCache.has(item.slug));
+    if (!needsDetailFetch || rawItems.length === 0) return;
+    const uncached = rawItems.filter((item) => !detailCache.has(item.slug));
     if (uncached.length === 0) return;
     let cancelled = false;
     // Use apiLimiter so we don't fire all detail fetches in parallel — a burst of
@@ -1529,17 +1553,18 @@ useEffect(() => {
     // some fetches to fail silently and leaving specs uncached. Uncached products
     // pass the resolution filter unconditionally (if (!cached) return true), making
     // the filter appear broken even when resolution values are set in admin.
-    Promise.all(
-      uncached.map((item) =>
-        apiLimiter(() => catalogApi.getProduct(item.slug)).then((d) => {
-          detailCache.set(item.slug, { stock: d.stock, variants: d.variants, specs: d.specs ?? {} });
-        }).catch(() => {})
-      )
-    ).then(() => {
-      if (!cancelled) setCacheTick((t) => t + 1);
+    // Call setCacheTick per-item (not after Promise.all) so partial cache population
+    // immediately triggers a re-render and filters update as each product loads.
+    uncached.forEach((item) => {
+      apiLimiter(() => catalogApi.getProduct(item.slug)).then((d) => {
+        if (cancelled) return;
+        detailCache.set(item.slug, { stock: d.stock, variants: d.variants, specs: d.specs ?? {} });
+        setCacheTick((t) => t + 1);
+      }).catch(() => {});
     });
     return () => { cancelled = true; };
-  }, [needsDetailFetch, priceFilteredItems]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsDetailFetch, rawItems]);
 
   // cacheTick read to make React re-render after pre-fetch.
   void cacheTick;
