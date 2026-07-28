@@ -125,10 +125,19 @@ export default function WishlistPage() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {items.map((item) => {
-                const listCard = toListCard(item);
+                const detailLoaded = !!productDetails[item.slug];
+                // For variant-specific items, wait for product details so we never
+                // show the wrong variant's image/price/link.
+                if (item.variantId && !detailLoaded) {
+                  return <ProductCardSkeleton key={item.wishlistItemId} />;
+                }
                 const variantOverride: Variant | undefined = item.variantId
                   ? productDetails[item.slug]?.variants.find((v) => v.id === item.variantId)
                   : undefined;
+                // If details loaded but the specific variant wasn't found (deleted/changed),
+                // skip rather than falling back to showing the default product card.
+                if (item.variantId && detailLoaded && !variantOverride) return null;
+                const listCard = toListCard(item);
                 return (
                   <ProductCard
                     key={item.wishlistItemId}

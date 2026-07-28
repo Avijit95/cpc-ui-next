@@ -213,7 +213,6 @@ export default function DealsSection() {
   }, []);
 
   // displayIdx is derived — no state needed.
-  // const liveCountForDisplay = deals.filter((d) => new Date(d.endsAt).getTime() > now).length;
 
   const liveCountForDisplay = deals.filter((d) => new Date(d.endsAt).getTime() > now).length;
   const displayIdx = liveCountForDisplay > 0 ? dealIdx % liveCountForDisplay : 0;

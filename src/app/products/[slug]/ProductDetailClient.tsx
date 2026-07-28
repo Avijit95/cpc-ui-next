@@ -145,6 +145,8 @@ function buildVariantGroups(variants: Variant[]): VariantGroup[] {
   const keys: string[] = [];
   for (const v of variants) {
     for (const k of Object.keys(v.attributes)) {
+      // Skip admin-only metadata keys — they must not influence variant selection or labels.
+      if (k.startsWith("__")) continue;
       if (k.startsWith("__")) continue; // skip internal metadata keys (e.g. __gstRate)
       if (!keys.includes(k)) keys.push(k);
     }
@@ -621,7 +623,7 @@ export default function ProductDetailClient() {
   const { setCart: syncHeaderCart, items: cartItems } = useCart();
   const { stocks, setStock, adjustStock } = useStock();
   const { setActiveCategory } = useActiveCategory();
-  const wishlisted = product ? isWishlisted(product.id) : false;
+  // wishlisted is computed below after selectedVariant is available
 
   // Reviews state.
   const [reviewsResp, setReviewsResp] = useState<ReviewListResponse | null>(null);
@@ -978,6 +980,7 @@ useEffect(() => {
   const selectedVariant = hasVariants
     ? findVariant(product.variants, selectedAttrs, variantGroups)
     : undefined;
+  const wishlisted = isWishlisted(product.id, selectedVariant?.id);
 
   // Picking a value keeps the other selections when a matching variant exists,
   // otherwise snaps to a valid variant (prefers in-stock) so a variant always
@@ -986,10 +989,30 @@ useEffect(() => {
     const next = { ...selectedAttrs, [key]: value };
     let target = findVariant(product.variants, next, variantGroups);
     if (!target) {
-      const candidates = product.variants.filter(
-        (v) => attrValue(v, key) === value,
-      );
-      target = candidates.find((v) => v.stock > 0) ?? candidates[0];
+      // For TVs: when changing color or year, keep size locked.
+      // sizeFilteredVariants is computed below in the render body; closures in
+      // event handlers execute after render so the value is always up-to-date.
+      const pool = isTvProduct && key !== "size" ? sizeFilteredVariants : product.variants;
+      const candidates = pool.filter((v) => attrValue(v, key) === value);
+      if (candidates.length > 0) {
+        // Score candidates by how well they preserve the current attribute selections.
+        // Attributes later in VARIANT_ATTR_ORDER get higher weight so e.g. switching
+        // color preserves size rather than year.
+        const otherGroups = variantGroups.filter((g) => g.key !== key);
+        const getScore = (v: Variant) => {
+          let score = v.stock > 0 ? 1 : 0;
+          for (const g of otherGroups) {
+            if (attrValue(v, g.key) !== (selectedAttrs[g.key] ?? "")) continue;
+            const pri = VARIANT_ATTR_ORDER.indexOf(g.key);
+            score += pri >= 0 ? 1 << (pri + 1) : 2;
+          }
+          return score;
+        };
+        target = candidates.reduce(
+          (best, v) => getScore(v) > getScore(best) ? v : best,
+          candidates[0],
+        );
+      }
     }
     if (target) {
       setSelectedAttrs(attrsOf(target));
@@ -1107,6 +1130,8 @@ useEffect(() => {
   const colorSourceVariants =
     (isLensProduct || isSpeakerProduct) && lensModelKey && selectedAttrs[lensModelKey]
       ? product.variants.filter((v) => attrValue(v, lensModelKey) === selectedAttrs[lensModelKey])
+      : isTvProduct && selectedAttrs["size"]
+      ? product.variants.filter((v) => attrValue(v, "size") === selectedAttrs["size"])
       : product.variants;
   const colorValues = [
     ...new Set(
@@ -1132,6 +1157,12 @@ useEffect(() => {
           colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === selectedColor)
         )
       : product.variants;
+  // For TVs: variants locked to the currently selected size.
+  // Used to keep size fixed when changing color or launch year.
+  const sizeFilteredVariants =
+    isTvProduct && selectedAttrs["size"]
+      ? product.variants.filter((v) => attrValue(v, "size") === selectedAttrs["size"])
+      : product.variants;
   const selectedVariantLabel = isCameraProduct
     ? selectedAttrs["lensIncluded"] === "Yes"
       ? `Body with ${selectedAttrs["lens"] ?? ""}`.trim()
@@ -1144,10 +1175,10 @@ useEffect(() => {
   // For TV: resolve the spec section index for the selected variant.
   // This index is used for title, description, and specifications table.
   // Strategies (in priority order):
-  //   1 – Model number: find "Product Name N" whose text contains the variant's model
-  //   2 – Variant position: variant at index N → spec section N (most reliable fallback)
-  //   3 – Screen Size spec matching (getTvSizeIndex)
-  //   4 – Size number word-boundary match in "Product Name N" text
+  //   1 – Model attribute match in "Product Name N" text
+  //   2 – Screen Size spec matching (getTvSizeIndex) — most reliable for multi-size products
+  //   3 – Size number word-boundary match in "Product Name N" text
+  //   4 – Variant array position (last resort; unreliable when multiple variants share a size)
   const tvModelStr = isTvProduct && selectedVariant
     ? String(selectedVariant.attributes?.model ?? "").trim().toLowerCase()
     : "";
@@ -1156,29 +1187,31 @@ useEffect(() => {
     : "";
   const tvSpecIdx = (() => {
     if (!isTvProduct || !selectedVariant) return 0;
-    // Strategy 1: match by model number in "Product Name N"
+    // Strategy 1: match by model attribute in "Product Name N" text
     if (tvModelStr) {
       for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
         const n = String(product.specs[multiModelKey("Product Name", i)] ?? "").trim();
         if (n && n.toLowerCase().includes(tvModelStr)) return i;
       }
     }
-    // Strategy 2: variant position in product.variants → spec section index
-    const variantPos = product.variants.findIndex((v) => v.id === selectedVariant.id);
-    if (variantPos >= 0 && variantPos < MAX_MULTIMODEL_DISPLAY) {
-      const n = String(product.specs[multiModelKey("Product Name", variantPos)] ?? "").trim();
-      if (n) return variantPos;
-    }
-    // Strategy 3: Screen Size spec matching
+    // Strategy 2: Screen Size spec matching (most reliable for multi-size products)
     const sizeIdx = getTvSizeIndex(product.specs, selectedVariant);
-    if (sizeIdx > 0) return sizeIdx;
-    // Strategy 4: size number in "Product Name N" text
+    if (sizeIdx >= 0) return sizeIdx;
+    // Strategy 3: size number word-boundary match in "Product Name N" text
     if (tvSizeNum) {
       const re = new RegExp(`(?<![0-9])${tvSizeNum}(?![0-9])`);
       for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
         const n = String(product.specs[multiModelKey("Product Name", i)] ?? "").trim();
         if (n && re.test(n)) return i;
       }
+    }
+    // Strategy 4 (last resort): variant array position → spec section index.
+    // Only works when each variant is a distinct model; unreliable when multiple
+    // variants (colors/years) share the same size/spec section.
+    const variantPos = product.variants.findIndex((v) => v.id === selectedVariant.id);
+    if (variantPos >= 0 && variantPos < MAX_MULTIMODEL_DISPLAY) {
+      const n = String(product.specs[multiModelKey("Product Name", variantPos)] ?? "").trim();
+      if (n) return variantPos;
     }
     return 0;
   })();
@@ -1277,9 +1310,9 @@ useEffect(() => {
                       setWishlistBusy(true);
                       try {
                         if (wishlisted) {
-                          await removeByProductId(product.id);
+                          await removeByProductId(product.id, selectedVariant?.id);
                         } else {
-                          await addToWishlist(product.id);
+                          await addToWishlist(product.id, selectedVariant?.id);
                         }
                       } catch {
                         // Silent on wishlist toggle.
@@ -1487,9 +1520,12 @@ useEffect(() => {
                     <div className="mb-4">
                       <div className="flex flex-wrap gap-4">
                         {colorValues.map((color) => {
-                          const colorVariant = product.variants.find((v) =>
-                            colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color)
-                          );
+                          // For TVs, pick the image from the size-locked pool so the
+                          // thumbnail reflects the correct variant for this size.
+                          const colorPool = isTvProduct ? sizeFilteredVariants : product.variants;
+                          const colorVariant =
+                            colorPool.find((v) => colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color) && v.images.length > 0) ??
+                            colorPool.find((v) => colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color));
                           const imgUrl =
                             colorVariant?.images?.[0]?.url ??
                             productImages[0]?.url ??
@@ -1500,11 +1536,13 @@ useEffect(() => {
                               key={color}
                               type="button"
                               onClick={() => {
+                                // For TVs: keep the current size locked — only look inside sizeFilteredVariants.
+                                const pool = isTvProduct ? sizeFilteredVariants : product.variants;
                                 const target =
-                                  product.variants.find((v) =>
+                                  pool.find((v) =>
                                     colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color) && v.stock > 0
                                   ) ??
-                                  product.variants.find((v) =>
+                                  pool.find((v) =>
                                     colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === color)
                                   );
                                 if (target) { setSelectedAttrs(attrsOf(target)); setActiveImageIdx(0); }
@@ -1574,6 +1612,18 @@ useEffect(() => {
                         /* TV: per-attribute pill rows */
                         nonColorGroups.map((g) => {
                           const selectedVal = selectedAttrs[g.key] ?? "";
+                          // For non-size attributes, only show values available for the
+                          // current size (and, for year, also filter by current color).
+                          const pillPool = g.key !== "size"
+                            ? (selectedColor
+                                ? sizeFilteredVariants.filter((v) =>
+                                    colorAttrKeys.some((k) => String(v.attributes[k] ?? "") === selectedColor)
+                                  )
+                                : sizeFilteredVariants)
+                            : null; // size shows all values
+                          const availableVals = pillPool
+                            ? [...new Set(pillPool.map((v) => attrValue(v, g.key)).filter(Boolean))]
+                            : g.values;
                           return (
                             <div key={g.key}>
                               <p className="text-sm font-bold text-gray-800 mb-2">
@@ -1581,14 +1631,14 @@ useEffect(() => {
                                 <span className="font-semibold">{selectedVal}</span>
                               </p>
                               <div className="flex flex-wrap gap-2">
-                                {[...g.values].sort((a, b) => {
+                                {[...availableVals].sort((a, b) => {
                                   const na = parseFloat(a), nb = parseFloat(b);
                                   return !isNaN(na) && !isNaN(nb) ? na - nb : a.localeCompare(b);
                                 }).map((val) => {
                                   const isActive = selectedVal === val;
                                   const pillVariant =
                                     findVariant(product.variants, { ...selectedAttrs, [g.key]: val }, variantGroups) ??
-                                    colorFilteredVariants.find((v) => attrValue(v, g.key) === val);
+                                    (pillPool ?? colorFilteredVariants).find((v) => attrValue(v, g.key) === val);
                                   const pillStockKey = pillVariant ? `v:${pillVariant.id}` : null;
                                   const pillStock = pillStockKey
                                     ? (stocks[pillStockKey] ?? pillVariant?.stock ?? 0)
@@ -2643,9 +2693,9 @@ const TV_PER_SIZE_SPEC_BASES = [
 ];
 
 function getTvSizeIndex(specs: Record<string, unknown>, selectedVariant?: Variant): number {
-  if (!selectedVariant) return 0;
+  if (!selectedVariant) return -1;
   const sizeAttr = selectedVariant.attributes?.size;
-  if (!sizeAttr) return 0;
+  if (!sizeAttr) return -1;
   const sizeStr = String(sizeAttr).trim().toLowerCase().replace(/['"]/g, "");
   for (let i = 0; i < MAX_MULTIMODEL_DISPLAY; i++) {
     const val = specs[multiModelKey("Screen Size", i)];
@@ -2654,7 +2704,7 @@ function getTvSizeIndex(specs: Record<string, unknown>, selectedVariant?: Varian
       if (specStr === sizeStr || specStr.includes(sizeStr) || sizeStr.includes(specStr)) return i;
     }
   }
-  return 0;
+  return -1;
 }
 
 // ── Speaker per-model keys ────────────────────────────────────────────────────

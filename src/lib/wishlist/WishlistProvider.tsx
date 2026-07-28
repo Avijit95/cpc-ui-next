@@ -86,19 +86,30 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const isWishlisted = useCallback(
     (productId: string, variantId?: string) => {
       if (variantId) {
+        // Specific variant check: exact match only.
         return items.some((it) => it.id === productId && it.variantId === variantId);
       }
-      return items.some((it) => it.id === productId);
+      // Product-level check (no variantId passed): only match null-variantId entries.
+      // Variant-specific entries must NOT make the whole product appear wishlisted,
+      // otherwise every variant card on the listing page shows the filled heart.
+      return items.some((it) => it.id === productId && it.variantId === null);
     },
     [items],
   );
 
   const add = useCallback(
     async (productId: string, variantId?: string) => {
+      // Remove ALL existing wishlist entries for this product before adding the new one.
+      // This ensures only one entry per product is kept (the latest selected variant),
+      // preventing stale variant cards from lingering in the wishlist.
+      const existing = items.filter((it) => it.id === productId);
+      for (const stale of existing) {
+        await wishlistApi.removeItem(stale.wishlistItemId);
+      }
       const v = await wishlistApi.addItem({ productId, variantId });
       setItems(v.items);
     },
-    [],
+    [items],
   );
 
   const removeByProductId = useCallback(

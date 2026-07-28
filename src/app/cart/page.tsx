@@ -311,21 +311,49 @@ export default function CartPage() {
                             {line.name}
                           </h3>
                         </Link>
-                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
-                          <span className="text-sm sm:text-base font-bold text-[#129cd3]">
-                            {formatPrice(line.unitPrice)}
-                          </span>
-                          {line.deal && (
-                            <>
-                              <span className="text-xs text-gray-400 line-through">
-                                {formatPrice(line.deal.basePrice)}
+                        {(() => {
+                          const mrp = mrpMap[lineStockKey];
+                          const hasDeal = !!line.deal;
+                          const hasMrpDiscount = mrp && mrp > line.unitPrice;
+                          const mrpPrice = hasDeal ? line.deal!.basePrice : (hasMrpDiscount ? mrp : null);
+                          const discountPct = hasDeal
+                            ? line.deal!.percentOff
+                            : hasMrpDiscount
+                            ? Math.round(((mrp - line.unitPrice) / mrp) * 100)
+                            : null;
+                          return (
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
+                              <span className="text-sm sm:text-base font-bold text-[#129cd3]">
+                                {formatPrice(line.unitPrice)}
                               </span>
-                              <span className="text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded">
-                                DEAL -{line.deal.percentOff}%
+                              {mrpPrice && (
+                                <span className="text-xs text-gray-400 line-through">
+                                  {formatPrice(mrpPrice)}
+                                </span>
+                              )}
+                              {discountPct !== null && discountPct > 0 && (
+                                <span className="text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded">
+                                  {hasDeal ? "DEAL " : ""}-{discountPct}%
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {/* Coupon discounts */}
+                        {(line.appliedCoupons.customer || line.appliedCoupons.retail) && (
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
+                            {line.appliedCoupons.customer && line.discount.customer > 0 && (
+                              <span className="text-[11px] text-green-700 font-medium">
+                                Coupon &quot;{line.appliedCoupons.customer.name}&quot;: −{formatPrice(line.discount.customer)}
                               </span>
-                            </>
-                          )}
-                        </div>
+                            )}
+                            {line.appliedCoupons.retail && line.discount.retail > 0 && (
+                              <span className="text-[11px] text-green-700 font-medium">
+                                Coupon &quot;{line.appliedCoupons.retail.name}&quot;: −{formatPrice(line.discount.retail)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center gap-4">
                           {/* Qty */}
                           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
