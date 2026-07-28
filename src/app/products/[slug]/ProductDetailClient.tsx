@@ -655,6 +655,11 @@ export default function ProductDetailClient() {
 
   useEffect(() => {
     if (!slug) return;
+    setLoading(true);
+    setProduct(null);
+    setError(null);
+    setNotFound(false);
+
     const ac = new AbortController();
     catalogApi
       .getProduct(slug, ac.signal)

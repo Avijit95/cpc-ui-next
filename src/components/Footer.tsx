@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Mail } from "lucide-react";
 
 const footerLinks = {
@@ -18,6 +20,27 @@ const SELLER_IEC = process.env.NEXT_PUBLIC_SELLER_IEC;
 
 export default function Footer() {
   const [email, setEmail] = useState("");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeCategory = searchParams.get("category");
+
+  const footerNav = [
+    { name: "HOME", href: "/" },
+    { name: "PHONE", href: "/products?category=phone", category: "phone" },
+    { name: "CAMERA", href: "/products?category=camera", category: "camera" },
+    { name: "CAMERA LENS", href: "/products?category=camera-lens", category: "camera-lens" },
+    { name: "TV", href: "/products?category=tv", category: "tv" },
+    { name: "SPEAKERS", href: "/products?category=speakers", category: "speakers" },
+    { name: "SMART DEVICES", href: "/products?category=smart-devices", category: "smart-devices" },
+  ];
+
+  const isActiveLink = (href: string, category?: string) => {
+    if (href === "/" && pathname === "/") return true;
+    if (pathname.startsWith("/products") && category) {
+      return activeCategory === category;
+    }
+    return false;
+  };
 
   return (
     <footer className="bg-gray-800 text-gray-400">
@@ -100,17 +123,23 @@ export default function Footer() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="bg-gray-900 py-4 px-4">
+      <div className="bg-gray-900 border-t border-gray-800 py-4 px-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-          <p>© 2024 CellPhone Crowd. All rights reserved.</p>
-          <div className="flex gap-4 flex-wrap justify-center">
-            <a href="#" className="hover:text-[#129cd3] transition-colors">HOME</a>
-            <a href="#" className="hover:text-[#129cd3] transition-colors">SMARTPHONES</a>
-            <a href="#" className="hover:text-[#129cd3] transition-colors">CAMERAS</a>
-            <a href="#" className="hover:text-[#129cd3] transition-colors">AUDIO</a>
-            <a href="#" className="hover:text-[#129cd3] transition-colors">DEALS</a>
-            <a href="#" className="hover:text-[#129cd3] transition-colors">BLOG</a>
-          </div>
+          <p>© {new Date().getFullYear()} CellPhone Crowd. All rights reserved.</p>
+          <nav aria-label="Footer quick links">
+            <ul className="flex flex-wrap justify-center gap-4">
+              {footerNav.map((link) => (
+                <li key={link.name}>
+                  <Link
+                    href={link.href}
+                    className={`hover:text-[#129cd3] transition-colors ${isActiveLink(link.href, link.category) ? "text-white font-semibold" : "text-gray-400"}`}
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
       </div>
     </footer>
