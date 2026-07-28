@@ -1300,7 +1300,8 @@ useEffect(() => {
                 />
                 <div className="absolute top-3 right-3 flex flex-col gap-2">
                   <button
-                    onClick={async () => {
+                    onClick={async (e) => {
+                      e.stopPropagation();
                       if (wishlistBusy || !product) return;
                       if (status === "unauthenticated") {
                         const path = `/products/${slug}`;
@@ -1332,7 +1333,8 @@ useEffect(() => {
                     />
                   </button>
                   <button
-                    onClick={async () => {
+                    onClick={async (e) => {
+                      e.stopPropagation();
                       const url = window.location.origin + `/products/${slug}` +
                         (selectedVariant ? `?variant=${selectedVariant.id}` : "");
                       try {

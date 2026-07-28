@@ -99,13 +99,11 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
 
   const add = useCallback(
     async (productId: string, variantId?: string) => {
-      // Remove ALL existing wishlist entries for this product before adding the new one.
-      // This ensures only one entry per product is kept (the latest selected variant),
-      // preventing stale variant cards from lingering in the wishlist.
-      const existing = items.filter((it) => it.id === productId);
-      for (const stale of existing) {
-        await wishlistApi.removeItem(stale.wishlistItemId);
-      }
+      // If this exact variant (or product, if no variantId) is already wishlisted, skip.
+      const duplicate = variantId
+        ? items.find((it) => it.id === productId && it.variantId === variantId)
+        : items.find((it) => it.id === productId && it.variantId === null);
+      if (duplicate) return;
       const v = await wishlistApi.addItem({ productId, variantId });
       setItems(v.items);
     },
