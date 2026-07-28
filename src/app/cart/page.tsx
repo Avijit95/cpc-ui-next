@@ -17,7 +17,10 @@ import {
   ChevronRight,
   AlertTriangle,
   Loader2,
+  Heart,
+  X,
 } from "lucide-react";
+import { wishlistApi } from "@/lib/api";
 
 function formatPrice(price: number) {
   return "₹" + Math.round(price).toLocaleString("en-IN");
@@ -34,6 +37,9 @@ export default function CartPage() {
   const [error, setError] = useState<string | null>(null);
   const [variantImages, setVariantImages] = useState<Record<string, string>>({});
   const [mrpMap, setMrpMap] = useState<Record<string, number>>({});
+  const [removeModal, setRemoveModal] = useState<PricedCartLine | null>(null);
+  const [wishlistBusy, setWishlistBusy] = useState(false);
+  const [wishlistError, setWishlistError] = useState<string | null>(null);
 
   // Mirror cart changes (load, qty, coupons, removal) into the header badge.
   useEffect(() => {
@@ -349,7 +355,7 @@ export default function CartPage() {
                             Buy Now
                           </button>
                           <button
-                            onClick={() => removeLine(line)}
+                            onClick={() => { setRemoveModal(line); setWishlistError(null); }}
                             disabled={busy}
                             className="flex items-center gap-1.5 text-red-500 hover:text-red-700 text-xs font-medium transition-colors disabled:opacity-40"
                           >
@@ -531,6 +537,81 @@ export default function CartPage() {
         </div>
       </main>
       <Footer />
+
+      {/* Remove confirmation modal */}
+      {removeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !wishlistBusy && setRemoveModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 z-10">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Remove Item</h2>
+                <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">{removeModal.name}</p>
+              </div>
+              <button
+                onClick={() => setRemoveModal(null)}
+                disabled={wishlistBusy}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 transition-colors disabled:opacity-50 flex-shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {wishlistError && (
+              <p className="text-xs text-red-600 mb-3 flex items-center gap-1.5">
+                <AlertTriangle size={13} /> {wishlistError}
+              </p>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={async () => {
+                  const line = removeModal;
+                  setRemoveModal(null);
+                  await removeLine(line);
+                }}
+                disabled={wishlistBusy}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-red-200 hover:border-red-400 hover:bg-red-50 text-left transition-colors group"
+              >
+                <span className="w-9 h-9 rounded-full bg-red-100 group-hover:bg-red-200 flex items-center justify-center flex-shrink-0 transition-colors">
+                  <Trash2 size={16} className="text-red-500" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Remove Product</p>
+                  <p className="text-xs text-gray-500">Permanently remove from cart</p>
+                </div>
+              </button>
+
+              <button
+                onClick={async () => {
+                  const line = removeModal;
+                  setWishlistBusy(true);
+                  setWishlistError(null);
+                  try {
+                    await wishlistApi.addItem({ productId: line.productId, ...(line.variantId ? { variantId: line.variantId } : {}) });
+                    setRemoveModal(null);
+                    await removeLine(line);
+                  } catch {
+                    setWishlistError("Could not move to wishlist. Please try again.");
+                  } finally {
+                    setWishlistBusy(false);
+                  }
+                }}
+                disabled={wishlistBusy}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-[#129cd3]/30 hover:border-[#129cd3] hover:bg-[#e8f7fc] text-left transition-colors group disabled:opacity-60"
+              >
+                <span className="w-9 h-9 rounded-full bg-[#e8f7fc] group-hover:bg-[#c8edf8] flex items-center justify-center flex-shrink-0 transition-colors">
+                  {wishlistBusy ? <Loader2 size={16} className="text-[#129cd3] animate-spin" /> : <Heart size={16} className="text-[#129cd3]" />}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Move to Wishlist</p>
+                  <p className="text-xs text-gray-500">Save for later and remove from cart</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

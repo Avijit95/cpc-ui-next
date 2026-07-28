@@ -105,6 +105,7 @@ export default function ProductCard({
   const [addState, setAddState] = useState<AddState>("idle");
   const [shareState, setShareState] = useState<"idle" | "copied">("idle");
   const [wishlistBusy, setWishlistBusy] = useState(false);
+  const [wishlistAdded, setWishlistAdded] = useState(false);
   const router = useRouter();
   const { status } = useAuth();
   const { isWishlisted, add: addToWishlist, removeByProductId } = useWishlist();
@@ -241,6 +242,15 @@ export default function ProductCard({
               {badge}
             </span>
           )}
+          {/* Wishlist added confirmation */}
+          {wishlistAdded && (
+            <div className="col-start-1 row-start-1 self-start justify-self-start m-2 z-[1000] pointer-events-none">
+              <div className="flex items-center gap-1.5 bg-green-600 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg shadow-lg animate-fade-in-up">
+                <Check size={11} strokeWidth={3} />
+                Moved to Wishlist
+              </div>
+            </div>
+          )}
           <div className="col-start-1 row-start-1 self-start justify-self-end m-2 flex flex-col gap-1 z-[999]">
             <button
               onClick={async (e) => {
@@ -257,6 +267,8 @@ export default function ProductCard({
                     await removeByProductId(product.id, variantOverride?.id);
                   } else {
                     await addToWishlist(product.id, variantOverride?.id);
+                    setWishlistAdded(true);
+                    setTimeout(() => setWishlistAdded(false), 2500);
                   }
                 } catch {
                   // Silent fail on heart toggle — full-page error UX would be intrusive.

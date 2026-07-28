@@ -1355,7 +1355,7 @@ useEffect(() => {
                         >
                           {img.url && (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={img.url} alt={product.name} className="w-full h-full object-cover" />
+                            <img src={img.url} alt={product.name} className="w-full h-full object-contain" />
                           )}
                         </button>
                       );
@@ -1516,7 +1516,7 @@ useEffect(() => {
                               className="flex flex-col items-center gap-1 group focus:outline-none"
                             >
                               <span className={`rounded-lg border-2 transition-colors overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50 ${active ? "border-[#129cd3] shadow-sm" : "border-gray-300 group-hover:border-gray-500"}`} style={{ width: 64, height: 64 }}>
-                                {imgUrl ? <img src={imgUrl} alt={color} className="w-full h-full object-cover" /> : <span className="text-xs text-gray-400 p-1 text-center leading-tight">{color}</span>}
+                                {imgUrl ? <img src={imgUrl} alt={color} className="w-full h-full object-contain" /> : <span className="text-xs text-gray-400 p-1 text-center leading-tight">{color}</span>}
                               </span>
                               <span className={`text-xs text-center leading-tight max-w-[72px] truncate transition-colors ${active ? "font-semibold text-[#129cd3]" : "font-medium text-gray-600 group-hover:text-gray-800"}`}>{color}</span>
                             </button>
@@ -1561,7 +1561,7 @@ useEffect(() => {
                               className="flex flex-col items-center gap-1 group focus:outline-none"
                             >
                               <span className={`rounded-lg border-2 transition-colors overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50 ${active ? "border-[#129cd3] shadow-sm" : "border-gray-300 group-hover:border-gray-500"}`} style={{ width: 64, height: 64 }}>
-                                {imgUrl ? <img src={imgUrl} alt={color} className="w-full h-full object-cover" /> : <span className="text-xs text-gray-400 p-1 text-center leading-tight">{color}</span>}
+                                {imgUrl ? <img src={imgUrl} alt={color} className="w-full h-full object-contain" /> : <span className="text-xs text-gray-400 p-1 text-center leading-tight">{color}</span>}
                               </span>
                               <span className={`text-xs text-center leading-tight max-w-[72px] truncate transition-colors ${active ? "font-semibold text-[#129cd3]" : "font-medium text-gray-600 group-hover:text-gray-800"}`}>{color}</span>
                             </button>
@@ -2532,7 +2532,7 @@ useEffect(() => {
                 }`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url ?? undefined} alt={product.name} className="w-full h-full object-cover" />
+                <img src={img.url ?? undefined} alt={product.name} className="w-full h-full object-contain" />
               </button>
             ))}
           </div>
@@ -2565,7 +2565,7 @@ useEffect(() => {
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.url ?? undefined} alt={product.name} className="w-full h-full object-cover" />
+                  <img src={img.url ?? undefined} alt={product.name} className="w-full h-full object-contain" />
                 </button>
               ))}
             </div>

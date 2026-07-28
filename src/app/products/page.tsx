@@ -280,11 +280,17 @@ const TV_FILTER_GROUPS: TvFilterGroup[] = [
   },
 ];
 
-// Parse a "12GB" or "12 GB" attribute string into a number.
+// Parse a "12GB", "12 GB", "1TB", or "1 TB" attribute string into GB.
 function parseGb(val: unknown): number | null {
   if (!val) return null;
-  const m = String(val).match(/^(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) : null;
+  const s = String(val).trim();
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(TB|GB|MB)?/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const unit = (m[2] ?? "GB").toUpperCase();
+  if (unit === "TB") return n * 1024;
+  if (unit === "MB") return n / 1024;
+  return n;
 }
 
 function matchRamGb(gb: number, option: string): boolean {
@@ -295,7 +301,7 @@ function matchRamGb(gb: number, option: string): boolean {
 }
 function matchStorageGb(gb: number, option: string): boolean {
   if (option === "64 GB and Below") return gb <= 64;
-  if (option === "64 GB - 127.9 GB") return gb > 64 && gb < 128;
+  if (option === "64 GB - 127.9 GB") return gb >= 64 && gb < 128;
   if (option === "128 GB - 255.9 GB") return gb >= 128 && gb < 256;
   if (option === "256 GB and Above") return gb >= 256;
   return false;
@@ -948,36 +954,60 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
 
     // Battery Life — multi-strategy lookup
     if (battOpts.length > 0) {
-      const BATT_KEY_RE = /battery|playback|playtime|play\s*time|backup|hours|hour/i;
-      const SKIP_KEY_RE = /capacity|mah|price|weight|dimension|size|color|watt|power\s*output/i;
-      const HOUR_VAL_RE = /\d[\d.]*\s*(h\b|hr|hrs|hour)/i;
+      // Key patterns that suggest playback/battery duration
+      const BATT_KEY_RE = /battery|playback|playtime|play\s*time|backup|hours|hour|standby|music.*time|run.*time|endur|duration|life/i;
+      // Key patterns to skip (capacity/power/physical specs)
+      const SKIP_KEY_RE = /capacity|mah|price|weight|dimension|color|watt|power\s*output/i;
+      // Value pattern: number followed by an optional hyphen/space then a time unit
+      const HOUR_VAL_RE = /\b(\d+(?:\.\d+)?)\s*[-–]?\s*(h\b|hr\b|hrs\b|hours?)\b/i;
 
       let hrs: number | null = null;
 
-      // Pass 1: key contains battery/playback/backup/hours AND value looks like duration
+      // Extract hour value from a value that EXPLICITLY has a time unit ("28 hrs", "28-hour", etc.)
+      const extractExplicitHrs = (v: unknown): number | null => {
+        const m = String(v ?? "").match(HOUR_VAL_RE);
+        if (!m) return null;
+        const n = parseFloat(m[1]);
+        return n > 0 && n <= 100 ? n : null;
+      };
+
+      // Pass 1: key suggests duration — also trust a plain number (no unit) from the value,
+      // but skip values that look like mAh capacity or voltage (not playtime).
       for (const [k, v] of Object.entries(specs)) {
-        const val = String(v ?? "");
         if (BATT_KEY_RE.test(k) && !SKIP_KEY_RE.test(k)) {
-          const n = parseHours(v);
-          if (n !== null && n > 0 && n < 200) { hrs = n; break; }
+          const raw = String(v ?? "");
+          if (/mah/i.test(raw) || /^\s*[\d.]+\s*v\b/i.test(raw)) continue;
+          const n = extractExplicitHrs(v) ?? (() => {
+            const p = parseHours(v);
+            return p !== null && p > 0 && p <= 100 ? p : null;
+          })();
+          if (n !== null) { hrs = n; break; }
         }
-        void val;
       }
 
-      // Pass 2: any spec value that looks like "28 hours" / "28 hrs" / "28H"
+      // Pass 2: value explicitly has a time unit ("28 hrs", "28h", "28-hour", "28 hours")
+      // — don't trust plain numbers here since any spec might have a plain number
       if (hrs === null) {
         for (const [k, v] of Object.entries(specs)) {
           if (SKIP_KEY_RE.test(k)) continue;
-          const val = String(v ?? "");
-          if (HOUR_VAL_RE.test(val)) {
+          const n = extractExplicitHrs(v);
+          if (n !== null) { hrs = n; break; }
+        }
+      }
+
+      // Pass 3: key contains "time" or "life" — trust a plain number as hours
+      if (hrs === null) {
+        for (const [k, v] of Object.entries(specs)) {
+          if (SKIP_KEY_RE.test(k)) continue;
+          if (/time|life/i.test(k)) {
             const n = parseHours(v);
-            if (n !== null && n > 0 && n < 200) { hrs = n; break; }
+            if (n !== null && n > 0 && n <= 100) { hrs = n; break; }
           }
         }
       }
 
-      // If battery info genuinely not found, pass the product through (don't exclude it)
-      if (hrs === null) return true;
+      // If battery info genuinely not found, exclude the product — it has no battery life spec.
+      if (hrs === null) return false;
 
       if (!battOpts.some((opt) => {
         if (opt === "Up to 10 Hours") return hrs! <= 10;
@@ -1795,6 +1825,18 @@ useEffect(() => {
       }
     : undefined;
 
+  // Build a per-variant color filter for speakers so ProductCardExpander shows only
+  // variants matching the selected color — same-brand different-model products each
+  // independently pass the product-level filter; this narrows which variant cards appear.
+  const speakerColorOpts = isSpeakerCategory ? (speakerFilters["color"] ?? []) : [];
+  const speakerVariantFilter = speakerColorOpts.length > 0
+    ? (v: import("@/lib/api").Variant) => {
+        const vColor = String(v.attributes["color"] ?? "").toLowerCase().trim();
+        if (!vColor) return true; // no color attribute — always show
+        return speakerColorOpts.some((opt) => vColor.includes(opt.toLowerCase().trim()));
+      }
+    : undefined;
+
   const setPhoneFilter = (key: string, values: string[]) => {
     setPhoneFilters((prev) => ({ ...prev, [key]: values }));
   };
@@ -2257,13 +2299,14 @@ useEffect(() => {
                     <PriceSortedGrid products={items} dir={sortValue === "price-asc" ? "asc" : "desc"} />
                   ) : (
                     items.map((product) => {
-                      // When a phone RAM/storage filter is active, render matching variant
-                      // cards directly from the cache instead of relying on prop propagation
-                      // through ProductCardExpander's internal variants state.
-                      if (phoneVariantFilter) {
+                      // When a phone RAM/storage filter or speaker color filter is active,
+                      // render matching variant cards directly from the cache so the filter
+                      // takes effect immediately without waiting for ProductCardExpander.
+                      const activeVariantFilter = phoneVariantFilter ?? speakerVariantFilter;
+                      if (activeVariantFilter) {
                         const cached = detailCache.get(product.slug);
                         if (cached && cached.variants.length > 0) {
-                          const matched = cached.variants.filter(phoneVariantFilter);
+                          const matched = cached.variants.filter(activeVariantFilter);
                           if (matched.length === 0) return null;
                           // Wrap in a keyed Fragment so React can correctly reconcile this
                           // group against the previous ProductCardExpander (same key).
@@ -2286,7 +2329,7 @@ useEffect(() => {
                           product={product}
                           priceMin={minPrice > PRICE_FLOOR ? minPrice : undefined}
                           priceMax={maxPrice < PRICE_CEIL ? maxPrice : undefined}
-                          variantFilter={tvVariantFilter ?? phoneVariantFilter}
+                          variantFilter={tvVariantFilter ?? phoneVariantFilter ?? speakerVariantFilter}
                           onFetched={() => setCacheTick((t) => t + 1)}
                         />
                       );

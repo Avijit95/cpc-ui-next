@@ -89,6 +89,7 @@ function ProfileInner({ user }: { user: PublicUser }) {
   const router = useRouter();
   const { refreshUser, logout } = useAuth();
 
+
   // Name edit
   const [name, setName] = useState(user.name);
   const [savingName, setSavingName] = useState(false);
@@ -107,6 +108,13 @@ function ProfileInner({ user }: { user: PublicUser }) {
   const [otpCode, setOtpCode] = useState("");
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+
+  // Email change modal (shown when phone is the signup credential)
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
 
   const nameTrimmed = name.trim();
   const nameDirty = nameTrimmed.length > 0 && nameTrimmed !== user.name;
@@ -202,6 +210,37 @@ function ProfileInner({ user }: { user: PublicUser }) {
       setPhoneError(isApiError(err) ? err.message : "OTP verification failed.");
     } finally {
       setPhoneBusy(false);
+    }
+  }
+
+  function openEmailModal() {
+    setEmailModalOpen(true);
+    setNewEmail(user.email ?? "");
+    setEmailError(null);
+    setEmailSent(false);
+  }
+
+  function closeEmailModal() {
+    if (emailBusy) return;
+    setEmailModalOpen(false);
+  }
+
+  async function handleChangeEmail() {
+    if (emailBusy) return;
+    const trimmed = newEmail.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    setEmailBusy(true);
+    setEmailError(null);
+    try {
+      await meApi.changeEmail(trimmed);
+      setEmailSent(true);
+    } catch (err) {
+      setEmailError(isApiError(err) ? err.message : "Could not send confirmation email.");
+    } finally {
+      setEmailBusy(false);
     }
   }
 
@@ -369,12 +408,20 @@ function ProfileInner({ user }: { user: PublicUser }) {
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
-                  <input
-                    type="text"
-                    value={user.email ?? "—"}
-                    readOnly
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-600"
-                  />
+                  <div className="flex flex-col min-[500px]:flex-row min-[500px]:items-center gap-2 min-[500px]:gap-3">
+                    <input
+                      type="text"
+                      value={user.email ?? "Not set"}
+                      readOnly
+                      className="w-full min-[500px]:flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-600"
+                    />
+                    <button
+                      onClick={openEmailModal}
+                      className="w-full min-[500px]:w-auto flex-shrink-0 border-2 border-[#129cd3] text-[#129cd3] hover:bg-[#e8f7fc] text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                    >
+                      {user.email ? "Change" : "Add"}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -405,6 +452,76 @@ function ProfileInner({ user }: { user: PublicUser }) {
         </div>
       </main>
       <Footer />
+
+      {emailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={closeEmailModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-800">
+                {user.email ? "Change Email" : "Add Email"}
+              </h2>
+              <button
+                onClick={closeEmailModal}
+                disabled={emailBusy}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {emailSent ? (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                  <CheckCircle size={18} className="text-green-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-green-800">
+                    A confirmation link has been sent to <span className="font-semibold">{newEmail.trim()}</span>. Click the link in the email to confirm your new address.
+                  </p>
+                </div>
+                <button
+                  onClick={closeEmailModal}
+                  className="w-full bg-[#129cd3] hover:bg-[#0e87b5] text-white font-semibold py-2.5 rounded-xl transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">New Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    autoFocus
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">A confirmation link will be sent to this address.</p>
+                </div>
+                {emailError && <p className="text-xs text-red-600">{emailError}</p>}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={handleChangeEmail}
+                    disabled={emailBusy || !newEmail.trim()}
+                    className="flex-1 bg-[#129cd3] hover:bg-[#0e87b5] disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    {emailBusy && <Loader2 size={14} className="animate-spin" />}
+                    Send Confirmation
+                  </button>
+                  <button
+                    onClick={closeEmailModal}
+                    disabled={emailBusy}
+                    className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {phoneModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

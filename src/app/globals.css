@@ -83,6 +83,22 @@ html {
   }
 }
 
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.2s ease forwards;
+}
+
+@keyframes dealFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.deal-fade-in {
+  animation: dealFadeIn 500ms ease forwards;
+}
+
 .category-slider,
 .product-section-slider {
   -ms-overflow-style: none;

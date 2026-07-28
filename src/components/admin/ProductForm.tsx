@@ -1909,7 +1909,8 @@ function TvSpecsEditor({
                       const nameKey = tvSizeKey("Product Name", i);
                       const slugKey = tvSizeKey("Slug", i);
                       const curSlug = get(slugKey);
-                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
+                      const prevKebab = toKebab(get(nameKey));
+                      const shouldAutoSlug = !curSlug || (prevKebab !== "" && curSlug.startsWith(prevKebab));
                       let next = rows.some(r => r.key === nameKey)
                         ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
                         : [...rows, { id: uid(), key: nameKey, value: v }];
@@ -2239,7 +2240,24 @@ function CameraSpecsEditor({
               </span>
               <input
                 value={modelVal}
-                onChange={(e) => set(cameraModelKey("Model", i), e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const modelKey = cameraModelKey("Model", i);
+                  const slugKey = cameraModelKey("Slug", i);
+                  const curSlug = get(slugKey);
+                  const prevKebab = toKebab(get(modelKey));
+                  const shouldAutoSlug = !curSlug || (prevKebab !== "" && curSlug.startsWith(prevKebab));
+                  let next = rows.some(r => r.key === modelKey)
+                    ? rows.map(r => r.key === modelKey ? { ...r, value: v } : r)
+                    : [...rows, { id: uid(), key: modelKey, value: v }];
+                  if (shouldAutoSlug) {
+                    const newSlug = toKebab(v);
+                    next = next.some(r => r.key === slugKey)
+                      ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                      : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                  }
+                  onChange(next);
+                }}
                 placeholder="e.g. EOS 1500D"
                 disabled={disabled}
                 className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:text-gray-400"
@@ -2278,23 +2296,7 @@ function CameraSpecsEditor({
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
                   <input
                     value={get(cameraModelKey("Product Name", i))}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const nameKey = cameraModelKey("Product Name", i);
-                      const slugKey = cameraModelKey("Slug", i);
-                      const curSlug = get(slugKey);
-                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
-                      let next = rows.some(r => r.key === nameKey)
-                        ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
-                        : [...rows, { id: uid(), key: nameKey, value: v }];
-                      if (shouldAutoSlug) {
-                        const newSlug = toKebab(v);
-                        next = next.some(r => r.key === slugKey)
-                          ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
-                          : [...next, { id: uid(), key: slugKey, value: newSlug }];
-                      }
-                      onChange(next);
-                    }}
+                    onChange={(e) => set(cameraModelKey("Product Name", i), e.target.value)}
                     placeholder="e.g. Canon EOS 1500D DSLR Camera Body"
                     disabled={disabled}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -2629,7 +2631,8 @@ function CameraLensSpecsEditor({
                       const nameKey = lensModelKey("Lens Name", i);
                       const slugKey = lensModelKey("Slug", i);
                       const curSlug = get(slugKey);
-                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
+                      const prevKebab = toKebab(get(nameKey));
+                      const shouldAutoSlug = !curSlug || (prevKebab !== "" && curSlug.startsWith(prevKebab));
                       let next = rows.some(r => r.key === nameKey)
                         ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
                         : [...rows, { id: uid(), key: nameKey, value: v }];
@@ -3003,7 +3006,24 @@ function SpeakerSpecsEditor({
               </span>
               <input
                 value={modelVal}
-                onChange={(e) => set(speakerModelKey("Model", i), e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const modelKey = speakerModelKey("Model", i);
+                  const slugKey = speakerModelKey("Slug", i);
+                  const curSlug = get(slugKey);
+                  const prevKebab = toKebab(get(modelKey));
+                  const shouldAutoSlug = !curSlug || (prevKebab !== "" && curSlug.startsWith(prevKebab));
+                  let next = rows.some(r => r.key === modelKey)
+                    ? rows.map(r => r.key === modelKey ? { ...r, value: v } : r)
+                    : [...rows, { id: uid(), key: modelKey, value: v }];
+                  if (shouldAutoSlug) {
+                    const newSlug = toKebab(v);
+                    next = next.some(r => r.key === slugKey)
+                      ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                      : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                  }
+                  onChange(next);
+                }}
                 placeholder="Enter model no. to unlock spec fields…"
                 disabled={disabled}
                 className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -3028,23 +3048,7 @@ function SpeakerSpecsEditor({
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
                   <input
                     value={get(speakerModelKey("Product Name", i))}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const nameKey = speakerModelKey("Product Name", i);
-                      const slugKey = speakerModelKey("Slug", i);
-                      const curSlug = get(slugKey);
-                      const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
-                      let next = rows.some(r => r.key === nameKey)
-                        ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
-                        : [...rows, { id: uid(), key: nameKey, value: v }];
-                      if (shouldAutoSlug) {
-                        const newSlug = toKebab(v);
-                        next = next.some(r => r.key === slugKey)
-                          ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
-                          : [...next, { id: uid(), key: slugKey, value: newSlug }];
-                      }
-                      onChange(next);
-                    }}
+                    onChange={(e) => set(speakerModelKey("Product Name", i), e.target.value)}
                     placeholder="e.g. JBL Charge 5 Portable Bluetooth Speaker"
                     disabled={disabled}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -3322,7 +3326,24 @@ function SmartDeviceSpecsEditor({
               <span className="text-xs font-bold text-[#129cd3] uppercase tracking-wide whitespace-nowrap">Model {i + 1}</span>
               <input
                 value={modelVal}
-                onChange={(e) => setVal(smartDeviceModelKey("Model", i), e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const modelKey = smartDeviceModelKey("Model", i);
+                  const slugKey = smartDeviceModelKey("Slug", i);
+                  const curSlug = get(slugKey);
+                  const prevKebab = toKebab(get(modelKey));
+                  const shouldAutoSlug = !curSlug || (prevKebab !== "" && curSlug.startsWith(prevKebab));
+                  let next = rows.some(r => r.key === modelKey)
+                    ? rows.map(r => r.key === modelKey ? { ...r, value: v } : r)
+                    : [...rows, { id: uid(), key: modelKey, value: v }];
+                  if (shouldAutoSlug) {
+                    const newSlug = toKebab(v);
+                    next = next.some(r => r.key === slugKey)
+                      ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
+                      : [...next, { id: uid(), key: slugKey, value: newSlug }];
+                  }
+                  onChange(next);
+                }}
                 placeholder="Enter model no. to unlock spec fields…"
                 disabled={disabled}
                 className="flex-1 border border-[#129cd3]/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
@@ -3343,23 +3364,7 @@ function SmartDeviceSpecsEditor({
                       <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
                       <input
                         value={get(smartDeviceModelKey("Product Name", i))}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          const nameKey = smartDeviceModelKey("Product Name", i);
-                          const slugKey = smartDeviceModelKey("Slug", i);
-                          const curSlug = get(slugKey);
-                          const shouldAutoSlug = !curSlug || curSlug === toKebab(get(nameKey));
-                          let next = rows.some(r => r.key === nameKey)
-                            ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
-                            : [...rows, { id: uid(), key: nameKey, value: v }];
-                          if (shouldAutoSlug) {
-                            const newSlug = toKebab(v);
-                            next = next.some(r => r.key === slugKey)
-                              ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
-                              : [...next, { id: uid(), key: slugKey, value: newSlug }];
-                          }
-                          onChange(next);
-                        }}
+                        onChange={(e) => setVal(smartDeviceModelKey("Product Name", i), e.target.value)}
                         placeholder="e.g. Amazon Echo Dot (5th Gen)"
                         disabled={disabled}
                         className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"

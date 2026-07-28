@@ -146,8 +146,11 @@ export default function DealsSection() {
   const [dealDetails, setDealDetails] = useState<Record<string, ProductDetail>>({});
   const [loaded, setLoaded] = useState(false);
   const [dealIdx, setDealIdx] = useState(0);
+  const [displayIdx, setDisplayIdx] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const [autoKey, setAutoKey] = useState(0);
   const THUMB_VISIBLE = 4;
+  const AUTO_ADVANCE_MS = 5000; // auto-rotate every 5 seconds
   const SWIPE_THRESHOLD = 50;
   const dragStartX = useRef<number | null>(null);
   const isDragging = useRef(false);
@@ -210,6 +213,27 @@ export default function DealsSection() {
     return () => clearInterval(t);
   }, []);
 
+  // Update displayed deal immediately — the CSS animation on key change handles the fade-in.
+  useEffect(() => {
+    const liveCount = deals.filter((d) => new Date(d.endsAt).getTime() > Date.now()).length;
+    const target = liveCount > 0 ? dealIdx % liveCount : 0;
+    if (target !== displayIdx) setDisplayIdx(target);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealIdx, deals]);
+
+  // Auto-advance deals every AUTO_ADVANCE_MS.
+  // Depends on autoKey so it restarts fresh after any manual navigation,
+  // preventing an immediate skip right after the user picks a slide.
+  useEffect(() => {
+    const liveCount = deals.filter((d) => new Date(d.endsAt).getTime() > Date.now()).length;
+    if (liveCount <= 1) return;
+    const t = setInterval(() => {
+      setDealIdx((i) => (i + 1) % liveCount);
+    }, AUTO_ADVANCE_MS);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deals, autoKey]);
+
   const liveDeals = deals.filter((d) => new Date(d.endsAt).getTime() > now);
   const safeIdx = liveDeals.length > 0 ? dealIdx % liveDeals.length : 0;
 
@@ -229,7 +253,9 @@ export default function DealsSection() {
     );
   }
 
-  const deal = liveDeals[safeIdx];
+  // displayIdx drives the visible content; safeIdx drives the thumb highlight.
+  const safeDisplayIdx = liveDeals.length > 0 ? displayIdx % liveDeals.length : 0;
+  const deal = liveDeals[safeDisplayIdx];
   if (!deal) return null;
 
   // Derive thumbStart so the selected deal is always centred in the strip.
@@ -238,8 +264,10 @@ export default function DealsSection() {
     Math.min(Math.max(0, liveDeals.length - THUMB_VISIBLE), safeIdx - Math.floor(THUMB_VISIBLE / 2)),
   );
 
-  const prevDeal = () => setDealIdx((i) => (i - 1 + liveDeals.length) % liveDeals.length);
-  const nextDeal = () => setDealIdx((i) => (i + 1) % liveDeals.length);
+  // Increment autoKey to restart the auto-advance interval after manual navigation,
+  // so it doesn't immediately skip away from the slide the user just chose.
+  const prevDeal = () => { setDealIdx((i) => (i - 1 + liveDeals.length) % liveDeals.length); setAutoKey((k) => k + 1); };
+  const nextDeal = () => { setDealIdx((i) => (i + 1) % liveDeals.length); setAutoKey((k) => k + 1); };
 
   const onDragStart = (clientX: number) => {
     dragStartX.current = clientX;
@@ -285,7 +313,8 @@ export default function DealsSection() {
             </div>
 
             <div
-              className="pt-14 xs:p-5 xs:pt-14 flex flex-col min-[1100px]:flex-row min-[1100px]:items-center gap-3 relative select-none"
+              key={displayIdx}
+              className="deal-fade-in pt-14 xs:p-5 xs:pt-14 flex flex-col min-[1100px]:flex-row min-[1100px]:items-center gap-3 relative select-none"
               onMouseDown={(e) => onDragStart(e.clientX)}
               onMouseMove={(e) => onDragMove(e.clientX)}
               onMouseUp={(e) => onDragEnd(e.clientX)}
@@ -400,28 +429,49 @@ export default function DealsSection() {
                       const displayParts = [s("Display Size"), s("Screen Type")].filter(Boolean);
                       if (displayParts.length) highlights.push({ label: "Display", text: displayParts.join(" · "), ...colors[4] });
                     }
-                    // Camera highlights — only trigger if a camera-unique key matches
+                    // Camera / Lens highlights — only trigger if a camera-unique key matches
                     if (highlights.length === 0) {
                       const lensMount = s("Lens Mount");
                       const memCard = s("Memory Card Type");
                       const shutterSpeed = s("Shutter Speed");
                       const isCameraProduct = !!(lensMount || memCard || shutterSpeed);
                       if (isCameraProduct) {
-                        if (lensMount) highlights.push({ label: "Lens Mount", text: lensMount, ...colors[0] });
-                        if (memCard) highlights.push({ label: "Memory Card", text: memCard, ...colors[1] });
-                        if (shutterSpeed) highlights.push({ label: "Shutter Speed", text: shutterSpeed, ...colors[2] });
-                        const aspectRatio = s("Aspect Ratio");
-                        if (aspectRatio) highlights.push({ label: "Aspect Ratio", text: aspectRatio, ...colors[3] });
-                        const connParts: string[] = [];
-                        if (s("Wi-Fi") === "Yes") connParts.push("Wi-Fi");
-                        if (s("Bluetooth") === "Yes") connParts.push("Bluetooth");
-                        if (s("NFC") === "Yes") connParts.push("NFC");
-                        const usbType = s("USB Type");
-                        if (usbType) connParts.push(`USB ${usbType}`);
-                        if (s("HDMI") === "Yes") connParts.push("HDMI");
-                        if (connParts.length > 0) highlights.push({ label: "Connectivity", text: connParts.join(", "), ...colors[4] });
-                        const display = s("Display");
-                        if (display) highlights.push({ label: "Display", text: display, ...colors[5] });
+                        // Lens-specific keys (shown when it's a lens, not a camera body)
+                        const focalLength = s("Focal Length");
+                        const maxAperture = s("Maximum Aperture") || s("Max Aperture") || s("Aperture");
+                        const minFocus = s("Minimum Focus Distance") || s("Min Focus Distance");
+                        const filterThread = s("Filter Thread") || s("Filter Size") || s("Filter Diameter");
+                        const imageStab = s("Image Stabilization") || s("Optical Stabilization") || s("IS");
+                        const zoomType = s("Zoom Type") || s("Lens Type");
+                        const isLens = !!(lensMount && (focalLength || maxAperture || filterThread || zoomType));
+
+                        if (isLens) {
+                          // Lens product highlights
+                          if (lensMount) highlights.push({ label: "Lens Mount", text: lensMount, ...colors[0] });
+                          if (focalLength) highlights.push({ label: "Focal Length", text: focalLength, ...colors[1] });
+                          if (maxAperture) highlights.push({ label: "Max Aperture", text: maxAperture, ...colors[2] });
+                          if (minFocus) highlights.push({ label: "Min Focus Distance", text: minFocus, ...colors[3] });
+                          if (filterThread) highlights.push({ label: "Filter Thread", text: filterThread, ...colors[4] });
+                          if (imageStab) highlights.push({ label: "Image Stabilization", text: imageStab, ...colors[5] });
+                          if (zoomType) highlights.push({ label: "Lens Type", text: zoomType, ...colors[6] });
+                        } else {
+                          // Camera body highlights
+                          if (lensMount) highlights.push({ label: "Lens Mount", text: lensMount, ...colors[0] });
+                          if (memCard) highlights.push({ label: "Memory Card", text: memCard, ...colors[1] });
+                          if (shutterSpeed) highlights.push({ label: "Shutter Speed", text: shutterSpeed, ...colors[2] });
+                          const aspectRatio = s("Aspect Ratio");
+                          if (aspectRatio) highlights.push({ label: "Aspect Ratio", text: aspectRatio, ...colors[3] });
+                          const connParts: string[] = [];
+                          if (s("Wi-Fi") === "Yes") connParts.push("Wi-Fi");
+                          if (s("Bluetooth") === "Yes") connParts.push("Bluetooth");
+                          if (s("NFC") === "Yes") connParts.push("NFC");
+                          const usbType = s("USB Type");
+                          if (usbType) connParts.push(`USB ${usbType}`);
+                          if (s("HDMI") === "Yes") connParts.push("HDMI");
+                          if (connParts.length > 0) highlights.push({ label: "Connectivity", text: connParts.join(", "), ...colors[4] });
+                          const display = s("Display");
+                          if (display) highlights.push({ label: "Display", text: display, ...colors[5] });
+                        }
                       }
                     }
                     // TV highlights
@@ -596,7 +646,7 @@ export default function DealsSection() {
                   return (
                     <button
                       key={d.id}
-                      onClick={() => setDealIdx(i)}
+                      onClick={() => { setDealIdx(i); setAutoKey((k) => k + 1); }}
                       className={`relative flex-shrink-0 flex-1 bg-white p-2 rounded-lg transition-all duration-200 ${
                         i === safeIdx
                           ? "border-2 border-[#129cd3] shadow-md shadow-[#129cd3]/20"

@@ -577,14 +577,14 @@ function CouponModal({
           </label>
           <input
             value={name}
-            onChange={(e) => setName(e.target.value.slice(0, 80))}
+            onChange={(e) => setName(e.target.value.slice(0, 30))}
             placeholder="e.g. WELCOME100"
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#129cd3] font-mono"
             required
             autoFocus
           />
           <p className="text-[11px] text-gray-400 mt-1">
-            Up to 80 characters. Doubles as the human-friendly identifier.
+            Up to 30 characters. Doubles as the human-friendly identifier.
           </p>
         </div>
 
