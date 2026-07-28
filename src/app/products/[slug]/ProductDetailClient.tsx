@@ -654,11 +654,20 @@ export default function ProductDetailClient() {
   const myReview = reviewsResp?.items.find((r) => r.userId === user?.id) ?? null;
 
   useEffect(() => {
+    // if (!slug) return;
+    // setLoading(true);
+    // setProduct(null);
+    // setError(null);
+    // setNotFound(false);
     if (!slug) return;
+
+  const resetState = () => {
     setLoading(true);
     setProduct(null);
     setError(null);
     setNotFound(false);
+  };
+  resetState();
 
     const ac = new AbortController();
     catalogApi
