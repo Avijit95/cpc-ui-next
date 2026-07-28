@@ -146,7 +146,6 @@ export default function DealsSection() {
   const [dealDetails, setDealDetails] = useState<Record<string, ProductDetail>>({});
   const [loaded, setLoaded] = useState(false);
   const [dealIdx, setDealIdx] = useState(0);
-  const [displayIdx, setDisplayIdx] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [autoKey, setAutoKey] = useState(0);
   const THUMB_VISIBLE = 4;
@@ -213,13 +212,9 @@ export default function DealsSection() {
     return () => clearInterval(t);
   }, []);
 
-  // Update displayed deal immediately — the CSS animation on key change handles the fade-in.
-  useEffect(() => {
-    const liveCount = deals.filter((d) => new Date(d.endsAt).getTime() > Date.now()).length;
-    const target = liveCount > 0 ? dealIdx % liveCount : 0;
-    if (target !== displayIdx) setDisplayIdx(target);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dealIdx, deals]);
+  // displayIdx is derived — no state needed.
+  const liveCountForDisplay = deals.filter((d) => new Date(d.endsAt).getTime() > Date.now()).length;
+  const displayIdx = liveCountForDisplay > 0 ? dealIdx % liveCountForDisplay : 0;
 
   // Auto-advance deals every AUTO_ADVANCE_MS.
   // Depends on autoKey so it restarts fresh after any manual navigation,
