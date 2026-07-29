@@ -1026,11 +1026,17 @@ useEffect(() => {
     if (target) {
       setSelectedAttrs(attrsOf(target));
       setActiveImageIdx(0);
-      const targetSlug = typeof target.attributes?.slug === "string" && target.attributes.slug.trim()
-        ? target.attributes.slug.trim()
-        : null;
-      if (targetSlug && targetSlug !== slug) {
-        router.replace(`/products/${targetSlug}`, { scroll: false });
+      // For TV products: look up the per-size product slug from specs
+      let destSlug = slug;
+      if (isTvProduct) {
+        const specIdx = getTvSizeIndex(product.specs, target);
+        if (specIdx >= 0) {
+          const specSlug = String(product.specs[multiModelKey("Slug", specIdx)] ?? "").trim();
+          if (specSlug) destSlug = specSlug;
+        }
+      }
+      if (destSlug !== slug) {
+        router.replace(`/products/${destSlug}`, { scroll: false });
       } else {
         router.replace(`/products/${slug}?variant=${target.id}`, { scroll: false });
       }
