@@ -1026,9 +1026,14 @@ useEffect(() => {
     if (target) {
       setSelectedAttrs(attrsOf(target));
       setActiveImageIdx(0);
-      // For TV products: look up the per-size product slug from specs
+      // Resolve destination slug: variant attribute → spec Slug N → current slug
       let destSlug = slug;
-      if (isTvProduct) {
+      const attrSlug = typeof target.attributes?.slug === "string"
+        ? target.attributes.slug.trim()
+        : "";
+      if (attrSlug) {
+        destSlug = attrSlug;
+      } else if (isTvProduct) {
         const specIdx = getTvSizeIndex(product.specs, target);
         if (specIdx >= 0) {
           const specSlug = String(product.specs[multiModelKey("Slug", specIdx)] ?? "").trim();
