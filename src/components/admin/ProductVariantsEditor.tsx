@@ -12,6 +12,14 @@ import { adminApi, isApiError } from "@/lib/api";
 import { imageUrlForKey } from "@/lib/image-url";
 import type { AdminVariant, ProductImageContentType } from "@/lib/api";
 
+function toKebab(s: string) {
+  return s.trim().toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 // Presets are suggestions only (datalist) — the merchant can type anything.
 const RAM_PRESETS = ["4GB", "6GB", "8GB", "12GB", "16GB"];
 const STORAGE_PRESETS = ["64GB", "128GB", "256GB", "512GB", "1TB"];
@@ -285,7 +293,9 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
       uid: uid(),
       existingId: v.id,
       name: isTV && v.attributes.name != null ? String(v.attributes.name) : "",
-      slug: isTV && v.attributes.slug != null ? String(v.attributes.slug) : "",
+      slug: isTV
+        ? (v.attributes.slug ? String(v.attributes.slug).trim() : toKebab(String(v.attributes.name ?? "")))
+        : "",
       ram: ramVal,
       storage: storageVal,
       color: v.attributes.color != null ? String(v.attributes.color) : "",
@@ -538,6 +548,17 @@ const ProductVariantsEditor = forwardRef<
       validate: () => {
         const seen = new Set<string>();
         for (const r of rows) {
+          if (isTV && !r.slug.trim()) {
+            return "Each TV variant must have a Product Slug.";
+          }
+          if (isTV && r.name.trim() && tvSpecModels.length > 0 && tvSpecModels.some((m) => m.productName)) {
+            const nameMatched = tvSpecModels.some(
+              (m) => m.productName.trim().toLowerCase() === r.name.trim().toLowerCase(),
+            );
+            if (!nameMatched) {
+              return `Product Name "${r.name}" doesn't match any product name in the Specifications section. Fix it before saving.`;
+            }
+          }
           if (!r.ram.trim() && !r.color.trim()) {
             return isCamera
               ? "Each variant needs at least one of Model No. or Color."
@@ -874,6 +895,11 @@ const ProductVariantsEditor = forwardRef<
                       if (matched.screenSize) updates.ram = matched.screenSize;
                     }
                   }
+                  // Auto-generate slug from name unless user has manually edited it
+                  const prevKebab = toKebab(r.name);
+                  if (!r.slug || r.slug === prevKebab) {
+                    updates.slug = toKebab(val);
+                  }
                   updateRow(r.uid, updates);
                 }}
                 placeholder='e.g. Samsung 43" Crystal 4K TV'
@@ -881,7 +907,7 @@ const ProductVariantsEditor = forwardRef<
                 className={`w-full border rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] ${showTvNameAlert ? "border-red-400 bg-red-50" : "border-gray-200"}`}
               />
             </Field>
-            <Field label="Product Slug (optional)">
+            <Field label="Product Slug">
               <input
                 value={r.slug}
                 onChange={(e) => updateRow(r.uid, { slug: e.target.value })}

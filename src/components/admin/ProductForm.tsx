@@ -1927,17 +1927,6 @@ function TvSpecsEditor({
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </div>
-                {/* Slug */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Slug</label>
-                  <input
-                    value={get(tvSizeKey("Slug", i))}
-                    onChange={(e) => set(tvSizeKey("Slug", i), e.target.value)}
-                    placeholder="e.g. samsung-43-4k-qled-smart-tv (auto-generated if empty)"
-                    disabled={disabled}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] font-mono bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                  />
-                </div>
                 {/* Description */}
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>
