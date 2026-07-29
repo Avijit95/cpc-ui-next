@@ -1069,18 +1069,6 @@ const ProductVariantsEditor = forwardRef<
                 </Field>
               </div>
             )}
-            {/* Product Slug */}
-            {(r.ram.trim() || r.storage.trim()) && (
-              <Field label="Product Slug">
-                <input
-                  value={r.slug}
-                  onChange={(e) => updateRow(r.uid, { slug: e.target.value })}
-                  placeholder="e.g. samsung-55-inch-crystal-4k-tv"
-                  disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] font-mono"
-                />
-              </Field>
-            )}
             </div>{/* end p-3 space-y-3 */}
           </div>
         ) : (
