@@ -97,10 +97,16 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const title = variant ? resolveVariantTitle(product, variant) : product.name;
 
   // description: prefer product.description, fall back to specs["Description"]
-  const description =
+  // Strip any corrupted trailing data (runs of repeated chars like AAAA...)
+  const rawDesc =
     product.description?.trim() ||
     String(product.specs?.["Description"] ?? "").trim() ||
-    undefined;
+    "";
+  const description = rawDesc
+    ? rawDesc.replace(/(.)\1{10,}/g, "").trim() || undefined
+    : undefined;
+
+  const pageUrl = `/products/${slug}${variantId ? `?variant=${variantId}` : ""}`;
 
   return {
     title,
@@ -108,6 +114,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     openGraph: {
       siteName: "CellPhone Crowd",
       type: "website",
+      url: pageUrl,
       title,
       description,
       ...(imageUrl ? { images: [{ url: imageUrl }] } : {}),
