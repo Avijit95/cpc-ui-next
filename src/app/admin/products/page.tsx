@@ -847,9 +847,6 @@ export default function AdminProductsPage() {
                               <p className="font-semibold text-gray-800 line-clamp-1 text-sm">
                                 {p.name}
                               </p>
-                              <code className="hidden sm:inline text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                                {p.slug}
-                              </code>
                             </div>
                           </div>
                         </td>

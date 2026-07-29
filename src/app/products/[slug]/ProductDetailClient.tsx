@@ -1029,15 +1029,29 @@ useEffect(() => {
       // Resolve destination slug: variant attribute → spec Slug N → current slug
       let destSlug = slug;
       const attrSlug = typeof target.attributes?.slug === "string"
-        ? target.attributes.slug.trim()
+        ? target.attributes.slug.trim().toLowerCase()
         : "";
       if (attrSlug) {
         destSlug = attrSlug;
       } else if (isTvProduct) {
+        // Try spec Slug N fallback
         const specIdx = getTvSizeIndex(product.specs, target);
         if (specIdx >= 0) {
           const specSlug = String(product.specs[multiModelKey("Slug", specIdx)] ?? "").trim();
           if (specSlug) destSlug = specSlug;
+        }
+        // If still no match, try swapping the current color suffix in the slug
+        // e.g. on "...-black" clicking Silver → "...-silver"
+        if (destSlug === slug) {
+          const targetColor = String(target.attributes?.color ?? "").trim().toLowerCase();
+          const currentVariant = findVariant(product.variants, selectedAttrs);
+          const currentColor = String(currentVariant?.attributes?.color ?? "").trim().toLowerCase();
+          if (targetColor && currentColor && targetColor !== currentColor) {
+            const suffix = `-${currentColor}`;
+            if (slug.endsWith(suffix)) {
+              destSlug = slug.slice(0, -suffix.length) + `-${targetColor}`;
+            }
+          }
         }
       }
       if (destSlug !== slug) {

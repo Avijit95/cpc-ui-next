@@ -736,18 +736,21 @@ export default function ProductForm({ mode }: { mode: Mode }) {
     const _bIsSmartDevice = !_bIsTv && (_bCatSlug.includes("smart") || _bCatName.includes("smart"));
     const _bIsCamera      = !_bIsLens && (_bCatSlug.includes("camera") || _bCatName.includes("camera"));
     const _bNameOptional  = _bIsLens || _bIsSpeaker || _bIsTv || _bIsSmartDevice || _bIsCamera;
-    // For smart devices, cameras, TVs, and speakers the name comes from the first model's "Product Name" spec row.
-    const _sdName = (_bIsSmartDevice || _bIsCamera || _bIsTv || _bIsSpeaker)
+    // For smart devices, cameras, and speakers the name comes from the first model's "Product Name" spec row.
+    // For TVs, the name comes from the first variant's Product Name field.
+    const _tvName = _bIsTv
+      ? ((variantsRef.current?.getRows() as { name?: string }[])?.[0]?.name ?? "").trim()
+      : "";
+    const _sdName = (_bIsSmartDevice || _bIsCamera || _bIsSpeaker)
       ? (specRows.find((r) => r.key === "Product Name")?.value ?? "").trim()
       : "";
     // For lens products, derive name from first variant's model (ram field) if product name is blank.
     const _lensName = _bIsLens
       ? ((variantsRef.current?.getRows() as { ram?: string }[])?.[0]?.ram ?? "").trim()
       : "";
-    const name = _sdName || _lensName || form.name.trim();
+    const name = _tvName || _sdName || _lensName || form.name.trim();
     if (!name && !_bNameOptional) return { error: "Product name is required." };
     if (_bIsSmartDevice && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
-    if (_bIsTv && !name) return { error: "Enter a Product Name for at least the first screen size in the Specifications section." };
     if (_bIsSpeaker && !name) return { error: "Enter a Product Name for at least the first model in the Specifications section." };
     if (!form.categoryId) return { error: "Pick a category." };
 
@@ -1716,7 +1719,7 @@ type TvSpecGroup = { label: string; icon: string; fields: TvSpecField[] };
 
 // Keys that differ per screen size
 const TV_PER_SIZE_BASE_KEYS = [
-  "Screen Size", "Product Name", "Slug", "Description",
+  "Screen Size", "Slug", "Description",
   // Display
   "Display Technology", "Resolution", "LED Arrangement",
   "Viewing Angle", "Aspect Ratio",
@@ -1899,34 +1902,6 @@ function TvSpecsEditor({
 
             {sizeVal.trim() ? (
               <div className="p-3 space-y-4">
-                {/* Product Name */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Name</label>
-                  <input
-                    value={get(tvSizeKey("Product Name", i))}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const nameKey = tvSizeKey("Product Name", i);
-                      const slugKey = tvSizeKey("Slug", i);
-                      const curSlug = get(slugKey);
-                      const prevKebab = toKebab(get(nameKey));
-                      const shouldAutoSlug = !curSlug || (prevKebab !== "" && curSlug.startsWith(prevKebab));
-                      let next = rows.some(r => r.key === nameKey)
-                        ? rows.map(r => r.key === nameKey ? { ...r, value: v } : r)
-                        : [...rows, { id: uid(), key: nameKey, value: v }];
-                      if (shouldAutoSlug) {
-                        const newSlug = toKebab(v);
-                        next = next.some(r => r.key === slugKey)
-                          ? next.map(r => r.key === slugKey ? { ...r, value: newSlug } : r)
-                          : [...next, { id: uid(), key: slugKey, value: newSlug }];
-                      }
-                      onChange(next);
-                    }}
-                    placeholder='e.g. Samsung 43" 4K QLED Smart TV'
-                    disabled={disabled}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                  />
-                </div>
                 {/* Description */}
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Description</label>

@@ -5,6 +5,7 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, ImagePlus, Plus, Star, Trash2, X } from "lucide-react";
@@ -18,6 +19,73 @@ function toKebab(s: string) {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+/** Autocomplete input that searches backend products and lets admin pick the correct slug. */
+function SlugSearch({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (slug: string) => void;
+  disabled?: boolean;
+}) {
+  const [query, setQuery] = useState(value);
+  const [results, setResults] = useState<Array<{ name: string; slug: string }>>([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { setQuery(value); }, [value]);
+
+  function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value;
+    setQuery(v);
+    onChange(v);
+    if (timer.current) clearTimeout(timer.current);
+    if (v.length < 2) { setResults([]); setOpen(false); return; }
+    timer.current = setTimeout(async () => {
+      try {
+        const res = await adminApi.listProducts({ search: v, limit: 8 });
+        setResults(res.items.map((p) => ({ name: p.name, slug: p.slug })));
+        setOpen(res.items.length > 0);
+      } catch { setResults([]); setOpen(false); }
+    }, 300);
+  }
+
+  function select(slug: string) {
+    setQuery(slug);
+    onChange(slug);
+    setResults([]);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={query}
+        onChange={handleInput}
+        disabled={disabled}
+        placeholder="Search product name or paste slug…"
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] font-mono"
+      />
+      {open && results.length > 0 && (
+        <ul className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden text-sm max-h-56 overflow-y-auto">
+          {results.map((r) => (
+            <li
+              key={r.slug}
+              onMouseDown={() => select(r.slug)}
+              className="px-3 py-2 cursor-pointer hover:bg-blue-50"
+            >
+              <div className="font-medium text-gray-800 truncate">{r.name}</div>
+              <div className="text-xs text-gray-400 font-mono truncate">{r.slug}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 // Presets are suggestions only (datalist) — the merchant can type anything.
@@ -221,7 +289,7 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     if (r.lensIncluded === "Yes" && r.storage.trim()) a.lens = r.storage.trim();
   } else if (isTV) {
     if (r.name?.trim()) a.name = r.name.trim();
-    if (r.slug?.trim()) a.slug = r.slug.trim();
+    if (r.slug?.trim()) a.slug = toKebab(r.slug.trim());
     if (r.ram.trim()) a.size = r.ram.trim();
     if (r.storage.trim()) a.model = r.storage.trim();
     if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
@@ -546,14 +614,6 @@ const ProductVariantsEditor = forwardRef<
       validate: () => {
         const seen = new Set<string>();
         for (const r of rows) {
-          if (isTV && r.name.trim() && tvSpecModels.length > 0 && tvSpecModels.some((m) => m.productName)) {
-            const nameMatched = tvSpecModels.some(
-              (m) => m.productName.trim().toLowerCase() === r.name.trim().toLowerCase(),
-            );
-            if (!nameMatched) {
-              return `Product Name "${r.name}" doesn't match any product name in the Specifications section. Fix it before saving.`;
-            }
-          }
           if (!r.ram.trim() && !r.color.trim()) {
             return isCamera
               ? "Each variant needs at least one of Model No. or Color."
@@ -849,28 +909,20 @@ const ProductVariantsEditor = forwardRef<
         // Normalise size by stripping inch symbols (" ″ ') before comparing.
         const normTvSize = (v: string) => v.replace(/["""″''']/g, "").trim().toLowerCase();
         const hasTvSpecSizes = isTV && tvSpecSizes.length > 0;
-        const hasTvSpecNames = isTV && tvSpecModels.some((m) => m.productName);
         const tvSizeEntered = isTV && r.ram.trim() !== "";
-        const tvNameEntered = isTV && r.name.trim() !== "";
         const tvSizeMatched = !hasTvSpecSizes || !tvSizeEntered ||
           tvSpecModels.some((m) => normTvSize(m.screenSize) === normTvSize(r.ram));
-        const tvNameMatched = !hasTvSpecNames || !tvNameEntered ||
-          tvSpecModels.some((m) => m.productName.trim().toLowerCase() === r.name.trim().toLowerCase());
         const showTvSizeAlert = hasTvSpecSizes && tvSizeEntered && !tvSizeMatched;
-        const showTvNameAlert = hasTvSpecNames && tvNameEntered && !tvNameMatched;
-        const tvRowDisabled = disabled || showTvSizeAlert || showTvNameAlert;
+        const tvRowDisabled = disabled || showTvSizeAlert;
 
         return isTV ? (
           /* ── TV: multi-row card ───────────────────────────────── */
           <div key={r.uid} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-            {(showTvNameAlert || showTvSizeAlert) && (
+            {showTvSizeAlert && (
               <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700">
                 <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
                 <span>
-                  {showTvNameAlert
-                    ? <>Product Name <strong>&ldquo;{r.name}&rdquo;</strong> doesn&apos;t match any product name in the Specifications section. Fix it here or update the Specifications first.</>
-                    : <>Size <strong>&ldquo;{r.ram}&rdquo;</strong> doesn&apos;t match any screen size in the Specifications section. Fix it here or add this size to the Specifications first.</>
-                  } Other fields are locked until it matches.
+                  Size <strong>&ldquo;{r.ram}&rdquo;</strong> doesn&apos;t match any screen size in the Specifications section. Fix it here or add this size to the Specifications first. Other fields are locked until it matches.
                 </span>
               </div>
             )}
@@ -899,7 +951,7 @@ const ProductVariantsEditor = forwardRef<
                 }}
                 placeholder='e.g. Samsung 43" Crystal 4K TV'
                 disabled={disabled}
-                className={`w-full border rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] ${showTvNameAlert ? "border-red-400 bg-red-50" : "border-gray-200"}`}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3]"
               />
             </Field>
             {/* Row 1: Size + Model No. + delete */}
@@ -1069,15 +1121,13 @@ const ProductVariantsEditor = forwardRef<
                 </Field>
               </div>
             )}
-            {/* Product Slug — stored as attributes.slug, used for URL routing */}
+            {/* Product Slug — only fill if linking to a different backend product */}
             {(r.ram.trim() || r.storage.trim()) && (
               <Field label="Product Slug">
-                <input
+                <SlugSearch
                   value={r.slug}
-                  onChange={(e) => updateRow(r.uid, { slug: e.target.value })}
-                  placeholder="e.g. samsung-55-inch-crystal-4k-tv"
+                  onChange={(slug) => updateRow(r.uid, { slug })}
                   disabled={disabled}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] font-mono"
                 />
               </Field>
             )}
