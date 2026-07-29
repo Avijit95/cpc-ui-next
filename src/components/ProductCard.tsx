@@ -191,8 +191,13 @@ export default function ProductCard({
     ? Math.round(((displayBasePrice - displayFinalPrice) / displayBasePrice) * 100)
     : 0;
 
+  const variantSlug = variantOverride?.attributes.slug
+    ? String(variantOverride.attributes.slug).trim()
+    : null;
   const productLink = variantOverride
-    ? `/products/${product.slug}?variant=${variantOverride.id}`
+    ? variantSlug
+      ? `/products/${variantSlug}`
+      : `/products/${product.slug}?variant=${variantOverride.id}`
     : `/products/${product.slug}`;
 
   const variantAttrLabel = variantOverride ? variantLabel(variantOverride) : null;
