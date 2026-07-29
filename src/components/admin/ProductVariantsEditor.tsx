@@ -293,9 +293,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
       uid: uid(),
       existingId: v.id,
       name: isTV && v.attributes.name != null ? String(v.attributes.name) : "",
-      slug: isTV
-        ? (v.attributes.slug ? String(v.attributes.slug).trim() : toKebab(String(v.attributes.name ?? "")))
-        : "",
+      slug: isTV && v.attributes.slug ? String(v.attributes.slug).trim() : "",
       ram: ramVal,
       storage: storageVal,
       color: v.attributes.color != null ? String(v.attributes.color) : "",
@@ -548,9 +546,6 @@ const ProductVariantsEditor = forwardRef<
       validate: () => {
         const seen = new Set<string>();
         for (const r of rows) {
-          if (isTV && !r.slug.trim()) {
-            return "Each TV variant must have a Product Slug.";
-          }
           if (isTV && r.name.trim() && tvSpecModels.length > 0 && tvSpecModels.some((m) => m.productName)) {
             const nameMatched = tvSpecModels.some(
               (m) => m.productName.trim().toLowerCase() === r.name.trim().toLowerCase(),
