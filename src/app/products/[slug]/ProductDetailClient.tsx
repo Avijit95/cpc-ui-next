@@ -1026,6 +1026,7 @@ useEffect(() => {
     if (target) {
       setSelectedAttrs(attrsOf(target));
       setActiveImageIdx(0);
+      router.replace(`/products/${slug}?variant=${target.id}`, { scroll: false });
     }
   };
 
@@ -1348,7 +1349,7 @@ useEffect(() => {
                         (selectedVariant ? `?variant=${selectedVariant.id}` : "");
                       try {
                         if (navigator.share) {
-                          await navigator.share({ title: product?.name ?? "", url });
+                          await navigator.share({ title: displayTitle, url });
                         } else {
                           await navigator.clipboard.writeText(url);
                           setShareState("copied");
