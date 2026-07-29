@@ -1914,6 +1914,18 @@ function TvSpecsEditor({
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] resize-y bg-white disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </div>
+                {/* Product Slug — unique slug for this size (used to navigate between sizes) */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Product Slug</label>
+                  <input
+                    value={get(tvSizeKey("Slug", i))}
+                    onChange={(e) => set(tvSizeKey("Slug", i), e.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, ""))}
+                    placeholder={`e.g. samsung-${sizeVal.replace(/[^0-9]/g, "")}-inch-crystal-4k-tv`}
+                    disabled={disabled}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-[#129cd3] bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                  <p className="text-[10px] text-gray-400">The backend product slug for this {sizeVal}&quot; size. Leave empty if all sizes are variants of one product.</p>
+                </div>
                 {TV_PER_SIZE_GROUPS.map((group) => (
                   <div key={group.label}>
                     <div className="flex items-center gap-1.5 mb-2">

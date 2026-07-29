@@ -1026,30 +1026,28 @@ useEffect(() => {
     if (target) {
       setSelectedAttrs(attrsOf(target));
       setActiveImageIdx(0);
-      // Resolve destination slug: variant attribute → spec Slug N → current slug
+      // Resolve destination slug:
+      // - For non-TV products: use variant's attributes.slug if admin explicitly linked it
+      // - For TV products: attributes.slug is often auto-generated and may not exist; use
+      //   color-suffix swap heuristic instead, falling back to ?variant={id}
       let destSlug = slug;
       const attrSlug = typeof target.attributes?.slug === "string"
         ? target.attributes.slug.trim().toLowerCase()
         : "";
-      if (attrSlug) {
+      if (attrSlug && !isTvProduct) {
         destSlug = attrSlug;
       } else if (isTvProduct) {
-        // Try spec Slug N fallback
-        const specIdx = getTvSizeIndex(product.specs, target);
-        if (specIdx >= 0) {
-          const specSlug = String(product.specs[multiModelKey("Slug", specIdx)] ?? "").trim();
-          if (specSlug) destSlug = specSlug;
-        }
-        // If still no match, try swapping the current color suffix in the slug
+        // Try swapping color suffix in the current slug
         // e.g. on "...-black" clicking Silver → "...-silver"
-        if (destSlug === slug) {
-          const targetColor = String(target.attributes?.color ?? "").trim().toLowerCase();
-          const currentVariant = findVariant(product.variants, selectedAttrs);
-          const currentColor = String(currentVariant?.attributes?.color ?? "").trim().toLowerCase();
-          if (targetColor && currentColor && targetColor !== currentColor) {
-            const suffix = `-${currentColor}`;
-            if (slug.endsWith(suffix)) {
-              destSlug = slug.slice(0, -suffix.length) + `-${targetColor}`;
+        const targetColor = String(target.attributes?.color ?? "").trim().toLowerCase();
+        if (targetColor) {
+          const allColors = product.variants
+            .map((v) => String(v.attributes?.color ?? "").trim().toLowerCase())
+            .filter(Boolean);
+          for (const c of allColors) {
+            if (c !== targetColor && slug.endsWith(`-${c}`)) {
+              destSlug = slug.slice(0, -(c.length + 1)) + `-${targetColor}`;
+              break;
             }
           }
         }

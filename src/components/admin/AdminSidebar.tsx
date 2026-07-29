@@ -20,6 +20,7 @@ import {
   Loader2,
   Star,
   Zap,
+  Wrench,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -52,6 +53,12 @@ const navGroups = [
     items: [
       { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/admin/cms", label: "CMS", icon: ImageIcon },
+    ],
+  },
+  {
+    label: "TOOLS",
+    items: [
+      { href: "/admin/tools/fix-slugs", label: "Fix Slugs", icon: Wrench },
     ],
   },
   {

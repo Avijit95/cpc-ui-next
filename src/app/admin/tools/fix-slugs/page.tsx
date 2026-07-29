@@ -13,11 +13,16 @@ function toKebab(s: string) {
 }
 
 type Result = { id: string; name: string; oldSlug: string; newSlug: string; status: "updated" | "skipped" | "error"; error?: string };
+type VResult = { productName: string; variantSku: string; removedSlug: string; status: "cleared" | "skipped" | "error"; error?: string };
 
 export default function FixSlugsPage() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [summary, setSummary] = useState<{ updated: number; skipped: number; errors: number } | null>(null);
+
+  const [tvRunning, setTvRunning] = useState(false);
+  const [tvResults, setTvResults] = useState<VResult[]>([]);
+  const [tvSummary, setTvSummary] = useState<{ cleared: number; skipped: number; errors: number } | null>(null);
 
   const run = async () => {
     setRunning(true);
@@ -62,6 +67,57 @@ export default function FixSlugsPage() {
     setSummary({ updated, skipped, errors });
     setResults(out);
     setRunning(false);
+  };
+
+  const runTvVariantFix = async () => {
+    setTvRunning(true);
+    setTvResults([]);
+    setTvSummary(null);
+
+    const out: VResult[] = [];
+
+    // Find TV categories
+    const categories = await adminApi.listCategories();
+    const tvCats = categories.filter((c) =>
+      c.slug?.toLowerCase().includes("tv") || c.name?.toLowerCase().includes("tv") || c.name?.toLowerCase().includes("television")
+    );
+
+    for (const cat of tvCats) {
+      let offset = 0;
+      while (true) {
+        const page = await adminApi.listProducts({ categoryId: cat.id, status: "ACTIVE", limit: 50, offset });
+        for (const p of page.items) {
+          const detail = await adminApi.getProduct(p.id);
+          for (const v of detail.variants) {
+            const attrSlug = typeof v.attributes?.slug === "string" ? v.attributes.slug.trim() : "";
+            if (!attrSlug) {
+              out.push({ productName: p.name, variantSku: v.sku, removedSlug: "", status: "skipped" });
+              continue;
+            }
+            // Clear attributes.slug by sending full attributes without the slug key
+            const cleanedAttrs = { ...v.attributes };
+            delete cleanedAttrs.slug;
+            try {
+              await adminApi.updateVariant(p.id, v.id, { attributes: cleanedAttrs });
+              out.push({ productName: p.name, variantSku: v.sku, removedSlug: attrSlug, status: "cleared" });
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              out.push({ productName: p.name, variantSku: v.sku, removedSlug: attrSlug, status: "error", error: msg });
+            }
+            setTvResults([...out]);
+          }
+        }
+        offset += page.items.length;
+        if (offset >= page.total || page.items.length === 0) break;
+      }
+    }
+
+    const cleared = out.filter(r => r.status === "cleared").length;
+    const skipped = out.filter(r => r.status === "skipped").length;
+    const errors  = out.filter(r => r.status === "error").length;
+    setTvSummary({ cleared, skipped, errors });
+    setTvResults(out);
+    setTvRunning(false);
   };
 
   return (
@@ -116,6 +172,60 @@ export default function FixSlugsPage() {
             </table>
           </div>
         )}
+
+        {/* ── Section 2: Clear bad TV variant slugs ── */}
+        <div className="border-t border-gray-200 pt-6 space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-gray-800 mb-1">Clear TV Variant Slugs</h2>
+            <p className="text-sm text-gray-500">Removes the auto-generated <code className="bg-gray-100 px-1 rounded text-xs">attributes.slug</code> from all TV variants. These bad slugs caused &ldquo;Product Not Found&rdquo; when clicking TV variant cards. Run this once to clean up existing data.</p>
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">
+            <strong>Warning:</strong> This clears <code className="bg-red-100 px-1 rounded">attributes.slug</code> from every TV variant. If you have intentionally set any TV variant slugs via SlugSearch, those will also be removed. After running, re-set them in the product editor.
+          </div>
+          <button
+            onClick={runTvVariantFix}
+            disabled={tvRunning}
+            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
+          >
+            {tvRunning ? "Running…" : "Clear TV variant slugs"}
+          </button>
+
+          {tvSummary && (
+            <div className="flex gap-4 text-sm font-semibold">
+              <span className="text-green-700">{tvSummary.cleared} cleared</span>
+              <span className="text-gray-500">{tvSummary.skipped} skipped (no slug)</span>
+              {tvSummary.errors > 0 && <span className="text-red-600">{tvSummary.errors} errors</span>}
+            </div>
+          )}
+
+          {tvResults.filter(r => r.status !== "skipped").length > 0 && (
+            <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Product</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Variant SKU</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Removed slug</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {tvResults.filter(r => r.status !== "skipped").map((r, i) => (
+                    <tr key={i} className={r.status === "cleared" ? "bg-green-50" : r.status === "error" ? "bg-red-50" : ""}>
+                      <td className="px-3 py-2 text-gray-800 max-w-[200px] truncate">{r.productName}</td>
+                      <td className="px-3 py-2 font-mono text-gray-500 max-w-[200px] truncate">{r.variantSku}</td>
+                      <td className="px-3 py-2 font-mono text-gray-500 max-w-[200px] truncate">{r.removedSlug}</td>
+                      <td className="px-3 py-2">
+                        {r.status === "cleared" && <span className="text-green-700 font-semibold">Cleared</span>}
+                        {r.status === "error"   && <span className="text-red-600 font-semibold" title={r.error}>Error</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

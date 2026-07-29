@@ -68,8 +68,18 @@ function SlugSearch({
         disabled={disabled}
         placeholder="Search product name or paste slug…"
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] font-mono"
+        className="w-full border border-gray-200 rounded-lg px-2.5 py-2 pr-8 text-sm outline-none focus:border-[#129cd3] font-mono"
       />
+      {query && !disabled && (
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); select(""); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          title="Clear slug"
+        >
+          ×
+        </button>
+      )}
       {open && results.length > 0 && (
         <ul className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden text-sm max-h-56 overflow-y-auto">
           {results.map((r) => (
@@ -941,11 +951,6 @@ const ProductVariantsEditor = forwardRef<
                     if (matched) {
                       if (matched.screenSize) updates.ram = matched.screenSize;
                     }
-                  }
-                  // Auto-generate slug from name unless user has manually edited it
-                  const prevKebab = toKebab(r.name);
-                  if (!r.slug || r.slug === prevKebab) {
-                    updates.slug = toKebab(val);
                   }
                   updateRow(r.uid, updates);
                 }}
