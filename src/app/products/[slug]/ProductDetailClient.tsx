@@ -1171,7 +1171,7 @@ useEffect(() => {
   // The currently selected color, looked up across all color keys
   const selectedColor = colorAttrKeys.map((k) => selectedAttrs[k]).find(Boolean) ?? null;
   // Informational TV variant attributes — stored per-variant but not selectable UI groups
-  const TV_HIDDEN_ATTR_KEYS = new Set(["dimensions", "dimWithStand", "dimWithoutStand", "weight", "model", "name"]);
+  const TV_HIDDEN_ATTR_KEYS = new Set(["dimensions", "dimWithStand", "dimWithoutStand", "weight", "model", "name", "slug"]);
   const nonColorGroups = variantGroups.filter((g) => {
     if (/^colou?r$/i.test(g.key)) return false;
     if (isTvProduct && TV_HIDDEN_ATTR_KEYS.has(g.key)) return false;
