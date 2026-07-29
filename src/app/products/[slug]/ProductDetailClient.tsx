@@ -1026,7 +1026,14 @@ useEffect(() => {
     if (target) {
       setSelectedAttrs(attrsOf(target));
       setActiveImageIdx(0);
-      router.replace(`/products/${slug}?variant=${target.id}`, { scroll: false });
+      const targetSlug = typeof target.attributes?.slug === "string" && target.attributes.slug.trim()
+        ? target.attributes.slug.trim()
+        : null;
+      if (targetSlug && targetSlug !== slug) {
+        router.replace(`/products/${targetSlug}`, { scroll: false });
+      } else {
+        router.replace(`/products/${slug}?variant=${target.id}`, { scroll: false });
+      }
     }
   };
 

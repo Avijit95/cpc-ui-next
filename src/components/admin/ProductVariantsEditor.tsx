@@ -38,6 +38,7 @@ type VariantRow = {
   uid: string;
   existingId?: string;
   name: string;       // TV only: per-variant product name, e.g. "Samsung 43\" Crystal 4K TV"
+  slug: string;       // TV only: slug of the linked product for this size (enables cross-product URL navigation)
   ram: string;
   storage: string;    // ROM (phone) | Lens Name (camera) | Model No. (TV)
   color: string;
@@ -212,6 +213,7 @@ function buildAttributes(r: VariantRow, isCamera: boolean, isTV: boolean, isSpea
     if (r.lensIncluded === "Yes" && r.storage.trim()) a.lens = r.storage.trim();
   } else if (isTV) {
     if (r.name?.trim()) a.name = r.name.trim();
+    if (r.slug?.trim()) a.slug = r.slug.trim();
     if (r.ram.trim()) a.size = r.ram.trim();
     if (r.storage.trim()) a.model = r.storage.trim();
     if (r.launchYear.trim()) a.launchYear = r.launchYear.trim();
@@ -283,6 +285,7 @@ function initRows(variants: AdminVariant[], isCamera: boolean, isTV: boolean, is
       uid: uid(),
       existingId: v.id,
       name: isTV && v.attributes.name != null ? String(v.attributes.name) : "",
+      slug: isTV && v.attributes.slug != null ? String(v.attributes.slug) : "",
       ram: ramVal,
       storage: storageVal,
       color: v.attributes.color != null ? String(v.attributes.color) : "",
@@ -398,7 +401,7 @@ const ProductVariantsEditor = forwardRef<
   const [rows, setRows] = useState<VariantRow[]>(() => {
     const _attrCols = isSmartDevice ? initSmartDeviceAttrCols(initialVariants) : [];
     if (draftRows && draftRows.length > 0) {
-      return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), name: r.name ?? "", attr1: r.attr1 ?? "", attr2: r.attr2 ?? "", attr3: r.attr3 ?? "" }));
+      return (draftRows as VariantRow[]).map((r) => ({ ...r, uid: uid(), name: r.name ?? "", slug: r.slug ?? "", attr1: r.attr1 ?? "", attr2: r.attr2 ?? "", attr3: r.attr3 ?? "" }));
     }
     return initRows(initialVariants, isCamera, isTV, isSpeaker, isLens, isSmartDevice, _attrCols);
   });
@@ -439,6 +442,7 @@ const ProductVariantsEditor = forwardRef<
       {
         uid: uid(),
         name: "",
+        slug: "",
         ram: "",
         storage: "",
         color: "",
@@ -875,6 +879,15 @@ const ProductVariantsEditor = forwardRef<
                 placeholder='e.g. Samsung 43" Crystal 4K TV'
                 disabled={disabled}
                 className={`w-full border rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] ${showTvNameAlert ? "border-red-400 bg-red-50" : "border-gray-200"}`}
+              />
+            </Field>
+            <Field label="Product Slug (optional)">
+              <input
+                value={r.slug}
+                onChange={(e) => updateRow(r.uid, { slug: e.target.value })}
+                placeholder="e.g. samsung-55-inch-crystal-4k-tv"
+                disabled={disabled}
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#129cd3] font-mono"
               />
             </Field>
             {/* Row 1: Size + Model No. + delete */}
