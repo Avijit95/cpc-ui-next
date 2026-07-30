@@ -291,7 +291,7 @@ function LoginPageInner() {
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #bcc7cba1", boxShadow: "0px 8px 11px 3px #9db3bb2e" }}>
             <div className="grid grid-cols-3 border-b border-gray-100">
               {(["phone", "google", "email"] as Tab[]).map((tab) => (
                 <button
@@ -299,7 +299,7 @@ function LoginPageInner() {
                   onClick={() => switchTab(tab)}
                   className={`py-3.5 text-xs font-semibold transition-all ${
                     activeTab === tab
-                      ? "text-[#129cd3] border-b-2 border-[#129cd3] bg-[#f0f9ff]"
+                      ? "text-[#129cd3] border-b-2 border-[#129cd3]"
                       : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
                   }`}
                 >
@@ -324,8 +324,8 @@ function LoginPageInner() {
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
                           Mobile Number
                         </label>
-                        <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
-                          <span className="px-4 py-3 bg-gray-50 text-gray-600 text-sm font-semibold border-r border-gray-200 flex-shrink-0">
+                        <div className="flex items-center border-[1.5px] border-gray-200 bg-[#f4f9fd] focus-within:border-[#129cd3] focus-within:bg-white rounded-xl overflow-hidden transition-all">
+                          <span className="px-4 py-3 bg-gray-100/70 text-gray-600 text-sm font-semibold border-r border-gray-200 flex-shrink-0">
                             +91
                           </span>
                           <input
@@ -342,7 +342,7 @@ function LoginPageInner() {
                         disabled={phoneNumber.length !== 10 || busy}
                         className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all ${
                           phoneNumber.length === 10 && !busy
-                            ? "bg-[#129cd3] hover:bg-[#0e87b5] text-white shadow-md shadow-[#129cd3]/30"
+                            ? "bg-gradient-to-r from-[#129cd3] to-[#0b8dbf] hover:from-[#0e87b5] hover:to-[#0a7fad] text-white shadow-md shadow-[#129cd3]/20"
                             : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         }`}
                       >
@@ -380,7 +380,7 @@ function LoginPageInner() {
                               value={digit}
                               onChange={(e) => handleOtpChange(i, e.target.value.replace(/\D/g, ""))}
                               onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                              className="w-11 h-12 text-center text-lg font-bold border-2 border-gray-200 focus:border-[#129cd3] focus:bg-[#f0f9ff] rounded-xl outline-none transition-colors"
+                              className="w-11 h-12 text-center text-lg font-bold border-[1.5px] border-gray-200 bg-[#f4f9fd] focus:border-[#129cd3] focus:bg-white rounded-xl outline-none transition-all"
                             />
                           ))}
                         </div>
@@ -395,14 +395,14 @@ function LoginPageInner() {
                             value={signupName}
                             onChange={(e) => setSignupName(e.target.value.slice(0, 100))}
                             placeholder="Full name"
-                            className="w-full border-2 border-gray-200 focus:border-[#129cd3] rounded-xl px-4 py-3 text-sm outline-none text-gray-800 transition-colors"
+                            className="w-full border-[1.5px] border-gray-200 bg-[#f4f9fd] focus:border-[#129cd3] focus:bg-white rounded-xl px-4 py-3 text-sm outline-none text-gray-800 transition-all"
                           />
                         </div>
                       )}
                       <button
                         onClick={handleVerifyOtp}
                         disabled={busy || otp.join("").length !== 6 || (needsName && !signupName.trim())}
-                        className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
+                        className="w-full bg-gradient-to-r from-[#129cd3] to-[#0b8dbf] hover:from-[#0e87b5] hover:to-[#0a7fad] disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-all shadow-md shadow-[#129cd3]/20 flex items-center justify-center gap-2"
                       >
                         {busy ? <Loader2 size={16} className="animate-spin" /> : <>Verify &amp; Continue <ArrowRight size={16} /></>}
                       </button>
@@ -455,7 +455,7 @@ function LoginPageInner() {
                 <div className="space-y-5">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
-                    <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+                    <div className="flex items-center border-[1.5px] border-gray-200 bg-[#f4f9fd] focus-within:border-[#129cd3] focus-within:bg-white rounded-xl overflow-hidden transition-all">
                       <span className="px-3 py-3 text-gray-400 flex-shrink-0"><Mail size={17} /></span>
                       <input
                         type="email"
@@ -468,7 +468,7 @@ function LoginPageInner() {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
-                    <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+                    <div className="flex items-center border-[1.5px] border-gray-200 bg-[#f4f9fd] focus-within:border-[#129cd3] focus-within:bg-white rounded-xl overflow-hidden transition-all">
                       <span className="px-3 py-3 text-gray-400 flex-shrink-0"><Lock size={17} /></span>
                       <input
                         type={showPassword ? "text" : "password"}
@@ -492,7 +492,7 @@ function LoginPageInner() {
                   <button
                     onClick={handleEmailLogin}
                     disabled={busy || !email || !password}
-                    className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
+                    className="w-full bg-gradient-to-r from-[#129cd3] to-[#0b8dbf] hover:from-[#0e87b5] hover:to-[#0a7fad] disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-all shadow-md shadow-[#129cd3]/20 flex items-center justify-center gap-2"
                   >
                     {busy ? <Loader2 size={16} className="animate-spin" /> : <>Sign In <ArrowRight size={16} /></>}
                   </button>

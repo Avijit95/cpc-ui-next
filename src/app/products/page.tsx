@@ -648,45 +648,33 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
     }
 
     // ── Connectivity ─────────────────────────────────────────────────────────
-    // TV stores connectivity as individual fields (HDMI Ports, Wi-Fi, USB Ports…)
-    // NOT as a combined "Connectivity Technology" string — check per-size keys.
+    // Scan ALL spec keys+values for connectivity signals so any key naming
+    // convention used in admin (HDMI Ports, No. of HDMI, Connectivity Technology…)
+    // is covered without hard-coding exact key names.
     if (connOpts.length > 0) {
       const specs = cached.specs;
-      // Check a spec key across all TV size slots (key, "key 2", "key 3"…)
-      const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false"]);
-      const tvSpecAny = (base: string): string => {
-        for (let i = 0; i < 5; i++) {
-          const k = i === 0 ? base : `${base} ${i + 1}`;
-          const v = specs[k];
-          if (v) {
-            const norm = String(v).trim().toLowerCase();
-            if (!TV_FALSY.has(norm)) return norm;
-          }
-        }
-        return "";
-      };
-      // Free-text fields that may contain connectivity info.
-      // "Other Convenience Features" and "Supported Devices for Casting" are per-size
-      // keys — join ALL five possible size slots so Bluetooth in slot 2+ is not missed.
-      const joinSlots = (base: string) =>
-        Array.from({ length: 5 }, (_, i) =>
-          String(specs[i === 0 ? base : `${base} ${i + 1}`] ?? "").toLowerCase()
-        ).join(" ");
-      const freeText = [
-        joinSlots("Other Convenience Features"),
-        joinSlots("Supported Devices for Casting"),
-        String(specs["Wi-Fi Type"] ?? "").toLowerCase(),
-      ].join(" ");
+      const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false", ""]);
+      // Build a combined string of all non-falsy spec values for keyword scanning.
+      const allSpecText = Object.entries(specs)
+        .filter(([, v]) => {
+          if (!v) return false;
+          const s = String(v).trim().toLowerCase();
+          return !TV_FALSY.has(s);
+        })
+        .map(([k, v]) => `${k} ${String(v)}`.toLowerCase())
+        .join(" ");
 
       const hasConn = (opt: string): boolean => {
-        if (opt === "HDMI")      return !!tvSpecAny("HDMI Ports") || !!tvSpecAny("HDMI") || !!tvSpecAny("No. of HDMI") || freeText.includes("hdmi");
-        if (opt === "USB")       return !!tvSpecAny("USB Ports") || !!tvSpecAny("USB") || !!tvSpecAny("No. of USB") || !!tvSpecAny("No. of USB Ports") || freeText.includes("usb");
-        if (opt === "Wi-Fi")     return !!tvSpecAny("Wi-Fi") || !!tvSpecAny("Wi-Fi Enabled") || !!tvSpecAny("Wireless") || !!tvSpecAny("WiFi") || !!tvSpecAny("Wi Fi") || !!tvSpecAny("Wi-Fi Type") || freeText.includes("wi-fi") || freeText.includes("wifi") || freeText.includes("wireless");
-        if (opt === "Bluetooth") return !!tvSpecAny("Bluetooth") || !!tvSpecAny("Bluetooth Version") || !!tvSpecAny("Bluetooth Enabled") || freeText.includes("bluetooth");
-        if (opt === "Ethernet")  return !!tvSpecAny("Ethernet") || !!tvSpecAny("LAN") || freeText.includes("ethernet") || freeText.includes("lan");
-        if (opt === "AV")        return !!tvSpecAny("AV") || !!tvSpecAny("AV In") || freeText.includes(" av") || freeText.includes("composite");
-        if (opt === "RF")        return !!tvSpecAny("RF") || !!tvSpecAny("RF In") || freeText.includes("antenna") || freeText.includes("coaxial");
-        return false;
+        switch (opt) {
+          case "HDMI":      return /hdmi/.test(allSpecText);
+          case "USB":       return /\busb\b/.test(allSpecText);
+          case "Wi-Fi":     return /wi[-\s]?fi|wifi|wireless/.test(allSpecText);
+          case "Bluetooth": return /bluetooth/.test(allSpecText);
+          case "Ethernet":  return /ethernet|\blan\b/.test(allSpecText);
+          case "AV":        return /\bav\b|composite/.test(allSpecText);
+          case "RF":        return /\brf\b|antenna|coaxial/.test(allSpecText);
+          default:          return false;
+        }
       };
       if (!connOpts.some(hasConn)) return false;
     }
@@ -719,7 +707,7 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
-    if (!cached) return true; // Not yet fetched — show it until cache is ready
+    if (!cached) return false; // Not yet fetched — hide until specs are loaded
     const specs  = cached?.specs ?? {};
 
     // Helper: read a spec key across all multi-model indexes (key, "key 2", "key 3"…)
@@ -912,7 +900,7 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
-    if (!cached) return true; // Not yet fetched — show it until cache is ready
+    if (!cached) return false; // Not yet fetched — hide until specs are loaded
     const specs  = cached?.specs ?? {};
 
     // Connectivity — each option is a separate connectivity type
@@ -1087,7 +1075,7 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
-    if (!cached) return true; // Not yet fetched — show until cache is ready
+    if (!cached) return false; // Not yet fetched — hide until specs are loaded
     const specs = cached?.specs ?? {};
 
     // All spec values normalised — used for broad scanning when key names are unknown
@@ -1614,8 +1602,8 @@ useEffect(() => {
     // Use apiLimiter so we don't fire all detail fetches in parallel — a burst of
     // parallel requests on a shared IP (CGNAT) triggers ThrottlerException, causing
     // some fetches to fail silently and leaving specs uncached. Uncached products
-    // pass the resolution filter unconditionally (if (!cached) return true), making
-    // the filter appear broken even when resolution values are set in admin.
+    // are hidden when a spec filter is active (return false) so the filter result
+    // is accurate — products appear as their specs load.
     // Call setCacheTick per-item (not after Promise.all) so partial cache population
     // immediately triggers a re-render and filters update as each product loads.
     uncached.forEach((item) => {
@@ -1740,6 +1728,37 @@ useEffect(() => {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraCategory, rawItems, cacheTick]);
+
+  // Dynamic TV connectivity options — derived from cached TV product specs.
+  const tvFilterOptions = useMemo(() => {
+    const TV_CONN_OPTS = ["HDMI", "Wi-Fi", "USB", "Bluetooth", "Ethernet", "AV", "RF"];
+    const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false", ""]);
+    const connFound = new Set<string>();
+
+    if (isTvCategory) {
+      for (const item of rawItems) {
+        const cached = detailCache.get(item.slug);
+        if (!cached) continue;
+        const allSpecText = Object.entries(cached.specs)
+          .filter(([, v]) => { if (!v) return false; const s = String(v).trim().toLowerCase(); return !TV_FALSY.has(s); })
+          .map(([k, v]) => `${k} ${String(v)}`.toLowerCase())
+          .join(" ");
+        if (/hdmi/.test(allSpecText))                     connFound.add("HDMI");
+        if (/\busb\b/.test(allSpecText))                  connFound.add("USB");
+        if (/wi[-\s]?fi|wifi|wireless/.test(allSpecText)) connFound.add("Wi-Fi");
+        if (/bluetooth/.test(allSpecText))                connFound.add("Bluetooth");
+        if (/ethernet|\blan\b/.test(allSpecText))         connFound.add("Ethernet");
+        if (/\bav\b|composite/.test(allSpecText))         connFound.add("AV");
+        if (/\brf\b|antenna|coaxial/.test(allSpecText))   connFound.add("RF");
+      }
+    }
+
+    return {
+      connectivity: TV_CONN_OPTS.filter((o) => connFound.has(o)),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTvCategory, rawItems, cacheTick]);
+
   const sortValue = sortOptions.find((o) => o.label === sortLabel)?.value;
   const specFiltered: ListCard[] = isPhoneCategory
     ? applyPhoneFilters(priceFilteredItems, phoneFilters)
@@ -1999,15 +2018,22 @@ useEffect(() => {
       ))}
 
       {/* TV-specific filters — shown only for TV category */}
-      {isTvCategory && TV_FILTER_GROUPS.map((group) => (
-        <FilterSection
-          key={group.key}
-          label={group.label}
-          options={group.options}
-          selected={tvFilters[group.key] ?? []}
-          onChange={(vals) => setTvFilter(group.key, vals)}
-        />
-      ))}
+      {isTvCategory && TV_FILTER_GROUPS.map((group) => {
+        const dynamic = (tvFilterOptions as Record<string, string[]>)[group.key];
+        // Use dynamic options only when we have cache data and found at least one match.
+        // Fall back to the static group.options while cache is still loading.
+        const opts = dynamic && dynamic.length > 0 ? dynamic : group.options;
+        if (opts.length === 0) return null;
+        return (
+          <FilterSection
+            key={group.key}
+            label={group.label}
+            options={opts}
+            selected={tvFilters[group.key] ?? []}
+            onChange={(vals) => setTvFilter(group.key, vals)}
+          />
+        );
+      })}
 
       {/* Camera-specific filters — shown only for camera category */}
       {isCameraCategory && CAMERA_FILTER_GROUPS.map((group) => {
@@ -2176,7 +2202,7 @@ useEffect(() => {
           <div className="flex gap-6">
             {/* Sidebar — desktop */}
             <div className="hidden lg:block w-56 flex-shrink-0">
-              <div className="bg-white border border-gray-200 rounded-lg p-5 sticky top-24 z-[999] max-h-[calc(100vh-7rem)] overflow-y-auto">
+              <div className="filter-sidebar bg-white/55 backdrop-blur-md border border-white/50 shadow-md rounded-lg p-5 sticky top-24 z-[999] max-h-[calc(100vh-7rem)] overflow-y-auto">
                 {filterSidebar}
               </div>
             </div>
