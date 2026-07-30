@@ -626,6 +626,90 @@ function extractTvInches(cached: ReturnType<typeof detailCache.get>, productName
   return null;
 }
 
+// ── TV per-screen-size specs ─────────────────────────────────────────────────
+// TV specs are stored per screen size as "Key", "Key 2" … "Key 5" (tvSizeKey in
+// ProductForm) and a TV renders one card per variant. A filter on a per-size spec must
+// therefore also narrow which size cards render — otherwise a TV that qualifies on its
+// 43" slot still shows its 75" card and the filter looks like it did nothing.
+const MAX_TV_SIZES = 5;
+
+const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false"]);
+
+// Which size slot a variant belongs to, matched on the per-size "Screen Size N" rows.
+// Returns null when the variant's size matches no slot — callers keep the card in that
+// case rather than hiding it on a guess (a TV has far more variants than size slots,
+// so falling back to variant position would read the wrong slot).
+function tvSizeIndex(specs: Record<string, unknown>, variant: Variant): number | null {
+  const vs = parseSpec(variant.attributes?.["size"]);
+  if (vs === null) return null;
+  for (let i = 0; i < MAX_TV_SIZES; i++) {
+    const s = parseSpec(specs[i === 0 ? "Screen Size" : `Screen Size ${i + 1}`]);
+    if (s !== null && s === vs) return i;
+  }
+  return null;
+}
+
+// Slot indexes to read: one screen size, or all of them for a product-level check.
+function tvSlots(slot: number | null): number[] {
+  return slot === null ? Array.from({ length: MAX_TV_SIZES }, (_, i) => i) : [slot];
+}
+
+// Every "…resolution…" spec value belonging to the given slot (all slots when null).
+// Case-insensitive on the key so "Display Resolution", "Screen Resolution" etc. count.
+function tvResolutionValues(specs: Record<string, unknown>, slot: number | null): string[] {
+  const wanted = tvSlots(slot).map((i) => (i === 0 ? "" : ` ${i + 1}`));
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(specs)) {
+    if (!v) continue;
+    if (!k.toLowerCase().includes("resolution")) continue;
+    const m = k.match(/ ([2-5])$/);
+    if (wanted.includes(m ? ` ${m[1]}` : "")) out.push(String(v));
+  }
+  return out;
+}
+
+// TVs store connectivity as individual per-size fields (HDMI Ports, Wi-Fi, …) plus
+// free-text boxes, NOT as one combined "Connectivity Technology" string. `slot` scopes
+// the read to a single screen size; null checks the whole product.
+function tvHasConnectivity(
+  specs: Record<string, unknown>,
+  opt: string,
+  slot: number | null,
+): boolean {
+  const slots = tvSlots(slot);
+  const specAny = (base: string): string => {
+    for (const i of slots) {
+      const v = specs[i === 0 ? base : `${base} ${i + 1}`];
+      if (v) {
+        const norm = String(v).trim().toLowerCase();
+        if (!TV_FALSY.has(norm)) return norm;
+      }
+    }
+    return "";
+  };
+  // Free-text fields that may name a connectivity type — all three are per-size keys,
+  // so they are read slot by slot too (Bluetooth is only ever entered here: the TV
+  // admin form has no Bluetooth/Ethernet/AV/RF field of its own).
+  const joinSlots = (base: string) =>
+    slots
+      .map((i) => String(specs[i === 0 ? base : `${base} ${i + 1}`] ?? "").toLowerCase())
+      .join(" ");
+  const freeText = [
+    joinSlots("Other Convenience Features"),
+    joinSlots("Supported Devices for Casting"),
+    joinSlots("Wi-Fi Type"),
+  ].join(" ");
+
+  if (opt === "HDMI")      return !!specAny("HDMI Ports") || !!specAny("HDMI") || !!specAny("No. of HDMI") || freeText.includes("hdmi");
+  if (opt === "USB")       return !!specAny("USB Ports") || !!specAny("USB") || !!specAny("No. of USB") || !!specAny("No. of USB Ports") || freeText.includes("usb");
+  if (opt === "Wi-Fi")     return !!specAny("Wi-Fi") || !!specAny("Wi-Fi Enabled") || !!specAny("Wireless") || !!specAny("WiFi") || !!specAny("Wi Fi") || !!specAny("Wi-Fi Type") || freeText.includes("wi-fi") || freeText.includes("wifi") || freeText.includes("wireless");
+  if (opt === "Bluetooth") return !!specAny("Bluetooth") || !!specAny("Bluetooth Version") || !!specAny("Bluetooth Enabled") || freeText.includes("bluetooth");
+  if (opt === "Ethernet")  return !!specAny("Ethernet") || !!specAny("LAN") || freeText.includes("ethernet") || freeText.includes("lan");
+  if (opt === "AV")        return !!specAny("AV") || !!specAny("AV In") || freeText.includes(" av") || freeText.includes("composite");
+  if (opt === "RF")        return !!specAny("RF") || !!specAny("RF In") || freeText.includes("antenna") || freeText.includes("coaxial");
+  return false;
+}
+
 function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>): ListCard[] {
   const sizeOpts = tvFilters["screenSize"]   ?? [];
   // Accept both "resolution" and "displayResolution" filter keys so either label works.
@@ -668,13 +752,7 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
       // "resolution" is treated as a resolution field.
       // This covers "Display Resolution", "display resolution", "Resolution 2",
       // "Screen Resolution", "Native Resolution", etc.
-      const allResVals: string[] = [];
-      for (const [k, v] of Object.entries(tvSpecs)) {
-        if (!v) continue;
-        if (k.toLowerCase().includes("resolution")) {
-          allResVals.push(String(v));
-        }
-      }
+      const allResVals: string[] = tvResolutionValues(tvSpecs, null);
       // If no resolution-named key exists, scan spec values for resolution keywords
       // but skip product name/description/model keys to avoid false matches
       // (e.g. "Crystal 4K Vision AI...Ultra HD (4K)..." in a product name field
@@ -711,44 +789,7 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
     // TV stores connectivity as individual fields (HDMI Ports, Wi-Fi, USB Ports…)
     // NOT as a combined "Connectivity Technology" string — check per-size keys.
     if (connOpts.length > 0) {
-      const specs = cached.specs;
-      // Check a spec key across all TV size slots (key, "key 2", "key 3"…)
-      const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false"]);
-      const tvSpecAny = (base: string): string => {
-        for (let i = 0; i < 5; i++) {
-          const k = i === 0 ? base : `${base} ${i + 1}`;
-          const v = specs[k];
-          if (v) {
-            const norm = String(v).trim().toLowerCase();
-            if (!TV_FALSY.has(norm)) return norm;
-          }
-        }
-        return "";
-      };
-      // Free-text fields that may contain connectivity info.
-      // "Other Convenience Features" and "Supported Devices for Casting" are per-size
-      // keys — join ALL five possible size slots so Bluetooth in slot 2+ is not missed.
-      const joinSlots = (base: string) =>
-        Array.from({ length: 5 }, (_, i) =>
-          String(specs[i === 0 ? base : `${base} ${i + 1}`] ?? "").toLowerCase()
-        ).join(" ");
-      const freeText = [
-        joinSlots("Other Convenience Features"),
-        joinSlots("Supported Devices for Casting"),
-        String(specs["Wi-Fi Type"] ?? "").toLowerCase(),
-      ].join(" ");
-
-      const hasConn = (opt: string): boolean => {
-        if (opt === "HDMI")      return !!tvSpecAny("HDMI Ports") || !!tvSpecAny("HDMI") || !!tvSpecAny("No. of HDMI") || freeText.includes("hdmi");
-        if (opt === "USB")       return !!tvSpecAny("USB Ports") || !!tvSpecAny("USB") || !!tvSpecAny("No. of USB") || !!tvSpecAny("No. of USB Ports") || freeText.includes("usb");
-        if (opt === "Wi-Fi")     return !!tvSpecAny("Wi-Fi") || !!tvSpecAny("Wi-Fi Enabled") || !!tvSpecAny("Wireless") || !!tvSpecAny("WiFi") || !!tvSpecAny("Wi Fi") || !!tvSpecAny("Wi-Fi Type") || freeText.includes("wi-fi") || freeText.includes("wifi") || freeText.includes("wireless");
-        if (opt === "Bluetooth") return !!tvSpecAny("Bluetooth") || !!tvSpecAny("Bluetooth Version") || !!tvSpecAny("Bluetooth Enabled") || freeText.includes("bluetooth");
-        if (opt === "Ethernet")  return !!tvSpecAny("Ethernet") || !!tvSpecAny("LAN") || freeText.includes("ethernet") || freeText.includes("lan");
-        if (opt === "AV")        return !!tvSpecAny("AV") || !!tvSpecAny("AV In") || freeText.includes(" av") || freeText.includes("composite");
-        if (opt === "RF")        return !!tvSpecAny("RF") || !!tvSpecAny("RF In") || freeText.includes("antenna") || freeText.includes("coaxial");
-        return false;
-      };
-      if (!connOpts.some(hasConn)) return false;
+      if (!connOpts.some((opt) => tvHasConnectivity(cached.specs, opt, null))) return false;
     }
 
     return true;
@@ -1842,14 +1883,44 @@ useEffect(() => {
 
   // Build a per-variant filter for TV size so ProductCardExpander shows only matching sizes
   const tvSizeOpts = tvFilters["screenSize"] ?? [];
-  const tvVariantFilter = isTvCategory && tvSizeOpts.length > 0
+
+  // Resolution and connectivity are per-screen-size specs and a TV renders one card per
+  // variant, so these must narrow the cards too — a TV qualifying on its 43" slot would
+  // otherwise still show its 75" card and the filter would look like it did nothing.
+  // Matching variant ids are precomputed because variantFilter gets no product context.
+  const tvResOpts = isTvCategory
+    ? [...(tvFilters["resolution"] ?? []), ...(tvFilters["displayResolution"] ?? [])]
+    : [];
+  const tvConnOpts = isTvCategory ? (tvFilters["connectivity"] ?? []) : [];
+  const tvSlotVariantIds = new Set<string>();
+  if (tvResOpts.length > 0 || tvConnOpts.length > 0) {
+    for (const item of rawItems) {
+      const cached = detailCache.get(item.slug);
+      if (!cached) continue;
+      for (const v of cached.variants) {
+        const slot = tvSizeIndex(cached.specs, v);
+        // Size matches no spec slot — keep the card rather than hide it on a guess.
+        if (slot === null) { tvSlotVariantIds.add(v.id); continue; }
+        // No resolution declared for this size — keep the card (matches the
+        // product-level fail-open above).
+        const resVals = tvResOpts.length > 0 ? tvResolutionValues(cached.specs, slot) : [];
+        if (resVals.length > 0 && !resVals.some((raw) => tvResOpts.some((o) => matchTvResolution(raw, o)))) continue;
+        if (tvConnOpts.length > 0 && !tvConnOpts.some((o) => tvHasConnectivity(cached.specs, o, slot))) continue;
+        tvSlotVariantIds.add(v.id);
+      }
+    }
+  }
+
+  const tvVariantFilter = isTvCategory && (tvSizeOpts.length > 0 || tvResOpts.length > 0 || tvConnOpts.length > 0)
     ? (v: import("@/lib/api").Variant) => {
-        const sv = v.attributes["size"];
-        if (!sv) return true; // no size attribute — show the card
-        const m = String(sv).match(/^(\d+(?:\.\d+)?)/);
-        if (!m) return true;
-        const inch = Number(m[1]);
-        return tvSizeOpts.some((opt) => matchTvScreenSize(inch, opt));
+        if (tvSizeOpts.length > 0) {
+          const sv = v.attributes["size"];
+          const m = sv ? String(sv).match(/^(\d+(?:\.\d+)?)/) : null;
+          // no size attribute / unparseable — don't reject on size
+          if (m && !tvSizeOpts.some((opt) => matchTvScreenSize(Number(m[1]), opt))) return false;
+        }
+        if ((tvResOpts.length > 0 || tvConnOpts.length > 0) && !tvSlotVariantIds.has(v.id)) return false;
+        return true;
       }
     : undefined;
 
