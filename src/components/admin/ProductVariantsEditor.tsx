@@ -36,7 +36,6 @@ function SlugSearch({
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // useEffect(() => { setQuery(value); }, [value]);
 useEffect(() => {
   const syncQuery = () => setQuery(value);
   syncQuery();

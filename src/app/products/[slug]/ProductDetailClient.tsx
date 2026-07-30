@@ -268,35 +268,19 @@ function SimilarProducts({
 
   const crumbIds = breadcrumbs.map((c) => `${c.id}:${c.slug}`).join(",");
 
-  // Derive a search unit from non-color variant attribute values.
-  const variantSearchUnit = (() => {
-    const colorRe = /^colou?r$/i;
-    const unitRe = /\b(GB|MB|TB|mAh|W)\b/i;
-    for (const v of variants) {
-      for (const [key, val] of Object.entries(v.attributes)) {
-        if (colorRe.test(key)) continue;
-        const m = String(val ?? "").match(unitRe);
-        if (m) return m[1].toUpperCase() === "W" ? "W" : m[1];
-      }
-    }
-    return "";
-  })();
-
   useEffect(() => {
     const ctrl = new AbortController();
 
-    async function tryCategory(category: string, search?: string): Promise<{ items: ListCard[]; categorySlug: string } | null> {
+    async function tryCategory(category: string): Promise<{ items: ListCard[]; categorySlug: string } | null> {
       try {
-        // Fetch 20 products — enough to expand into 10+ variant cards.
-        const res = await catalogApi.listProducts({ category, ...(search ? { search } : {}), limit: 20 }, ctrl.signal);
+        const res = await catalogApi.listProducts({ category, limit: 50 }, ctrl.signal);
         return res.items.length > 0 ? { items: res.items, categorySlug: category } : null;
       } catch {
-        if (ctrl.signal.aborted) return null;
         return null;
       }
     }
 
-    async function buildCards(items: ListCard[], categorySlug: string, search?: string) {
+    async function buildCards(items: ListCard[], categorySlug: string) {
       // Determine the current variant's RAM bucket so we can filter similar-product
       // variants to the same bucket (avoids showing 8 GB cards when viewing a 6 GB variant).
       const currentVariant = variants.find((v) => v.id === currentVariantId);
@@ -329,48 +313,16 @@ function SimilarProducts({
       const otherVariants = variants.filter((v) => v.id !== currentVariantId);
       const currentProductCards: SimilarCard[] = expandToCards(currentAsListCard, otherVariants);
 
-      // ── Step 2: Fetch same-brand products from the same category ──
-      // brandKey: prefer the brand field; fall back to the first word of the product name.
-      const brandKey = currentProduct.brand?.trim() || currentProduct.name.split(/\s+/)[0];
-      let sameBrandItems: ListCard[] = [];
-
-      if (brandKey && !ctrl.signal.aborted) {
-        // Attempt 1: brand query param (exact match on backend)
-        try {
-          const brandRes = await catalogApi.listProducts(
-            { category: categorySlug, brand: brandKey, limit: 20 },
-            ctrl.signal,
-          );
-          sameBrandItems = brandRes.items.filter((p) => p.slug !== currentSlug);
-        } catch { /* non-fatal */ }
-      }
-
-      // Attempt 2: keyword search by brand name (catches cases where brand param is unsupported
-      // or brand field is null but product names contain the brand word).
-      if (sameBrandItems.length === 0 && brandKey && !ctrl.signal.aborted) {
-        try {
-          const searchRes = await catalogApi.listProducts(
-            { category: categorySlug, search: brandKey, limit: 20 },
-            ctrl.signal,
-          );
-          // Accept items whose brand matches OR whose name starts with the brand word.
-          const bk = brandKey.toLowerCase();
-          sameBrandItems = searchRes.items.filter((p) => {
-            if (p.slug === currentSlug) return false;
-            if ((p.brand ?? "").toLowerCase() === bk) return true;
-            if (p.name.toLowerCase().startsWith(bk)) return true;
-            return false;
-          });
-        } catch { /* non-fatal */ }
-      }
-      if (ctrl.signal.aborted) return;
-
-      // ── Step 3: Merge — same-brand first, then general category (de-duplicated) ──
-      const sameBrandSlugs = new Set(sameBrandItems.map((p) => p.slug));
-      const generalItems = items.filter(
-        (p) => p.slug !== currentSlug && !sameBrandSlugs.has(p.slug),
-      );
-      const mergedItems = [...sameBrandItems, ...generalItems];
+      // ── Step 2: Sort category items — same-brand first, then others ──
+      // No extra API call: use items from the initial category fetch, sorted by brand relevance.
+      const brandKey = (currentProduct.brand?.trim() || currentProduct.name.split(/\s+/)[0]).toLowerCase();
+      const mergedItems = items
+        .filter((p) => p.slug !== currentSlug)
+        .sort((a, b) => {
+          const aMatch = (a.brand ?? "").toLowerCase() === brandKey || a.name.toLowerCase().startsWith(brandKey) ? 0 : 1;
+          const bMatch = (b.brand ?? "").toLowerCase() === brandKey || b.name.toLowerCase().startsWith(brandKey) ? 0 : 1;
+          return aMatch - bMatch;
+        });
 
       const expanded = await Promise.all(
         mergedItems.map(async (product) => {
@@ -387,54 +339,48 @@ function SimilarProducts({
       );
       if (ctrl.signal.aborted) return;
 
-      // Current product's other variants first (max 3), then one card per similar product.
+      // Current product's other variants first, then all variant cards from each similar product.
       const flat = [
-        ...currentProductCards.slice(0, 3),
-        ...expanded.map((cards) => cards[0]).filter(Boolean) as SimilarCard[],
+        ...currentProductCards,
+        ...expanded.flat(),
       ];
 
       setCards(flat.slice(0, 10));
-      setHasMore(true);
-      setMoreHref(
-        search
-          ? `/products?category=${encodeURIComponent(categorySlug)}&search=${encodeURIComponent(search)}`
-          : `/products?category=${encodeURIComponent(categorySlug)}`
-      );
+      setHasMore(flat.length > 10);
+      setMoreHref(`/products?category=${encodeURIComponent(categorySlug)}`);
     }
 
     async function load() {
       const levels = [...breadcrumbs].reverse();
+      let best: { items: ListCard[]; categorySlug: string } | null = null;
+
       for (const crumb of levels) {
-        const skip = !crumb.slug || ["products", "home", "all"].includes(crumb.slug);
-        if (skip) continue;
-
-        if (variantSearchUnit) {
-          const r = await tryCategory(crumb.slug, variantSearchUnit);
-          if (r) { await buildCards(r.items, r.categorySlug, variantSearchUnit); return; }
-          if (ctrl.signal.aborted) return;
-        }
-
-        const bySlug = await tryCategory(crumb.slug);
-        if (bySlug) { await buildCards(bySlug.items, bySlug.categorySlug); return; }
+        const slugKey = crumb.slug?.toLowerCase() ?? "";
+        const nameKey = crumb.name?.toLowerCase() ?? "";
+        const skipSlug = ["products", "home", "all"];
         if (ctrl.signal.aborted) return;
 
-        if (crumb.id) {
-          if (variantSearchUnit) {
-            const r = await tryCategory(crumb.id, variantSearchUnit);
-            if (r) { await buildCards(r.items, r.categorySlug, variantSearchUnit); return; }
-            if (ctrl.signal.aborted) return;
-          }
-          const byId = await tryCategory(crumb.id);
-          if (byId) { await buildCards(byId.items, byId.categorySlug); return; }
+        // Try slug, numeric id, and name — whichever returns the most products wins.
+        const keys = [...new Set([slugKey, crumb.id, nameKey].filter(
+          (k) => k && !skipSlug.includes(k)
+        ))] as string[];
+
+        for (const key of keys) {
+          const result = await tryCategory(key);
           if (ctrl.signal.aborted) return;
+          if (result && result.items.length > (best?.items.length ?? 0)) {
+            best = result;
+          }
         }
       }
+
+      if (best) await buildCards(best.items, best.categorySlug);
     }
 
     load().finally(() => setLoading(false));
     return () => ctrl.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crumbIds, currentSlug, variantSearchUnit]);
+  }, [crumbIds, currentSlug, currentVariantId]);
 
   const onScroll = () => {
     const el = scrollRef.current;
