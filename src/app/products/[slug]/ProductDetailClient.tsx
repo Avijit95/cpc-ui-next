@@ -1244,14 +1244,7 @@ useEffect(() => {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Back button */}
-          <button
-            onClick={() => router.back()}
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-600 hover:border-[#129cd3] hover:text-[#129cd3] transition-colors shadow-sm mb-4"
-            aria-label="Go back"
-          >
-            <ArrowLeft size={17} />
-          </button>
+           
 
           {/* Product Section — sticky-left / scrollable-right */}
           <div className="flex flex-col lg:flex-row gap-6 lg:items-start mb-8">
