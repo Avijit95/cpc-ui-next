@@ -633,7 +633,7 @@ function extractTvInches(cached: ReturnType<typeof detailCache.get>, productName
 // 43" slot still shows its 75" card and the filter looks like it did nothing.
 const MAX_TV_SIZES = 5;
 
-const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false"]);
+const TV_FALSY = new Set(["no", "0", "n/a", "not available", "not applicable", "none", "false", ""]);
 
 // Which size slot a variant belongs to, matched on the per-size "Screen Size N" rows.
 // Returns null when the variant's size matches no slot — callers keep the card in that
@@ -668,46 +668,55 @@ function tvResolutionValues(specs: Record<string, unknown>, slot: number | null)
   return out;
 }
 
-// TVs store connectivity as individual per-size fields (HDMI Ports, Wi-Fi, …) plus
-// free-text boxes, NOT as one combined "Connectivity Technology" string. `slot` scopes
-// the read to a single screen size; null checks the whole product.
+// Does this unsuffixed key have "Key 2"…"Key 5" siblings? If so it is the slot-1 half
+// of a per-size spec; if not it stands for the whole product.
+function tvHasSizeSiblings(specs: Record<string, unknown>, base: string): boolean {
+  for (let i = 1; i < MAX_TV_SIZES; i++) {
+    if (`${base} ${i + 1}` in specs) return true;
+  }
+  return false;
+}
+
+// "key value" for every non-falsy spec, lowercased — scanned for connectivity keywords
+// so any naming convention admin used (HDMI Ports, No. of HDMI, Connectivity Technology…)
+// is covered without hard-coding key names. `slot` restricts it to one screen size:
+// a key suffixed " 2"…" 5" belongs to that slot alone, and an unsuffixed key belongs to
+// slot 1 when it has suffixed siblings, or to every slot when it stands alone.
+function tvSpecText(specs: Record<string, unknown>, slot: number | null): string {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(specs)) {
+    if (!v) continue;
+    if (TV_FALSY.has(String(v).trim().toLowerCase())) continue;
+    if (slot !== null) {
+      const m = k.match(/ ([2-5])$/);
+      if (m) {
+        if (Number(m[1]) - 1 !== slot) continue;
+      } else if (slot !== 0 && tvHasSizeSiblings(specs, k)) {
+        continue;
+      }
+    }
+    parts.push(`${k} ${String(v)}`.toLowerCase());
+  }
+  return parts.join(" ");
+}
+
+// `slot` scopes the check to a single screen size; null checks the whole product.
 function tvHasConnectivity(
   specs: Record<string, unknown>,
   opt: string,
   slot: number | null,
 ): boolean {
-  const slots = tvSlots(slot);
-  const specAny = (base: string): string => {
-    for (const i of slots) {
-      const v = specs[i === 0 ? base : `${base} ${i + 1}`];
-      if (v) {
-        const norm = String(v).trim().toLowerCase();
-        if (!TV_FALSY.has(norm)) return norm;
-      }
-    }
-    return "";
-  };
-  // Free-text fields that may name a connectivity type — all three are per-size keys,
-  // so they are read slot by slot too (Bluetooth is only ever entered here: the TV
-  // admin form has no Bluetooth/Ethernet/AV/RF field of its own).
-  const joinSlots = (base: string) =>
-    slots
-      .map((i) => String(specs[i === 0 ? base : `${base} ${i + 1}`] ?? "").toLowerCase())
-      .join(" ");
-  const freeText = [
-    joinSlots("Other Convenience Features"),
-    joinSlots("Supported Devices for Casting"),
-    joinSlots("Wi-Fi Type"),
-  ].join(" ");
-
-  if (opt === "HDMI")      return !!specAny("HDMI Ports") || !!specAny("HDMI") || !!specAny("No. of HDMI") || freeText.includes("hdmi");
-  if (opt === "USB")       return !!specAny("USB Ports") || !!specAny("USB") || !!specAny("No. of USB") || !!specAny("No. of USB Ports") || freeText.includes("usb");
-  if (opt === "Wi-Fi")     return !!specAny("Wi-Fi") || !!specAny("Wi-Fi Enabled") || !!specAny("Wireless") || !!specAny("WiFi") || !!specAny("Wi Fi") || !!specAny("Wi-Fi Type") || freeText.includes("wi-fi") || freeText.includes("wifi") || freeText.includes("wireless");
-  if (opt === "Bluetooth") return !!specAny("Bluetooth") || !!specAny("Bluetooth Version") || !!specAny("Bluetooth Enabled") || freeText.includes("bluetooth");
-  if (opt === "Ethernet")  return !!specAny("Ethernet") || !!specAny("LAN") || freeText.includes("ethernet") || freeText.includes("lan");
-  if (opt === "AV")        return !!specAny("AV") || !!specAny("AV In") || freeText.includes(" av") || freeText.includes("composite");
-  if (opt === "RF")        return !!specAny("RF") || !!specAny("RF In") || freeText.includes("antenna") || freeText.includes("coaxial");
-  return false;
+  const text = tvSpecText(specs, slot);
+  switch (opt) {
+    case "HDMI":      return /hdmi/.test(text);
+    case "USB":       return /\busb\b/.test(text);
+    case "Wi-Fi":     return /wi[-\s]?fi|wifi|wireless/.test(text);
+    case "Bluetooth": return /bluetooth/.test(text);
+    case "Ethernet":  return /ethernet|\blan\b/.test(text);
+    case "AV":        return /\bav\b|composite/.test(text);
+    case "RF":        return /\brf\b|antenna|coaxial/.test(text);
+    default:          return false;
+  }
 }
 
 function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>): ListCard[] {
@@ -786,8 +795,9 @@ function applyTvFilters(items: ListCard[], tvFilters: Record<string, string[]>):
     }
 
     // ── Connectivity ─────────────────────────────────────────────────────────
-    // TV stores connectivity as individual fields (HDMI Ports, Wi-Fi, USB Ports…)
-    // NOT as a combined "Connectivity Technology" string — check per-size keys.
+    // Scan ALL spec keys+values for connectivity signals so any key naming
+    // convention used in admin (HDMI Ports, No. of HDMI, Connectivity Technology…)
+    // is covered without hard-coding exact key names.
     if (connOpts.length > 0) {
       if (!connOpts.some((opt) => tvHasConnectivity(cached.specs, opt, null))) return false;
     }
@@ -820,7 +830,7 @@ function applyCameraFilters(items: ListCard[], cameraFilters: Record<string, str
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
-    if (!cached) return true; // Not yet fetched — show it until cache is ready
+    if (!cached) return false; // Not yet fetched — hide until specs are loaded
     const specs  = cached?.specs ?? {};
 
     // Helper: read a spec key across all multi-model indexes (key, "key 2", "key 3"…)
@@ -1013,7 +1023,7 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
-    if (!cached) return true; // Not yet fetched — show it until cache is ready
+    if (!cached) return false; // Not yet fetched — hide until specs are loaded
     const specs  = cached?.specs ?? {};
 
     // Connectivity — each option is a separate connectivity type.
@@ -1201,7 +1211,7 @@ function applyLensFilters(items: ListCard[], lensFilters: Record<string, string[
 
   return items.filter((item) => {
     const cached = detailCache.get(item.slug);
-    if (!cached) return true; // Not yet fetched — show until cache is ready
+    if (!cached) return false; // Not yet fetched — hide until specs are loaded
     const specs = cached?.specs ?? {};
 
     // All spec values normalised — used for broad scanning when key names are unknown
@@ -1728,8 +1738,8 @@ useEffect(() => {
     // Use apiLimiter so we don't fire all detail fetches in parallel — a burst of
     // parallel requests on a shared IP (CGNAT) triggers ThrottlerException, causing
     // some fetches to fail silently and leaving specs uncached. Uncached products
-    // pass the resolution filter unconditionally (if (!cached) return true), making
-    // the filter appear broken even when resolution values are set in admin.
+    // are hidden when a spec filter is active (return false) so the filter result
+    // is accurate — products appear as their specs load.
     // Call setCacheTick per-item (not after Promise.all) so partial cache population
     // immediately triggers a re-render and filters update as each product loads.
     uncached.forEach((item) => {
@@ -1854,6 +1864,29 @@ useEffect(() => {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraCategory, rawItems, cacheTick]);
+
+  // Dynamic TV connectivity options — derived from cached TV product specs.
+  const tvFilterOptions = useMemo(() => {
+    const TV_CONN_OPTS = ["HDMI", "Wi-Fi", "USB", "Bluetooth", "Ethernet", "AV", "RF"];
+    const connFound = new Set<string>();
+
+    if (isTvCategory) {
+      for (const item of rawItems) {
+        const cached = detailCache.get(item.slug);
+        if (!cached) continue;
+        // Same matcher the filter uses, so the offered options can't drift from it.
+        for (const opt of TV_CONN_OPTS) {
+          if (tvHasConnectivity(cached.specs, opt, null)) connFound.add(opt);
+        }
+      }
+    }
+
+    return {
+      connectivity: TV_CONN_OPTS.filter((o) => connFound.has(o)),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTvCategory, rawItems, cacheTick]);
+
   const sortValue = sortOptions.find((o) => o.label === sortLabel)?.value;
   const specFiltered: ListCard[] = isPhoneCategory
     ? applyPhoneFilters(priceFilteredItems, phoneFilters)
@@ -2172,15 +2205,22 @@ useEffect(() => {
       ))}
 
       {/* TV-specific filters — shown only for TV category */}
-      {isTvCategory && TV_FILTER_GROUPS.map((group) => (
-        <FilterSection
-          key={group.key}
-          label={group.label}
-          options={group.options}
-          selected={tvFilters[group.key] ?? []}
-          onChange={(vals) => setTvFilter(group.key, vals)}
-        />
-      ))}
+      {isTvCategory && TV_FILTER_GROUPS.map((group) => {
+        const dynamic = (tvFilterOptions as Record<string, string[]>)[group.key];
+        // Use dynamic options only when we have cache data and found at least one match.
+        // Fall back to the static group.options while cache is still loading.
+        const opts = dynamic && dynamic.length > 0 ? dynamic : group.options;
+        if (opts.length === 0) return null;
+        return (
+          <FilterSection
+            key={group.key}
+            label={group.label}
+            options={opts}
+            selected={tvFilters[group.key] ?? []}
+            onChange={(vals) => setTvFilter(group.key, vals)}
+          />
+        );
+      })}
 
       {/* Camera-specific filters — shown only for camera category */}
       {isCameraCategory && CAMERA_FILTER_GROUPS.map((group) => {
@@ -2349,7 +2389,7 @@ useEffect(() => {
           <div className="flex gap-6">
             {/* Sidebar — desktop */}
             <div className="hidden lg:block w-56 flex-shrink-0">
-              <div className="bg-white border border-gray-200 rounded-lg p-5 sticky top-24 z-[999] max-h-[calc(100vh-7rem)] overflow-y-auto">
+              <div className="filter-sidebar bg-white/55 backdrop-blur-md border border-white/50 shadow-md rounded-lg p-5 sticky top-24 z-[999] max-h-[calc(100vh-7rem)] overflow-y-auto">
                 {filterSidebar}
               </div>
             </div>

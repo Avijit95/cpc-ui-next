@@ -18,7 +18,7 @@
 }
 
 body {
-  background: radial-gradient(circle, rgba(18, 156, 211, 0.08) 100%, rgba(235, 247, 251, 1) 50%, rgba(18, 156, 211, 0.08) 0%);
+  background: radial-gradient(circle,rgba(18, 156, 211, 0.05) 100%, rgba(255, 255, 255, 1) 50%, rgba(18, 156, 211, 0.05) 0%);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
@@ -261,6 +261,38 @@ html {
   border: 2px solid #ffffff;
   box-shadow: 0 0 0 1px #cbd5e1;
   cursor: pointer;
+}
+
+.backdrop-blur-2xl {
+  backdrop-filter: blur(2px);
+}
+
+/* Override browser autofill white background on admin glass inputs */
+.glass-input:-webkit-autofill,
+.glass-input:-webkit-autofill:hover,
+.glass-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px rgba(255,255,255,0.08) inset !important;
+  -webkit-text-fill-color: #e5e7eb !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Filter sidebar — thin thematic scrollbar */
+.filter-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: #b6bbbd94 transparent;
+}
+.filter-sidebar::-webkit-scrollbar {
+  width: 1px;
+}
+.filter-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.filter-sidebar::-webkit-scrollbar-thumb {
+  background: #b6bbbd94;
+  border-radius: 9999px;
+}
+.filter-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #b6bbbd;
 }
 
 .bg-black{

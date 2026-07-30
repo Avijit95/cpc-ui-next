@@ -100,25 +100,25 @@ function AdminLoginInner() {
         </div>
 
         {bootstrapping ? (
-          <div className="bg-white rounded-2xl shadow-2xl p-12 flex items-center justify-center">
+          <div className="bg-white/8 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-2xl shadow-black/40 p-12 flex items-center justify-center">
             <Loader2 className="animate-spin text-[#129cd3]" size={24} />
           </div>
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="bg-white rounded-2xl shadow-2xl p-8 space-y-5"
+            className="bg-white/8 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-2xl shadow-black/40 p-8 space-y-5"
           >
             {errorMsg && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 whitespace-pre-line">
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 backdrop-blur-sm px-4 py-3 text-sm text-red-300 whitespace-pre-line">
                 {errorMsg}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-200 mb-2">
                 Email Address
               </label>
-              <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+              <div className="flex items-center border border-white/20 bg-white/10 backdrop-blur-[2px] focus-within:border-[#129cd3]/60 focus-within:bg-white/15 rounded-xl overflow-hidden transition-all">
                 <span className="px-3 py-3 text-gray-400 flex-shrink-0">
                   <Mail size={17} />
                 </span>
@@ -128,16 +128,16 @@ function AdminLoginInner() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@example.com"
                   autoComplete="username"
-                  className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
+                  className="glass-input flex-1 px-2 py-3 text-sm outline-none text-gray-100 placeholder:text-gray-400 bg-transparent"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-200 mb-2">
                 Password
               </label>
-              <div className="flex items-center border-2 border-gray-200 focus-within:border-[#129cd3] rounded-xl overflow-hidden transition-colors">
+              <div className="flex items-center border border-white/20 bg-white/10 backdrop-blur-[2px] focus-within:border-[#129cd3]/60 focus-within:bg-white/15 rounded-xl overflow-hidden transition-all">
                 <span className="px-3 py-3 text-gray-400 flex-shrink-0">
                   <Lock size={17} />
                 </span>
@@ -147,12 +147,12 @@ function AdminLoginInner() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   autoComplete="current-password"
-                  className="flex-1 px-2 py-3 text-sm outline-none text-gray-800"
+                  className="glass-input flex-1 px-2 py-3 text-sm outline-none text-gray-100 placeholder:text-gray-400 bg-transparent"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
-                  className="px-3 text-gray-400 hover:text-gray-600 flex-shrink-0"
+                  className="px-3 text-gray-400 hover:text-gray-600 flex-shrink-0 transition-colors"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -161,10 +161,10 @@ function AdminLoginInner() {
             </div>
 
             <div className="flex items-center justify-between text-xs">
-              <label className="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
+              <label className="flex items-center gap-2 text-gray-300 cursor-pointer select-none">
                 <input type="checkbox" className="accent-[#129cd3]" /> Remember me
               </label>
-              <a href="#" className="text-[#129cd3] hover:underline font-semibold">
+              <a href="#" className="text-[#129cd3] hover:text-[#4db8e0] hover:underline font-semibold transition-colors">
                 Forgot password?
               </a>
             </div>
@@ -172,7 +172,7 @@ function AdminLoginInner() {
             <button
               type="submit"
               disabled={busy || !email || !password}
-              className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-[#129cd3]/30 flex items-center justify-center gap-2"
+              className="w-full bg-[#129cd3] hover:bg-[#0e87b5] disabled:bg-white/10 disabled:text-gray-500 text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2"
             >
               {busy ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -183,7 +183,7 @@ function AdminLoginInner() {
               )}
             </button>
 
-            <p className="text-center text-xs text-gray-400">
+            <p className="text-center text-xs text-gray-500">
               Not an admin?{" "}
               <Link
                 href="/login"
