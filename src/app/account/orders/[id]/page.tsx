@@ -24,6 +24,7 @@ import {
   Loader2,
   X,
   Clock,
+  Package,
 } from "lucide-react";
 
 type SidebarItem = {
@@ -443,13 +444,25 @@ export default function OrderDetailPage() {
                           return (
                             <tr key={idx} className="border-t border-gray-100">
                               <td className="px-5 py-3 text-gray-800">
-                                <div className="font-medium">{it.productName}</div>
-                                {it.variantSku && <div className="text-xs text-gray-500 mt-0.5">SKU: {it.variantSku}</div>}
-                                {(it.customerCouponName || it.retailCouponName) && (
-                                  <div className="text-xs text-green-700 mt-0.5">
-                                    {it.customerCouponName}{it.customerCouponName && it.retailCouponName ? " + " : null}{it.retailCouponName}
+                                <div className="flex items-center gap-3">
+                                  {it.primaryImageUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={it.primaryImageUrl} alt="" className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0" />
+                                  ) : (
+                                    <div className="w-10 h-10 bg-gray-50 rounded border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                      <Package size={18} className="text-gray-300" />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="font-medium">{it.productName}</div>
+                                    {it.variantSku && <div className="text-xs text-gray-500 mt-0.5">SKU: {it.variantSku}</div>}
+                                    {(it.customerCouponName || it.retailCouponName) && (
+                                      <div className="text-xs text-green-700 mt-0.5">
+                                        {it.customerCouponName}{it.customerCouponName && it.retailCouponName ? " + " : null}{it.retailCouponName}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                </div>
                               </td>
                               <td className="px-5 py-3 text-center text-gray-600">{it.qty}</td>
                               <td className="px-5 py-3 text-right text-gray-600">{formatPrice(it.unitPrice)}</td>
@@ -472,13 +485,25 @@ export default function OrderDetailPage() {
                       const discount = it.customerDiscount + it.retailDiscount;
                       return (
                         <div key={idx} className="px-4 py-3 text-xs">
-                          <p className="font-semibold text-gray-800 text-sm">{it.productName}</p>
-                          {it.variantSku && <p className="text-gray-400 mt-0.5">SKU: {it.variantSku}</p>}
-                          {(it.customerCouponName || it.retailCouponName) && (
-                            <p className="text-green-700 mt-0.5">
-                              {it.customerCouponName}{it.customerCouponName && it.retailCouponName ? " + " : null}{it.retailCouponName}
-                            </p>
-                          )}
+                          <div className="flex items-start gap-3">
+                            {it.primaryImageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={it.primaryImageUrl} alt="" className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 bg-gray-50 rounded border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                <Package size={18} className="text-gray-300" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-gray-800 text-sm">{it.productName}</p>
+                              {it.variantSku && <p className="text-gray-400 mt-0.5">SKU: {it.variantSku}</p>}
+                              {(it.customerCouponName || it.retailCouponName) && (
+                                <p className="text-green-700 mt-0.5">
+                                  {it.customerCouponName}{it.customerCouponName && it.retailCouponName ? " + " : null}{it.retailCouponName}
+                                </p>
+                              )}
+                            </div>
+                          </div>
                           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
                             <span className="text-gray-400 uppercase font-semibold">Qty</span>
                             <span className="text-right">{it.qty}</span>
