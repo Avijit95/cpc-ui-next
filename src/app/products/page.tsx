@@ -251,6 +251,66 @@ const SPEAKER_FILTER_GROUPS: SpeakerFilterGroup[] = [
   },
 ];
 
+// Speakers keep one set of specs per model, keyed by suffix: "Battery Life" for model 1,
+// "Battery Life 2" for model 2, … up to 5 models (see SPEAKER_PER_MODEL_BASE_KEYS in
+// ProductForm). Every speaker spec lookup must read all model slots — reading only the
+// unsuffixed key hides products whose model 2+ is the one that matches the filter.
+const MAX_SPEAKER_MODELS = 5;
+
+function speakerSpecAt(specs: Record<string, unknown>, base: string, idx: number): unknown {
+  return specs[idx === 0 ? base : `${base} ${idx + 1}`];
+}
+
+// Every non-empty value a per-model spec holds across the product's models.
+// Falls back to [""] when nothing is set so the "value absent" branches below
+// (e.g. Voice Assistant "None") behave exactly as they did for a single lookup.
+function speakerSpecAll(specs: Record<string, unknown>, base: string): unknown[] {
+  const out: unknown[] = [];
+  for (let i = 0; i < MAX_SPEAKER_MODELS; i++) {
+    const v = speakerSpecAt(specs, base, i);
+    if (v !== undefined && String(v).trim() !== "") out.push(v);
+  }
+  return out.length > 0 ? out : [""];
+}
+
+// "18 Hours" → 18, "7.5 hours " → 7.5, "Up to 20 Hours" → 20, "2000 mAh" → null.
+// A bare number is accepted here because the caller has already picked a battery-life key.
+function parseBatteryHours(v: unknown): number | null {
+  const s = String(v ?? "");
+  const explicit = s.match(/\b(\d+(?:\.\d+)?)\s*[-–]?\s*(h\b|hr\b|hrs\b|hours?)\b/i);
+  const plain = s.match(/([\d.]+)/);
+  const n = explicit ? parseFloat(explicit[1]) : plain ? parseFloat(plain[1]) : NaN;
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
+}
+
+// Buckets are upper-inclusive and disjoint, so exactly 20 h belongs to "10–20 Hours".
+function matchBatteryLife(hrs: number, opt: string): boolean {
+  if (opt === "Up to 10 Hours") return hrs <= 10;
+  if (opt === "10–20 Hours") return hrs > 10 && hrs <= 20;
+  if (opt === "20–30 Hours") return hrs > 20 && hrs <= 30;
+  if (opt === "Above 30 Hours") return hrs > 30;
+  return false;
+}
+
+// Which model slot a variant belongs to, matched on the per-model "Model N" spec rows.
+// The name match must win over position: a product can carry several variants for the
+// same model (e.g. Stone 1300 Pro has 3 variants across 2 models).
+function speakerModelIndex(
+  specs: Record<string, unknown>,
+  variant: Variant,
+  variants: Variant[],
+): number {
+  const vm = String(variant.attributes?.model ?? "").toLowerCase().trim();
+  if (vm) {
+    for (let i = 0; i < MAX_SPEAKER_MODELS; i++) {
+      const m = String(speakerSpecAt(specs, "Model", i) ?? "").toLowerCase().trim();
+      if (m && m === vm) return i;
+    }
+  }
+  const pos = variants.findIndex((v) => v.id === variant.id);
+  return pos >= 0 ? pos : 0;
+}
+
 // ── TV-specific filter groups ─────────────────────────────────────────────────
 type TvFilterGroup = { key: string; label: string; options: string[] };
 
@@ -903,45 +963,59 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
     if (!cached) return false; // Not yet fetched — hide until specs are loaded
     const specs  = cached?.specs ?? {};
 
-    // Connectivity — each option is a separate connectivity type
+    // Connectivity — each option is a separate connectivity type.
+    // A product qualifies when ANY of its models offers the connection.
     if (connOpts.length > 0) {
+      const anyYes = (base: string) =>
+        speakerSpecAll(specs, base).some((v) => norm(v) === "yes");
       const has = (opt: string): boolean => {
         const o = norm(opt);
-        if (o === "bluetooth")  return norm(specs["Bluetooth"]) === "yes";
-        if (o === "wi fi")      return norm(specs["Wi-Fi"]) === "yes";
-        if (o === "aux")        return norm(specs["AUX Input"]) === "yes";
-        if (o === "usb")        { const uv = norm(specs["USB Port"]); return !!uv && uv !== "no"; }
-        if (o === "hdmi arc")   return norm(specs["HDMI"]) === "yes";
-        if (o === "optical")    return norm(specs["Optical Input"]) === "yes";
-        if (o === "rca")        return norm(specs["RCA Input"]) === "yes";
+        if (o === "bluetooth")  return anyYes("Bluetooth");
+        if (o === "wi fi")      return anyYes("Wi-Fi");
+        if (o === "aux")        return anyYes("AUX Input");
+        if (o === "usb")        return speakerSpecAll(specs, "USB Port").some((v) => {
+          const uv = norm(v);
+          return !!uv && uv !== "no";
+        });
+        if (o === "hdmi arc")   return anyYes("HDMI");
+        if (o === "optical")    return anyYes("Optical Input");
+        if (o === "rca")        return anyYes("RCA Input");
         return false;
       };
       if (!connOpts.some(has)) return false;
     }
 
-    // Bluetooth Version
+    // Bluetooth Version — match when any model's version qualifies
     if (btOpts.length > 0) {
-      const ver = parseBtVersion(specs["Bluetooth Version"]);
-      if (ver === null) return false;
-      if (!btOpts.some((opt) => {
+      const versions = speakerSpecAll(specs, "Bluetooth Version")
+        .map(parseBtVersion)
+        .filter((v): v is number => v !== null);
+      if (versions.length === 0) return false;
+      if (!versions.some((ver) => btOpts.some((opt) => {
         if (opt === "5.4 & Above") return ver >= 5.4;
         const target = parseBtVersion(opt);
         return target !== null && Math.abs(ver - target) < 0.05;
-      })) return false;
+      }))) return false;
     }
 
-    // Voice Assistant
+    // Voice Assistant — match when any model supports the selected assistant
     if (vaOpts.length > 0) {
-      const raw = norm(specs["Voice Assistant Support"] ?? "");
-      if (!vaOpts.some((opt) => {
+      const raws = speakerSpecAll(specs, "Voice Assistant Support").map((v) => norm(v));
+      if (!raws.some((raw) => vaOpts.some((opt) => {
         const o = norm(opt);
         if (o === "none") return !raw || raw === "none" || raw === "no";
         return raw.includes(o);
-      })) return false;
+      }))) return false;
     }
 
-    // Battery Life — multi-strategy lookup
+    // Battery Life — one value per model ("Battery Life", "Battery Life 2", …).
+    // The product qualifies when ANY model's battery life falls in a selected bucket;
+    // the per-variant filter below then hides the model cards that don't match.
     if (battOpts.length > 0) {
+      let hrsList = speakerSpecAll(specs, "Battery Life")
+        .map(parseBatteryHours)
+        .filter((n): n is number => n !== null);
+
       // Key patterns that suggest playback/battery duration
       const BATT_KEY_RE = /battery|playback|playtime|play\s*time|backup|hours|hour|standby|music.*time|run.*time|endur|duration|life/i;
       // Key patterns to skip (capacity/power/physical specs)
@@ -949,6 +1023,9 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
       // Value pattern: number followed by an optional hyphen/space then a time unit
       const HOUR_VAL_RE = /\b(\d+(?:\.\d+)?)\s*[-–]?\s*(h\b|hr\b|hrs\b|hours?)\b/i;
 
+      // Heuristic fallback below, used only for products with no "Battery Life" row at
+      // all (legacy / imported specs that keep the figure under a non-standard key).
+      const useFallback = hrsList.length === 0;
       let hrs: number | null = null;
 
       // Extract hour value from a value that EXPLICITLY has a time unit ("28 hrs", "28-hour", etc.)
@@ -961,7 +1038,7 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
 
       // Pass 1: key suggests duration — also trust a plain number (no unit) from the value,
       // but skip values that look like mAh capacity or voltage (not playtime).
-      for (const [k, v] of Object.entries(specs)) {
+      for (const [k, v] of useFallback ? Object.entries(specs) : []) {
         if (BATT_KEY_RE.test(k) && !SKIP_KEY_RE.test(k)) {
           const raw = String(v ?? "");
           if (/mah/i.test(raw) || /^\s*[\d.]+\s*v\b/i.test(raw)) continue;
@@ -975,7 +1052,7 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
 
       // Pass 2: value explicitly has a time unit ("28 hrs", "28h", "28-hour", "28 hours")
       // — don't trust plain numbers here since any spec might have a plain number
-      if (hrs === null) {
+      if (useFallback && hrs === null) {
         for (const [k, v] of Object.entries(specs)) {
           if (SKIP_KEY_RE.test(k)) continue;
           const n = extractExplicitHrs(v);
@@ -984,7 +1061,7 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
       }
 
       // Pass 3: key contains "time" or "life" — trust a plain number as hours
-      if (hrs === null) {
+      if (useFallback && hrs === null) {
         for (const [k, v] of Object.entries(specs)) {
           if (SKIP_KEY_RE.test(k)) continue;
           if (/time|life/i.test(k)) {
@@ -994,29 +1071,25 @@ function applySpeakerFilters(items: ListCard[], speakerFilters: Record<string, s
         }
       }
 
+      if (hrs !== null) hrsList = [hrs];
+
       // If battery info genuinely not found, exclude the product — it has no battery life spec.
-      if (hrs === null) return false;
+      if (hrsList.length === 0) return false;
 
-      if (!battOpts.some((opt) => {
-        if (opt === "Up to 10 Hours") return hrs! <= 10;
-        if (opt === "10\u201320 Hours") return hrs! > 10 && hrs! <= 20;
-        if (opt === "20\u201330 Hours") return hrs! > 20 && hrs! <= 30;
-        if (opt === "Above 30 Hours")  return hrs! > 30;
-        return false;
-      })) return false;
+      if (!hrsList.some((h) => battOpts.some((opt) => matchBatteryLife(h, opt)))) return false;
     }
 
-    // Water Resistance
+    // Water Resistance — match when any model carries the selected rating
     if (waterOpts.length > 0) {
-      const raw = norm(specs["Water Resistance Rating"] ?? "");
-      if (!waterOpts.some((opt) => raw.includes(norm(opt)))) return false;
+      const raws = speakerSpecAll(specs, "Water Resistance Rating").map((v) => norm(v));
+      if (!raws.some((raw) => waterOpts.some((opt) => raw.includes(norm(opt))))) return false;
     }
 
-    // Color — check spec then variant attributes
+    // Color — check every model's spec colour, then variant attributes
     if (colorOpts.length > 0) {
-      const specColor = norm(specs["Color"] ?? "");
+      const specColors = speakerSpecAll(specs, "Color").map((v) => norm(v)).filter(Boolean);
       const variantColors = cached?.variants.map((v) => norm(v.attributes.color ?? "")) ?? [];
-      const allColors = specColor ? [specColor, ...variantColors] : variantColors;
+      const allColors = [...specColors, ...variantColors];
       if (!colorOpts.some((opt) => allColors.some((c) => c.includes(norm(opt))))) return false;
     }
 
@@ -1784,34 +1857,7 @@ useEffect(() => {
   const total = data?.total ?? 0;
   const brandFacets: BrandFacet[] = data?.facets.brands ?? [];
 
-  // Count visible cards: for products with fetched variants, count variant cards.
-  // Products not yet fetched count as 1 card each.
-  // Applies the same price filter as ProductCardExpander so the count matches what renders.
   const isPriceActive = minPrice > PRICE_FLOOR || maxPrice < PRICE_CEIL;
-  const visibleCardCount = items.reduce((sum, p) => {
-    const cached = detailCache.get(p.slug);
-    if (!cached || cached.variants.length === 0) return sum + 1;
-    // Camera: one card per lens-type group (conservative — don't price-filter camera groups)
-    const isCamera = cached.variants.some((v) => "lensIncluded" in v.attributes);
-    if (isCamera) {
-      const groups = new Set(cached.variants.map((v) =>
-        String(v.attributes.lensIncluded) === "Yes"
-          ? `lens:${String(v.attributes.lens ?? "")}`.toLowerCase()
-          : `body-only:${String(v.attributes.color ?? "").toLowerCase().trim()}`
-      ));
-      return sum + groups.size;
-    }
-    if (!isPriceActive) return sum + cached.variants.length;
-    const priceFiltered = cached.variants.filter((v) => {
-      const pr = v.pricing.finalPrice;
-      if (pr > 0) {
-        if (minPrice > PRICE_FLOOR && pr < minPrice) return false;
-        if (maxPrice < PRICE_CEIL && pr > maxPrice) return false;
-      }
-      return true;
-    });
-    return sum + priceFiltered.length;
-  }, 0);
 
   // Build a per-variant filter for TV size so ProductCardExpander shows only matching sizes
   const tvSizeOpts = tvFilters["screenSize"] ?? [];
@@ -1848,13 +1894,69 @@ useEffect(() => {
   // variants matching the selected color — same-brand different-model products each
   // independently pass the product-level filter; this narrows which variant cards appear.
   const speakerColorOpts = isSpeakerCategory ? (speakerFilters["color"] ?? []) : [];
-  const speakerVariantFilter = speakerColorOpts.length > 0
+
+  // Battery life is a per-model spec and speakers render one card per model, so the
+  // battery filter must also drop the model cards that don't match — otherwise a
+  // product that qualifies on model 2 would still show model 1's card. The matching
+  // variant ids are precomputed because variantFilter receives no product context.
+  const speakerBattOpts = isSpeakerCategory ? (speakerFilters["batteryLife"] ?? []) : [];
+  const speakerBattVariantIds = new Set<string>();
+  if (speakerBattOpts.length > 0) {
+    for (const item of rawItems) {
+      const cached = detailCache.get(item.slug);
+      if (!cached) continue;
+      for (const v of cached.variants) {
+        const idx = speakerModelIndex(cached.specs, v, cached.variants);
+        const hrs = parseBatteryHours(speakerSpecAt(cached.specs, "Battery Life", idx));
+        // Unknown battery life for this model — keep the card rather than hide it.
+        if (hrs === null || speakerBattOpts.some((opt) => matchBatteryLife(hrs, opt))) {
+          speakerBattVariantIds.add(v.id);
+        }
+      }
+    }
+  }
+
+  const speakerVariantFilter = speakerColorOpts.length > 0 || speakerBattOpts.length > 0
     ? (v: import("@/lib/api").Variant) => {
-        const vColor = String(v.attributes["color"] ?? "").toLowerCase().trim();
-        if (!vColor) return true; // no color attribute — always show
-        return speakerColorOpts.some((opt) => vColor.includes(opt.toLowerCase().trim()));
+        if (speakerColorOpts.length > 0) {
+          const vColor = String(v.attributes["color"] ?? "").toLowerCase().trim();
+          // no color attribute — always show
+          if (vColor && !speakerColorOpts.some((opt) => vColor.includes(opt.toLowerCase().trim()))) return false;
+        }
+        if (speakerBattOpts.length > 0 && !speakerBattVariantIds.has(v.id)) return false;
+        return true;
       }
     : undefined;
+
+  // Count visible cards: for products with fetched variants, count variant cards.
+  // Products not yet fetched count as 1 card each.
+  // Applies the same price and per-variant filters as the grid below so the count
+  // matches what actually renders.
+  const countedVariantFilter = tvVariantFilter ?? phoneVariantFilter ?? speakerVariantFilter;
+  const visibleCardCount = items.reduce((sum, p) => {
+    const cached = detailCache.get(p.slug);
+    if (!cached || cached.variants.length === 0) return sum + 1;
+    // Camera: one card per lens-type group (conservative — don't price-filter camera groups)
+    const isCamera = cached.variants.some((v) => "lensIncluded" in v.attributes);
+    if (isCamera) {
+      const groups = new Set(cached.variants.map((v) =>
+        String(v.attributes.lensIncluded) === "Yes"
+          ? `lens:${String(v.attributes.lens ?? "")}`.toLowerCase()
+          : `body-only:${String(v.attributes.color ?? "").toLowerCase().trim()}`
+      ));
+      return sum + groups.size;
+    }
+    const visible = cached.variants.filter((v) => {
+      const pr = v.pricing.finalPrice;
+      if (isPriceActive && pr > 0) {
+        if (minPrice > PRICE_FLOOR && pr < minPrice) return false;
+        if (maxPrice < PRICE_CEIL && pr > maxPrice) return false;
+      }
+      if (countedVariantFilter && !countedVariantFilter(v)) return false;
+      return true;
+    });
+    return sum + visible.length;
+  }, 0);
 
   const setPhoneFilter = (key: string, values: string[]) => {
     setPhoneFilters((prev) => ({ ...prev, [key]: values }));
