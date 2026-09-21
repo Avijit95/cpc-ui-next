@@ -217,8 +217,8 @@ function LoginPageInner() {
       });
       const btn = document.getElementById("gis-btn");
       if (btn) {
-        // panel p-6 (48px) + card p-8 (64px) = 112px total horizontal padding on mobile
-        const width = Math.max(220, Math.min(360, window.innerWidth - 112));
+        // max-w-md (448px) - card p-8 (64px) = 384px max content width
+        const width = Math.max(220, Math.min(384, window.innerWidth - 112));
         window.google.accounts.id.renderButton(btn, {
           theme: "outline",
           size: "large",
