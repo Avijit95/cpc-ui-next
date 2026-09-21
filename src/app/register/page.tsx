@@ -307,7 +307,7 @@ function RegisterPageInner() {
       </div>
 
       {/* ── Right Panel ── */}
-      <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12">
+      <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12 w-full">
         <div className="lg:hidden mb-8">
           <Link href="/">
             <Image src="/cpc-logo.png" alt="CPC" width={140} height={48} />
