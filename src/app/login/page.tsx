@@ -217,8 +217,9 @@ function LoginPageInner() {
       });
       const btn = document.getElementById("gis-btn");
       if (btn) {
-        // max-w-md (448px) - card p-8 (64px) = 384px max content width
-        const width = Math.max(220, Math.min(384, window.innerWidth - 112));
+        btn.innerHTML = ""; // clear any previous render so width is always applied fresh
+        const containerWidth = btn.parentElement?.clientWidth ?? window.innerWidth - 112;
+        const width = Math.max(220, Math.min(384, containerWidth));
         window.google.accounts.id.renderButton(btn, {
           theme: "outline",
           size: "large",
