@@ -282,7 +282,7 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           {/* Logo */}
           <Link href="/" className="flex items-center flex-shrink-0">
-            <Image src="/logo-light.png" alt="CPC Logo" width={140} height={50} priority />
+            <Image src="/cpc-logo.png" alt="CPC Logo" width={140} height={50} priority />
           </Link>
 
           {/* Search — drops to its own full-width row below md, inline from md up */}
@@ -366,8 +366,9 @@ export default function Header({ initialNavLinks }: HeaderProps = {}) {
               <Phone size={18} className="text-white" />
             </div>
             <div>
-              <p className="text-xs text-gray-600">Call us:</p>
-              <p className="text-sm font-semibold text-gray-800">+91 98765 43210</p>
+              <a href="tel:+918233337131" className="block text-sm font-semibold text-gray-800 hover:text-[#129cd3] transition-colors">+91 8233337131</a>
+              <a href="tel:+918233338727" className="block text-sm font-semibold text-gray-800 hover:text-[#129cd3] transition-colors">+91 8233338727</a>
+              {/* <a href="tel:+918233330402" className="block text-sm font-semibold text-gray-800 hover:text-[#129cd3] transition-colors">+91 8233330402</a> */}
             </div>
           </div>
 

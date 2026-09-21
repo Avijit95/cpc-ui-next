@@ -92,11 +92,21 @@ export default function Footer() {
           <p className="text-xs text-gray-400 mb-3 leading-relaxed">
             Your trusted destination for premium electronics at the best prices in India.
           </p>
-          <p className="text-xs mb-1">
-            <span className="text-gray-300 font-semibold">Phone:</span> +91 98765 43210
+          <p className="text-xs mb-0.5">
+            <span className="text-gray-300 font-semibold">Phone:</span>{" "}
+            <a href="tel:+918233337131" className="hover:text-[#129cd3] transition-colors">+91 8233337131</a>
+          </p>
+          <p className="text-xs mb-0.5">
+            <span className="text-gray-300 font-semibold invisible">Phone:</span>{" "}
+            <a href="tel:+918233338727" className="hover:text-[#129cd3] transition-colors">+91 8233338727</a>
           </p>
           <p className="text-xs mb-1">
-            <span className="text-gray-300 font-semibold">Email:</span> support@cellphonecrowd.in
+            <span className="text-gray-300 font-semibold invisible">Phone:</span>{" "}
+            <a href="tel:+918233330402" className="hover:text-[#129cd3] transition-colors">+91 8233330402</a>
+          </p>
+          <p className="text-xs mb-1">
+            <span className="text-gray-300 font-semibold">Email:</span>{" "}
+            <a href="mailto:support@cellphonecrowd.in" className="hover:text-[#129cd3] transition-colors">support@cellphonecrowd.in</a>
           </p>
           <p className="text-xs mb-1">
             <span className="text-gray-300 font-semibold">Hours:</span> Mon–Fri, 9am–6pm IST
