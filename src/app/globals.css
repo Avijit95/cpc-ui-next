@@ -23,6 +23,13 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Google GIS button — override SDK's hardcoded 360px inline width */
+#gis-btn > div,
+#gis-btn [role="button"] {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
 /* Gradient glow — fixed to viewport (never scrolls), overall opacity 0.3. */
 body::before {
   content: '';

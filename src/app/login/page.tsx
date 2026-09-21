@@ -267,7 +267,7 @@ function LoginPageInner() {
       </div>
 
       {/* ── Right Panel ── */}
-      <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12">
+      <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12 w-full">
         <div className="lg:hidden mb-8">
           <Link href="/">
             <Image src="/cpc-logo.png" alt="CPC" width={140} height={48} />
@@ -423,7 +423,7 @@ function LoginPageInner() {
                   </p>
 
                   {GOOGLE_CLIENT_ID ? (
-                    <div className="flex justify-center"><div id="gis-btn" /></div>
+                    <div><div id="gis-btn" /></div>
                   ) : (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
                       Set <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in <code className="font-mono">.env.local</code> to enable Google sign-in.
