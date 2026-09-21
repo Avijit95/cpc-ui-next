@@ -21,7 +21,6 @@ body {
   background: radial-gradient(circle,rgba(18, 156, 211, 0.05) 100%, rgba(255, 255, 255, 1) 50%, rgba(18, 156, 211, 0.05) 0%);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  overflow-x: hidden;
 }
 
 /* Gradient glow — fixed to viewport (never scrolls), overall opacity 0.3. */
