@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import {
   Mail, Lock, Phone, Eye, EyeOff, ArrowRight, Loader2,
   ShoppingBag, Shield, Zap, Headphones,
@@ -59,6 +59,7 @@ function LoginPageInner() {
   const next = searchParams.get("next") || "/";
   const { setSession, status, user } = useAuth();
 
+  const googleContainerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>("phone");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -217,10 +218,11 @@ function LoginPageInner() {
       });
       const btn = document.getElementById("gis-btn");
       if (btn) {
+        const containerWidth = googleContainerRef.current?.clientWidth;
         window.google.accounts.id.renderButton(btn, {
           theme: "outline",
           size: "large",
-          width: 360,
+          width: containerWidth || 360,
         });
       }
     }
@@ -228,7 +230,7 @@ function LoginPageInner() {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex overflow-x-hidden">
       {/* ── Left Panel ── */}
       <div className="hidden lg:flex flex-col justify-between w-[45%] bg-[#129cd3] p-12 relative overflow-hidden">
         <div className="absolute -top-20 -left-20 w-80 h-80 bg-white/10 rounded-full" />
@@ -267,7 +269,7 @@ function LoginPageInner() {
       </div>
 
       {/* ── Right Panel ── */}
-      <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12">
+      <div className="flex-1 flex flex-col justify-center items-center bg-gray-50 p-6 sm:p-12 overflow-x-hidden">
         <div className="lg:hidden mb-8">
           <Link href="/">
             <Image src="/cpc-logo.png" alt="CPC" width={140} height={48} />
@@ -423,7 +425,7 @@ function LoginPageInner() {
                   </p>
 
                   {GOOGLE_CLIENT_ID ? (
-                    <div className="flex justify-center"><div id="gis-btn" /></div>
+                    <div ref={googleContainerRef} className="flex justify-center w-full overflow-hidden"><div id="gis-btn" /></div>
                   ) : (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
                       Set <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in <code className="font-mono">.env.local</code> to enable Google sign-in.
