@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { isApiError, ordersApi, paymentsApi } from "@/lib/api";
 import type { OrderDetail, OrderStatus, ReturnReason } from "@/lib/api";
+import { openCashfreeCheckout } from "@/lib/payments/cashfree";
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -235,8 +236,7 @@ export default function OrderDetailPage() {
     setPayBusy(true);
     setPayError(null);
     try {
-      const { redirectUrl } = await paymentsApi.initiate(id);
-      window.location.href = redirectUrl;
+      await openCashfreeCheckout(await paymentsApi.initiate(id));
     } catch (err) {
       setPayError(
         isApiError(err) ? err.displayMessage : "Could not start payment",
