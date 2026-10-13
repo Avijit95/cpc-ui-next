@@ -661,9 +661,11 @@ export type CheckoutResponse = {
   grandTotal: number;
 };
 
-// Pine Labs hosted-checkout payment flow.
+// Cashfree hosted-checkout payment flow. `mode` tells the browser SDK whether
+// to open the sandbox or the live checkout.
 export type PaymentInitiateResponse = {
-  redirectUrl: string;
+  paymentSessionId: string;
+  mode: "sandbox" | "production";
 };
 
 export type PaymentStatusResponse = {

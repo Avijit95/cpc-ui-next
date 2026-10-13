@@ -21,6 +21,7 @@ import type {
   StateCode,
   StockShortage,
 } from "@/lib/api";
+import { openCashfreeCheckout } from "@/lib/payments/cashfree";
 import {
   ChevronLeft,
   ChevronRight,
@@ -307,11 +308,10 @@ function CheckoutContent() {
         } catch { /* sessionStorage unavailable — skip */ }
       }
       // Order created (PENDING_PAYMENT) → start payment and hand off to the
-      // Pine Labs hosted page. If initiation fails, send the user to the order
+      // Cashfree hosted page. If initiation fails, send the user to the order
       // detail page where they can retry payment.
       try {
-        const { redirectUrl } = await paymentsApi.initiate(resp.orderId);
-        window.location.href = redirectUrl;
+        await openCashfreeCheckout(await paymentsApi.initiate(resp.orderId));
         return;
       } catch {
         router.replace(

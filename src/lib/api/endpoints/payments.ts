@@ -5,7 +5,7 @@ import type {
 } from "../types";
 
 export const paymentsApi = {
-  // Start (or retry) payment for an order → Pine Labs hosted-page URL.
+  // Start (or retry) payment for an order → Cashfree payment session.
   initiate(orderId: string) {
     return request<PaymentInitiateResponse>("/payments/initiate", {
       method: "POST",
