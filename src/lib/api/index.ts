@@ -33,6 +33,8 @@ export type {
   ListAdminOrdersQuery,
   PatchOrderStatusBody,
   CreateRefundBody,
+  PickupReturnBody,
+  CompleteReturnBody,
   CreateAdminOrderBody,
   CreateAdminOrderItem,
   CreateAdminOrderResponse,

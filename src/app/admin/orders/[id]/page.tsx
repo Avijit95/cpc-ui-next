@@ -10,6 +10,9 @@ import type {
   OrderStatus,
   RefundReason,
   RefundStatus,
+  OrderReturn,
+  ReturnReason,
+  ReturnStatus,
 } from "@/lib/api";
 import {
   ChevronLeft,
@@ -31,6 +34,40 @@ const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
   PENDING: "Pending",
   SUCCESS: "Refunded",
   FAILED: "Failed",
+};
+
+const RETURN_REASON_LABEL: Record<ReturnReason, string> = {
+  DAMAGED: "Arrived damaged",
+  WRONG_ITEM: "Wrong item",
+  NOT_AS_DESCRIBED: "Not as described",
+  DEFECTIVE: "Defective / not working",
+  OTHER: "Other",
+};
+
+const RETURN_STATUS_LABEL: Record<ReturnStatus, string> = {
+  REQUESTED: "Requested",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  PICKED_UP: "Picked up",
+  COMPLETED: "Completed",
+  WITHDRAWN: "Withdrawn",
+};
+
+const RETURN_STYLE: Record<ReturnStatus, string> = {
+  REQUESTED: "bg-orange-50 text-orange-600 border-orange-200",
+  APPROVED: "bg-blue-50 text-blue-600 border-blue-200",
+  REJECTED: "bg-red-50 text-red-600 border-red-200",
+  PICKED_UP: "bg-indigo-50 text-indigo-600 border-indigo-200",
+  COMPLETED: "bg-emerald-50 text-emerald-600 border-emerald-200",
+  WITHDRAWN: "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+type ReturnActionKind = "reject" | "pickup" | "complete";
+
+const RETURN_ACTION_TITLE: Record<ReturnActionKind, string> = {
+  reject: "Reject return",
+  pickup: "Mark picked up",
+  complete: "Receive & refund",
 };
 
 const REFUND_STYLE: Record<RefundStatus, string> = {
@@ -115,6 +152,22 @@ export default function AdminOrderDetailPage() {
   const [refundNote, setRefundNote] = useState("");
   const [refundBusy, setRefundBusy] = useState(false);
   const [refundError, setRefundError] = useState<string | null>(null);
+
+  // Return request actions (approve inline; reject / pickup / receive via dialog).
+  const [returnAction, setReturnAction] = useState<{
+    kind: ReturnActionKind;
+    ret: OrderReturn;
+  } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [pickupCarrier, setPickupCarrier] = useState("");
+  const [pickupNumber, setPickupNumber] = useState("");
+  const [pickupUrl, setPickupUrl] = useState("");
+  const [restock, setRestock] = useState<Record<string, boolean>>({});
+  const [returnRefund, setReturnRefund] = useState("");
+  const [returnBusy, setReturnBusy] = useState(false);
+  const [returnError, setReturnError] = useState<string | null>(null);
+  const [approveBusy, setApproveBusy] = useState<string | null>(null);
+  const [returnCardError, setReturnCardError] = useState<string | null>(null);
 
   // Still refundable: what was paid online minus refunds that haven't failed.
   const refundable = order?.paidAt
@@ -295,6 +348,107 @@ export default function AdminOrderDetailPage() {
       setRefundBusy(false);
     }
   }, [id, refundAmount, refundNote, refundable, refresh]);
+
+  const itemName = (orderItemId: string) =>
+    order?.items.find((it) => it.id === orderItemId)?.productName ?? "Item";
+
+  const handleApproveReturn = useCallback(
+    async (returnId: string) => {
+      setApproveBusy(returnId);
+      setReturnCardError(null);
+      try {
+        await adminApi.approveReturn(returnId);
+        await refresh();
+      } catch (err) {
+        setReturnCardError(
+          isApiError(err) ? err.displayMessage : "Could not approve return",
+        );
+      } finally {
+        setApproveBusy(null);
+      }
+    },
+    [refresh],
+  );
+
+  const openReturnAction = (kind: ReturnActionKind, ret: OrderReturn) => {
+    setRejectReason("");
+    setPickupCarrier("");
+    setPickupNumber("");
+    setPickupUrl("");
+    setRestock(Object.fromEntries(ret.items.map((it) => [it.id, true])));
+    setReturnRefund((ret.maxRefund ?? 0).toFixed(2));
+    setReturnError(null);
+    setReturnAction({ kind, ret });
+  };
+
+  const closeReturnAction = () => {
+    if (returnBusy) return;
+    setReturnAction(null);
+    setReturnError(null);
+  };
+
+  const handleReturnAction = useCallback(async () => {
+    if (!returnAction) return;
+    const { kind, ret } = returnAction;
+    const maxRefund = ret.maxRefund ?? 0;
+    const amount = Math.round(Number(returnRefund) * 100) / 100;
+    if (kind === "reject" && rejectReason.trim().length < 3) {
+      setReturnError("Please give the customer a reason (at least 3 characters).");
+      return;
+    }
+    if (kind === "pickup") {
+      if (!pickupCarrier.trim() || !pickupNumber.trim()) {
+        setReturnError("Courier and tracking number are required.");
+        return;
+      }
+      if (pickupUrl.trim() && !/^https?:\/\//.test(pickupUrl.trim())) {
+        setReturnError("Tracking URL must start with http:// or https://");
+        return;
+      }
+    }
+    if (kind === "complete" && !(amount >= 0 && amount <= maxRefund)) {
+      setReturnError(`Refund must be between ₹0 and ${formatPrice(maxRefund)}.`);
+      return;
+    }
+    setReturnBusy(true);
+    setReturnError(null);
+    try {
+      if (kind === "reject") {
+        await adminApi.rejectReturn(ret.id, rejectReason.trim());
+      } else if (kind === "pickup") {
+        await adminApi.pickupReturn(ret.id, {
+          carrier: pickupCarrier.trim(),
+          trackingNumber: pickupNumber.trim(),
+          trackingUrl: pickupUrl.trim() || undefined,
+        });
+      } else {
+        await adminApi.completeReturn(ret.id, {
+          items: ret.items.map((it) => ({
+            returnItemId: it.id,
+            restock: restock[it.id] ?? false,
+          })),
+          refundAmount: amount,
+        });
+      }
+      await refresh();
+      setReturnAction(null);
+    } catch (err) {
+      setReturnError(
+        isApiError(err) ? err.displayMessage : "Could not update return",
+      );
+    } finally {
+      setReturnBusy(false);
+    }
+  }, [
+    returnAction,
+    rejectReason,
+    pickupCarrier,
+    pickupNumber,
+    pickupUrl,
+    restock,
+    returnRefund,
+    refresh,
+  ]);
 
   return (
     <>
@@ -551,6 +705,138 @@ export default function AdminOrderDetailPage() {
               )}
             </div>
 
+            {/* Return requests */}
+            {order.returns.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h2 className="font-bold text-gray-800 text-sm mb-3">
+                  {order.returns.length > 1 ? "Return requests" : "Return request"}
+                </h2>
+                <ul className="divide-y divide-gray-100">
+                  {order.returns.map((r) => (
+                    <li key={r.id} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-gray-800">
+                          {r.items
+                            .map((ri) => `${itemName(ri.orderItemId)} × ${ri.qty}`)
+                            .join(", ")}
+                        </p>
+                        <span
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${RETURN_STYLE[r.status]}`}
+                        >
+                          {RETURN_STATUS_LABEL[r.status]}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        Reason: {RETURN_REASON_LABEL[r.reason]}
+                        {r.note ? ` — “${r.note}”` : ""}
+                      </p>
+                      {r.photos.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {r.photos.map((url, i) => (
+                            <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={url}
+                                alt={`Return photo ${i + 1}`}
+                                className="w-16 h-16 object-cover rounded border border-gray-200"
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        Requested {formatDateTime(r.createdAt)}
+                        {r.approvedAt ? ` · Approved ${formatDateTime(r.approvedAt)}` : ""}
+                        {r.pickedUpAt ? ` · Picked up ${formatDateTime(r.pickedUpAt)}` : ""}
+                        {r.completedAt ? ` · Completed ${formatDateTime(r.completedAt)}` : ""}
+                      </p>
+                      {r.pickupTrackingNumber && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Pickup: {r.pickupCarrier} {r.pickupTrackingNumber}
+                          {r.pickupTrackingUrl && (
+                            <>
+                              {" · "}
+                              <a
+                                href={r.pickupTrackingUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#129cd3] hover:underline"
+                              >
+                                Track
+                              </a>
+                            </>
+                          )}
+                        </p>
+                      )}
+                      {r.status === "REJECTED" && (
+                        <p className="text-xs text-red-600 mt-1">Rejected: {r.rejectReason}</p>
+                      )}
+                      {r.status === "WITHDRAWN" && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Withdrawn by the customer {formatDateTime(r.withdrawnAt)}.
+                        </p>
+                      )}
+                      {r.status === "COMPLETED" && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Restocked:{" "}
+                          {r.items
+                            .map((ri) => `${itemName(ri.orderItemId)} ${ri.restocked ? "yes" : "no"}`)
+                            .join(", ")}
+                          {" · "}Refund {formatPrice(r.refundAmount ?? 0)}
+                          {r.refundStatus ? ` (${REFUND_STATUS_LABEL[r.refundStatus]})` : ""}
+                        </p>
+                      )}
+                      {(r.status === "REQUESTED" ||
+                        r.status === "APPROVED" ||
+                        r.status === "PICKED_UP") && (
+                        <div className="flex flex-wrap justify-end gap-2 mt-3">
+                          {(r.status === "REQUESTED" || r.status === "APPROVED") && (
+                            <button
+                              onClick={() => openReturnAction("reject", r)}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-red-500 border border-red-400 px-3 py-1.5 rounded-lg hover:bg-red-50 disabled:opacity-60 transition-colors"
+                            >
+                              Reject
+                            </button>
+                          )}
+                          {r.status === "REQUESTED" && (
+                            <button
+                              onClick={() => handleApproveReturn(r.id)}
+                              disabled={approveBusy === r.id}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#129cd3] hover:bg-[#0e87b5] px-3 py-1.5 rounded-lg disabled:opacity-60 transition-colors"
+                            >
+                              {approveBusy === r.id && (
+                                <Loader2 size={13} className="animate-spin" />
+                              )}
+                              Approve
+                            </button>
+                          )}
+                          {r.status === "APPROVED" && (
+                            <button
+                              onClick={() => openReturnAction("pickup", r)}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors"
+                            >
+                              Mark picked up
+                            </button>
+                          )}
+                          {(r.status === "APPROVED" || r.status === "PICKED_UP") && (
+                            <button
+                              onClick={() => openReturnAction("complete", r)}
+                              className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#129cd3] hover:bg-[#0e87b5] px-3 py-1.5 rounded-lg disabled:opacity-60 transition-colors"
+                            >
+                              Receive &amp; refund
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {returnCardError && (
+                  <p className="mt-3 text-xs text-red-600">{returnCardError}</p>
+                )}
+              </div>
+            )}
+
             {/* Refunds */}
             {(order.paidAt || order.refunds.length > 0) && (
               <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -743,6 +1029,173 @@ export default function AdminOrderDetailPage() {
               <button
                 onClick={closeTransition}
                 disabled={transitionBusy}
+                className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {returnAction && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !returnBusy && closeReturnAction()}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-gray-800">
+                {RETURN_ACTION_TITLE[returnAction.kind]}
+              </h2>
+              <button
+                onClick={closeReturnAction}
+                disabled={returnBusy}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              {returnAction.kind === "reject"
+                ? "The customer is emailed this reason and the order goes back to Delivered."
+                : returnAction.kind === "pickup"
+                ? "The customer is emailed these courier details."
+                : "Check each item. Items in good condition go back into stock, then the refund starts."}
+            </p>
+
+            {returnAction.kind === "reject" && (
+              <>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  maxLength={500}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Shown to the customer"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 resize-none"
+                />
+              </>
+            )}
+
+            {returnAction.kind === "pickup" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Courier <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={pickupCarrier}
+                    onChange={(e) => setPickupCarrier(e.target.value)}
+                    placeholder="e.g. Delhivery"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Tracking # <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={pickupNumber}
+                    onChange={(e) => setPickupNumber(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Tracking URL <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={pickupUrl}
+                    onChange={(e) => setPickupUrl(e.target.value)}
+                    placeholder="https://track.carrier.com/..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+              </div>
+            )}
+
+            {returnAction.kind === "complete" && (
+              <div className="space-y-3">
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {returnAction.ret.items.map((it) => (
+                    <label key={it.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer">
+                      <span className="flex-1 text-sm text-gray-800">
+                        {itemName(it.orderItemId)} × {it.qty}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={restock[it.id] ?? false}
+                        onChange={(e) =>
+                          setRestock((prev) => ({ ...prev, [it.id]: e.target.checked }))
+                        }
+                        className="accent-[#129cd3]"
+                      />
+                      <span className="text-xs text-gray-600">Good condition — restock</span>
+                    </label>
+                  ))}
+                </div>
+                {(returnAction.ret.maxRefund ?? 0) > 0 ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      Refund (₹){" "}
+                      <span className="font-normal text-gray-400">
+                        (max {formatPrice(returnAction.ret.maxRefund ?? 0)})
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={returnAction.ret.maxRefund}
+                      step="0.01"
+                      value={returnRefund}
+                      onChange={(e) => setReturnRefund(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    This order wasn&apos;t paid online — settle any refund offline.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {returnError && (
+              <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {returnError}
+              </div>
+            )}
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={handleReturnAction}
+                disabled={returnBusy}
+                className={`flex-1 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 ${
+                  returnAction.kind === "reject"
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-[#129cd3] hover:bg-[#0e87b5]"
+                }`}
+              >
+                {returnBusy && <Loader2 size={16} className="animate-spin" />}
+                {returnAction.kind === "reject"
+                  ? "Reject return"
+                  : returnAction.kind === "pickup"
+                  ? "Save pickup"
+                  : (returnAction.ret.maxRefund ?? 0) > 0
+                  ? "Confirm & refund"
+                  : "Confirm"}
+              </button>
+              <button
+                onClick={closeReturnAction}
+                disabled={returnBusy}
                 className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancel

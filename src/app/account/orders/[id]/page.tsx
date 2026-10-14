@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
@@ -13,6 +13,7 @@ import type {
   RefundReason,
   RefundStatus,
   ReturnReason,
+  ReturnStatus,
 } from "@/lib/api";
 import { openCashfreeCheckout } from "@/lib/payments/cashfree";
 import {
@@ -32,6 +33,7 @@ import {
   X,
   Clock,
   Package,
+  ImagePlus,
 } from "lucide-react";
 
 type SidebarItem = {
@@ -95,8 +97,45 @@ const RETURN_REASONS: { value: ReturnReason; label: string }[] = [
   { value: "DAMAGED", label: "Item arrived damaged" },
   { value: "WRONG_ITEM", label: "Received the wrong item" },
   { value: "NOT_AS_DESCRIBED", label: "Not as described" },
+  { value: "DEFECTIVE", label: "Item is defective / not working" },
   { value: "OTHER", label: "Other (please explain)" },
 ];
+
+const RETURN_STATUS_LABEL: Record<ReturnStatus, string> = {
+  REQUESTED: "Requested",
+  APPROVED: "Approved",
+  REJECTED: "Not approved",
+  PICKED_UP: "Picked up",
+  COMPLETED: "Completed",
+  WITHDRAWN: "Withdrawn",
+};
+
+const RETURN_BADGE: Record<ReturnStatus, string> = {
+  REQUESTED: "bg-orange-100 text-orange-700",
+  APPROVED: "bg-blue-100 text-blue-700",
+  REJECTED: "bg-red-100 text-red-700",
+  PICKED_UP: "bg-indigo-100 text-indigo-700",
+  COMPLETED: "bg-green-100 text-green-700",
+  WITHDRAWN: "bg-gray-100 text-gray-700",
+};
+
+// Returns in these states hold their items (they can't be returned again).
+const HOLDING_RETURN_STATUSES: ReturnStatus[] = [
+  "REQUESTED",
+  "APPROVED",
+  "PICKED_UP",
+  "COMPLETED",
+];
+
+// Reasons that need at least one photo of the item.
+const PHOTO_REQUIRED_REASONS: ReturnReason[] = [
+  "DAMAGED",
+  "DEFECTIVE",
+  "WRONG_ITEM",
+];
+const MAX_RETURN_PHOTOS = 5;
+const RETURN_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const RETURN_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 const RETURN_WINDOW_DAYS = 7;
 const INVOICE_POLL_INTERVAL_MS = 1500;
@@ -125,12 +164,27 @@ function canCancel(s: OrderStatus): boolean {
   return s === "PENDING_PAYMENT" || s === "CONFIRMED";
 }
 
+// How many of each order line can still be returned.
+function returnableQty(order: OrderDetail): Record<string, number> {
+  const held: Record<string, number> = {};
+  for (const r of order.returns ?? []) {
+    if (!HOLDING_RETURN_STATUSES.includes(r.status)) continue;
+    for (const it of r.items) {
+      held[it.orderItemId] = (held[it.orderItemId] ?? 0) + it.qty;
+    }
+  }
+  return Object.fromEntries(
+    order.items.map((it) => [it.id, it.qty - (held[it.id] ?? 0)]),
+  );
+}
+
 function canRequestReturn(order: OrderDetail): boolean {
   if (order.status !== "DELIVERED") return false;
   if (!order.deliveredAt) return false;
   const delivered = new Date(order.deliveredAt).getTime();
   const days = (Date.now() - delivered) / (1000 * 60 * 60 * 24);
-  return days <= RETURN_WINDOW_DAYS;
+  if (days > RETURN_WINDOW_DAYS) return false;
+  return Object.values(returnableQty(order)).some((q) => q > 0);
 }
 
 export default function OrderDetailPage() {
@@ -154,6 +208,14 @@ export default function OrderDetailPage() {
   const [returnNote, setReturnNote] = useState("");
   const [returnBusy, setReturnBusy] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
+  // orderItemId → qty selected for return (0 / missing = not selected).
+  const [returnQty, setReturnQty] = useState<Record<string, number>>({});
+  const [returnPhotos, setReturnPhotos] = useState<
+    { objectKey: string; previewUrl: string }[]
+  >([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const [withdrawBusy, setWithdrawBusy] = useState<string | null>(null);
 
   const [payBusy, setPayBusy] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -269,21 +331,102 @@ export default function OrderDetailPage() {
     }
   }, [id]);
 
+  const clearReturnPhotos = () => {
+    setReturnPhotos((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      return [];
+    });
+  };
+
+  const openReturn = () => {
+    setReturnQty({});
+    setReturnReason("DAMAGED");
+    setReturnNote("");
+    clearReturnPhotos();
+    setReturnError(null);
+    setShowReturn(true);
+  };
+
+  const handleReturnPhoto = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      if (!file) return;
+      if (returnPhotos.length >= MAX_RETURN_PHOTOS) {
+        setReturnError(`You can attach up to ${MAX_RETURN_PHOTOS} photos.`);
+        return;
+      }
+      if (
+        !RETURN_PHOTO_TYPES.includes(
+          file.type as (typeof RETURN_PHOTO_TYPES)[number],
+        )
+      ) {
+        setReturnError("Photo must be JPG, PNG, or WebP.");
+        return;
+      }
+      if (file.size > RETURN_PHOTO_MAX_BYTES) {
+        setReturnError("Photo must be 5 MB or smaller.");
+        return;
+      }
+      setPhotoBusy(true);
+      setReturnError(null);
+      try {
+        const { objectKey } = await ordersApi.uploadReturnPhoto(file);
+        setReturnPhotos((prev) => [
+          ...prev,
+          { objectKey, previewUrl: URL.createObjectURL(file) },
+        ]);
+      } catch (err) {
+        setReturnError(
+          isApiError(err) ? err.displayMessage : "Photo upload failed",
+        );
+      } finally {
+        setPhotoBusy(false);
+      }
+    },
+    [returnPhotos.length],
+  );
+
+  const removeReturnPhoto = (objectKey: string) => {
+    setReturnPhotos((prev) => {
+      const removed = prev.find((p) => p.objectKey === objectKey);
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((p) => p.objectKey !== objectKey);
+    });
+  };
+
   const handleReturn = useCallback(async () => {
+    const items = Object.entries(returnQty)
+      .filter(([, qty]) => qty > 0)
+      .map(([orderItemId, qty]) => ({ orderItemId, qty }));
+    if (items.length === 0) {
+      setReturnError("Select at least one item to return.");
+      return;
+    }
     if (returnReason === "OTHER" && !returnNote.trim()) {
       setReturnError("Please explain why you're returning this order");
+      return;
+    }
+    if (
+      PHOTO_REQUIRED_REASONS.includes(returnReason) &&
+      returnPhotos.length === 0
+    ) {
+      setReturnError("Please add at least one photo of the item.");
       return;
     }
     setReturnBusy(true);
     setReturnError(null);
     try {
-      await ordersApi.returnRequest(id, {
+      await ordersApi.createReturn(id, {
+        items,
         reason: returnReason,
         note: returnNote.trim() || undefined,
+        photoKeys: returnPhotos.map((p) => p.objectKey),
       });
       await fetchOrder();
       setShowReturn(false);
       setReturnNote("");
+      clearReturnPhotos();
     } catch (err) {
       setReturnError(
         isApiError(err) ? err.displayMessage : "Could not request return",
@@ -291,7 +434,24 @@ export default function OrderDetailPage() {
     } finally {
       setReturnBusy(false);
     }
-  }, [id, returnReason, returnNote, fetchOrder]);
+  }, [id, returnQty, returnReason, returnNote, returnPhotos, fetchOrder]);
+
+  const handleWithdrawReturn = useCallback(
+    async (returnId: string) => {
+      setWithdrawBusy(returnId);
+      try {
+        await ordersApi.withdrawReturn(returnId);
+        await fetchOrder();
+      } catch (err) {
+        setError(
+          isApiError(err) ? err.displayMessage : "Could not withdraw return",
+        );
+      } finally {
+        setWithdrawBusy(null);
+      }
+    },
+    [fetchOrder],
+  );
 
   const userName = user?.name ?? "Account";
   const userContact = user?.email ?? user?.phone ?? "";
@@ -401,10 +561,7 @@ export default function OrderDetailPage() {
                     )}
                     {canRequestReturn(order) && (
                       <button
-                        onClick={() => {
-                          setShowReturn(true);
-                          setReturnError(null);
-                        }}
+                        onClick={openReturn}
                         className="flex items-center gap-1.5 text-xs text-orange-600 border border-orange-400 px-3 py-1.5 rounded-lg hover:bg-orange-50 transition-colors"
                       >
                         <Undo2 size={13} /> Request Return
@@ -414,7 +571,7 @@ export default function OrderDetailPage() {
 
                   {order.status === "RETURN_REQUESTED" && (
                     <div className="mt-3 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
-                      Return requested on {formatDateTime(order.returnRequestedAt)}. We&apos;ll review and update the order shortly.
+                      Return requested on {formatDateTime(order.returnRequestedAt)}. Track its progress in the Return section below.
                     </div>
                   )}
                   {order.status === "CANCELLED" && (
@@ -654,6 +811,118 @@ export default function OrderDetailPage() {
                   )}
                 </div>
 
+                {/* Returns */}
+                {order.returns?.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <h2 className="font-bold text-gray-800 text-sm mb-3">
+                      {order.returns.length > 1 ? "Returns" : "Return"}
+                    </h2>
+                    <ul className="divide-y divide-gray-100">
+                      {order.returns.map((r) => {
+                        const refunded = (r.refundAmount ?? 0) > 0;
+                        const steps = [
+                          { label: "Requested", at: r.createdAt },
+                          { label: "Approved", at: r.approvedAt },
+                          { label: "Picked up", at: r.pickedUpAt },
+                          {
+                            label: r.completedAt && !refunded ? "Received" : "Refunded",
+                            at: r.completedAt,
+                          },
+                        ];
+                        return (
+                          <li key={r.id} className="py-3 first:pt-0 last:pb-0">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-medium text-gray-800">
+                                {r.items
+                                  .map((ri) => {
+                                    const line = order.items.find((it) => it.id === ri.orderItemId);
+                                    return `${line?.productName ?? "Item"} × ${ri.qty}`;
+                                  })
+                                  .join(", ")}
+                              </p>
+                              <span
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-full ${RETURN_BADGE[r.status]}`}
+                              >
+                                {RETURN_STATUS_LABEL[r.status]}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {RETURN_REASONS.find((x) => x.value === r.reason)?.label ?? r.reason}
+                              {r.note ? ` · ${r.note}` : ""}
+                            </p>
+                            {r.status !== "REJECTED" && r.status !== "WITHDRAWN" && (
+                              <ol className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+                                {steps.map((step) => (
+                                  <li
+                                    key={step.label}
+                                    className={`flex items-center gap-1.5 ${step.at ? "text-gray-800" : "text-gray-400"}`}
+                                  >
+                                    <span
+                                      className={`w-2 h-2 rounded-full ${step.at ? "bg-[#129cd3]" : "bg-gray-300"}`}
+                                    />
+                                    {step.label}
+                                    {step.at ? ` · ${formatDateTime(step.at)}` : ""}
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                            {r.pickupTrackingNumber && (
+                              <p className="text-xs text-gray-600 mt-2">
+                                Pickup: {r.pickupCarrier} {r.pickupTrackingNumber}
+                                {r.pickupTrackingUrl && (
+                                  <>
+                                    {" · "}
+                                    <a
+                                      href={r.pickupTrackingUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[#129cd3] hover:underline"
+                                    >
+                                      Track
+                                    </a>
+                                  </>
+                                )}
+                              </p>
+                            )}
+                            {r.status === "APPROVED" && !r.pickupTrackingNumber && (
+                              <p className="text-xs text-gray-600 mt-2">
+                                Approved. We&apos;ll arrange a pickup and email you the courier details.
+                              </p>
+                            )}
+                            {r.status === "REJECTED" && (
+                              <p className="text-xs text-red-600 mt-2">
+                                Not approved{r.rejectReason ? `: ${r.rejectReason}` : "."}
+                              </p>
+                            )}
+                            {r.status === "WITHDRAWN" && (
+                              <p className="text-xs text-gray-500 mt-2">
+                                You withdrew this request on {formatDateTime(r.withdrawnAt)}.
+                              </p>
+                            )}
+                            {r.status === "COMPLETED" && (
+                              <p className="text-xs text-gray-600 mt-2">
+                                {refunded
+                                  ? `Refund of ${formatPrice(r.refundAmount ?? 0)} started — see Refunds below.`
+                                  : "We've received your return."}
+                              </p>
+                            )}
+                            {(r.status === "REQUESTED" || r.status === "APPROVED") && (
+                              <button
+                                onClick={() => handleWithdrawReturn(r.id)}
+                                disabled={withdrawBusy === r.id}
+                                className="mt-2 flex items-center gap-1.5 text-xs text-gray-600 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors"
+                              >
+                                {withdrawBusy === r.id && <Loader2 size={13} className="animate-spin" />}
+                                Withdraw request
+                              </button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+
                 {/* Refunds */}
                 {order.refunds?.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -795,13 +1064,13 @@ export default function OrderDetailPage() {
       )}
 
       {/* Return modal */}
-      {showReturn && (
+      {showReturn && order && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => !returnBusy && setShowReturn(false)}
           />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold text-gray-800">Request Return</h2>
               <button
@@ -813,8 +1082,63 @@ export default function OrderDetailPage() {
               </button>
             </div>
             <p className="text-sm text-gray-600 mb-4">
-              Returns are accepted within {RETURN_WINDOW_DAYS} days of delivery. We&apos;ll review your request and follow up.
+              Returns are accepted within {RETURN_WINDOW_DAYS} days of delivery
+              {order.deliveredAt
+                ? ` (until ${new Date(
+                    new Date(order.deliveredAt).getTime() +
+                      RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+                  ).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })})`
+                : ""}
+              . We&apos;ll review your request and follow up.
             </p>
+
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Items to return
+            </label>
+            <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4">
+              {order.items
+                .filter((it) => (returnableQty(order)[it.id] ?? 0) > 0)
+                .map((it) => {
+                  const max = returnableQty(order)[it.id] ?? 0;
+                  const qty = returnQty[it.id] ?? 0;
+                  return (
+                    <div key={it.id} className="flex items-center gap-3 px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={qty > 0}
+                        onChange={(e) =>
+                          setReturnQty((prev) => ({
+                            ...prev,
+                            [it.id]: e.target.checked ? 1 : 0,
+                          }))
+                        }
+                        className="accent-[#129cd3]"
+                      />
+                      <span className="flex-1 text-sm text-gray-800 line-clamp-2">
+                        {it.productName}
+                      </span>
+                      <select
+                        value={qty || 1}
+                        disabled={qty === 0}
+                        onChange={(e) =>
+                          setReturnQty((prev) => ({
+                            ...prev,
+                            [it.id]: Number(e.target.value),
+                          }))
+                        }
+                        className="border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-800 bg-white disabled:opacity-50"
+                      >
+                        {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-xs text-gray-500">of {max}</span>
+                    </div>
+                  );
+                })}
+            </div>
 
             <label className="block text-xs font-semibold text-gray-600 mb-1">Reason</label>
             <select
@@ -842,6 +1166,60 @@ export default function OrderDetailPage() {
               placeholder="Describe the issue…"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 resize-none"
             />
+
+            <label className="block text-xs font-semibold text-gray-600 mb-1 mt-4">
+              Photos{" "}
+              <span className="font-normal text-gray-400">
+                {PHOTO_REQUIRED_REASONS.includes(returnReason)
+                  ? "(at least 1 required"
+                  : "(optional"}
+                , up to {MAX_RETURN_PHOTOS})
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {returnPhotos.map((p) => (
+                <div key={p.objectKey} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={p.previewUrl}
+                    alt=""
+                    className="w-16 h-16 object-cover rounded border border-gray-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeReturnPhoto(p.objectKey)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white border border-gray-300 rounded-full flex items-center justify-center text-gray-600 hover:text-red-500 hover:border-red-300 shadow-sm"
+                    aria-label="Remove photo"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+              {returnPhotos.length < MAX_RETURN_PHOTOS && (
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoBusy}
+                  className="w-16 h-16 border border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-500 hover:border-[#129cd3] hover:text-[#129cd3] transition-colors disabled:opacity-50"
+                >
+                  {photoBusy ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <>
+                      <ImagePlus size={16} />
+                      <span className="text-[10px] mt-0.5">Add</span>
+                    </>
+                  )}
+                </button>
+              )}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleReturnPhoto}
+              />
+            </div>
             {returnError && (
               <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 {returnError}
