@@ -563,6 +563,8 @@ export type OrderReturn = {
   pickupTrackingUrl: string | null;
   refundAmount: number | null;
   refundStatus: RefundStatus | null;
+  // Set when completed with a replacement: the free ₹0 order shipping it.
+  replacementOrder: { id: string; orderNumber: string; status: OrderStatus } | null;
   createdAt: string;
   approvedAt: string | null;
   rejectedAt: string | null;
@@ -572,7 +574,11 @@ export type OrderReturn = {
   maxRefund?: number; // admin view, open returns only
 };
 
-export type ReturnActionResponse = { id: string; status: ReturnStatus };
+export type ReturnActionResponse = {
+  id: string;
+  status: ReturnStatus;
+  replacementOrderId?: string | null;
+};
 
 export type OrderListItem = {
   id: string;
@@ -702,6 +708,8 @@ export type OrderDetail = {
   invoice: OrderInvoiceSummary | null;
   refunds: OrderRefund[];
   returns: OrderReturn[];
+  // Set when this order is a free replacement shipped for a return.
+  replacementFor?: { orderId: string; orderNumber: string } | null;
 };
 
 export type OrderCancelResponse = {

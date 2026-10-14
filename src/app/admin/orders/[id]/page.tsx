@@ -164,6 +164,8 @@ export default function AdminOrderDetailPage() {
   const [pickupUrl, setPickupUrl] = useState("");
   const [restock, setRestock] = useState<Record<string, boolean>>({});
   const [returnRefund, setReturnRefund] = useState("");
+  // For replacement requests: ship the replacement, or refund instead.
+  const [resolution, setResolution] = useState<"REFUND" | "REPLACE">("REFUND");
   const [returnBusy, setReturnBusy] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
   const [approveBusy, setApproveBusy] = useState<string | null>(null);
@@ -377,6 +379,7 @@ export default function AdminOrderDetailPage() {
     setPickupUrl("");
     setRestock(Object.fromEntries(ret.items.map((it) => [it.id, true])));
     setReturnRefund((ret.maxRefund ?? 0).toFixed(2));
+    setResolution(ret.type === "REPLACE" ? "REPLACE" : "REFUND");
     setReturnError(null);
     setReturnAction({ kind, ret });
   };
@@ -406,7 +409,11 @@ export default function AdminOrderDetailPage() {
         return;
       }
     }
-    if (kind === "complete" && !(amount >= 0 && amount <= maxRefund)) {
+    if (
+      kind === "complete" &&
+      resolution === "REFUND" &&
+      !(amount >= 0 && amount <= maxRefund)
+    ) {
       setReturnError(`Refund must be between ₹0 and ${formatPrice(maxRefund)}.`);
       return;
     }
@@ -427,7 +434,8 @@ export default function AdminOrderDetailPage() {
             returnItemId: it.id,
             restock: restock[it.id] ?? false,
           })),
-          refundAmount: amount,
+          resolution,
+          refundAmount: resolution === "REFUND" ? amount : undefined,
         });
       }
       await refresh();
@@ -447,6 +455,7 @@ export default function AdminOrderDetailPage() {
     pickupUrl,
     restock,
     returnRefund,
+    resolution,
     refresh,
   ]);
 
@@ -491,6 +500,18 @@ export default function AdminOrderDetailPage() {
                     </span>{" "}
                     ({order.user.email ?? order.user.phone ?? "—"})
                   </p>
+                  {order.replacementFor && (
+                    <p className="text-xs text-blue-700 mt-1">
+                      Free replacement for order{" "}
+                      <Link
+                        href={`/admin/orders/${order.replacementFor.orderId}`}
+                        className="font-semibold underline"
+                      >
+                        {order.replacementFor.orderNumber}
+                      </Link>{" "}
+                      — no invoice (₹0).
+                    </p>
+                  )}
                 </div>
                 <span
                   className={`text-xs font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${STATUS_STYLE[order.status]}`}
@@ -727,7 +748,8 @@ export default function AdminOrderDetailPage() {
                         </span>
                       </div>
                       <p className="text-xs text-gray-600 mt-0.5">
-                        Reason: {RETURN_REASON_LABEL[r.reason]}
+                        Wants: {r.type === "REPLACE" ? "Replacement" : "Refund"} · Reason:{" "}
+                        {RETURN_REASON_LABEL[r.reason]}
                         {r.note ? ` — “${r.note}”` : ""}
                       </p>
                       {r.photos.length > 0 && (
@@ -782,8 +804,23 @@ export default function AdminOrderDetailPage() {
                           {r.items
                             .map((ri) => `${itemName(ri.orderItemId)} ${ri.restocked ? "yes" : "no"}`)
                             .join(", ")}
-                          {" · "}Refund {formatPrice(r.refundAmount ?? 0)}
-                          {r.refundStatus ? ` (${REFUND_STATUS_LABEL[r.refundStatus]})` : ""}
+                          {r.replacementOrder ? (
+                            <>
+                              {" · "}Replacement order{" "}
+                              <Link
+                                href={`/admin/orders/${r.replacementOrder.id}`}
+                                className="font-semibold text-[#129cd3] hover:underline"
+                              >
+                                {r.replacementOrder.orderNumber}
+                              </Link>{" "}
+                              ({STATUS_LABEL[r.replacementOrder.status]})
+                            </>
+                          ) : (
+                            <>
+                              {" · "}Refund {formatPrice(r.refundAmount ?? 0)}
+                              {r.refundStatus ? ` (${REFUND_STATUS_LABEL[r.refundStatus]})` : ""}
+                            </>
+                          )}
                         </p>
                       )}
                       {(r.status === "REQUESTED" ||
@@ -823,7 +860,7 @@ export default function AdminOrderDetailPage() {
                               onClick={() => openReturnAction("complete", r)}
                               className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#129cd3] hover:bg-[#0e87b5] px-3 py-1.5 rounded-lg disabled:opacity-60 transition-colors"
                             >
-                              Receive &amp; refund
+                              {r.type === "REPLACE" ? "Receive & replace" : "Receive & refund"}
                             </button>
                           )}
                         </div>
@@ -1047,7 +1084,9 @@ export default function AdminOrderDetailPage() {
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold text-gray-800">
-                {RETURN_ACTION_TITLE[returnAction.kind]}
+                {returnAction.kind === "complete" && returnAction.ret.type === "REPLACE"
+                  ? "Receive & replace"
+                  : RETURN_ACTION_TITLE[returnAction.kind]}
               </h2>
               <button
                 onClick={closeReturnAction}
@@ -1062,6 +1101,8 @@ export default function AdminOrderDetailPage() {
                 ? "The customer is emailed this reason and the order goes back to Delivered."
                 : returnAction.kind === "pickup"
                 ? "The customer is emailed these courier details."
+                : resolution === "REPLACE"
+                ? "Check each item. Items in good condition go back into stock, then a free replacement order is created."
                 : "Check each item. Items in good condition go back into stock, then the refund starts."}
             </p>
 
@@ -1143,7 +1184,36 @@ export default function AdminOrderDetailPage() {
                     </label>
                   ))}
                 </div>
-                {(returnAction.ret.maxRefund ?? 0) > 0 ? (
+                {returnAction.ret.type === "REPLACE" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        ["REPLACE", "Ship replacement"],
+                        ["REFUND", "Refund instead"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setResolution(value)}
+                        className={`border rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                          resolution === value
+                            ? "border-[#129cd3] bg-[#129cd3]/10 text-[#129cd3]"
+                            : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {resolution === "REPLACE" ? (
+                  <p className="text-xs text-gray-500">
+                    Creates a ₹0 order with the same items (stock is reserved). Ship it
+                    from that order as usual. If it&apos;s out of stock, choose
+                    &quot;Refund instead&quot;.
+                  </p>
+                ) : (returnAction.ret.maxRefund ?? 0) > 0 ? (
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">
                       Refund (₹){" "}
@@ -1189,6 +1259,8 @@ export default function AdminOrderDetailPage() {
                   ? "Reject return"
                   : returnAction.kind === "pickup"
                   ? "Save pickup"
+                  : resolution === "REPLACE"
+                  ? "Confirm & create replacement"
                   : (returnAction.ret.maxRefund ?? 0) > 0
                   ? "Confirm & refund"
                   : "Confirm"}

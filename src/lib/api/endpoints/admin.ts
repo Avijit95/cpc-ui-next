@@ -229,6 +229,8 @@ export type PickupReturnBody = {
 
 export type CompleteReturnBody = {
   items: { returnItemId: string; restock: boolean }[];
+  // Replacement requests default to REPLACE; REFUND = "refund instead".
+  resolution?: "REFUND" | "REPLACE";
   refundAmount?: number; // defaults to the full refundable amount
 };
 
