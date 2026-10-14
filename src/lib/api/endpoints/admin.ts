@@ -8,6 +8,7 @@ import type {
   AdminCouponRow,
   AdminCouponsList,
   AdminCreateRefundResponse,
+  ReturnActionResponse,
   AdminReviewRow,
   AdminReviewsListResponse,
   AdminOrderDetail,
@@ -218,6 +219,17 @@ export type ListAdminOrdersQuery = AdminListSortFilter & {
   to?: string; // ISO date — legacy filter on createdAt
   limit?: number;
   offset?: number;
+};
+
+export type PickupReturnBody = {
+  carrier: string;
+  trackingNumber: string;
+  trackingUrl?: string;
+};
+
+export type CompleteReturnBody = {
+  items: { returnItemId: string; restock: boolean }[];
+  refundAmount?: number; // defaults to the full refundable amount
 };
 
 export type CreateRefundBody = {
@@ -631,6 +643,31 @@ export const adminApi = {
     return request<AdminOrderStatusPatchResponse>(
       `/admin/orders/${encodeURIComponent(id)}/status`,
       { method: "PATCH", body },
+    );
+  },
+  // Returns: approve / reject / pickup / receive & refund.
+  approveReturn(id: string) {
+    return request<ReturnActionResponse>(
+      `/admin/returns/${encodeURIComponent(id)}/approve`,
+      { method: "POST" },
+    );
+  },
+  rejectReturn(id: string, reason: string) {
+    return request<ReturnActionResponse>(
+      `/admin/returns/${encodeURIComponent(id)}/reject`,
+      { method: "POST", body: { reason } },
+    );
+  },
+  pickupReturn(id: string, body: PickupReturnBody) {
+    return request<ReturnActionResponse>(
+      `/admin/returns/${encodeURIComponent(id)}/pickup`,
+      { method: "POST", body },
+    );
+  },
+  completeReturn(id: string, body: CompleteReturnBody) {
+    return request<ReturnActionResponse>(
+      `/admin/returns/${encodeURIComponent(id)}/complete`,
+      { method: "POST", body },
     );
   },
   // Manual (full or partial) refund of an order's online payment.

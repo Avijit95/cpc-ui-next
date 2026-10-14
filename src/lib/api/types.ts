@@ -532,7 +532,47 @@ export type ReturnReason =
   | "DAMAGED"
   | "WRONG_ITEM"
   | "NOT_AS_DESCRIBED"
+  | "DEFECTIVE"
   | "OTHER";
+
+export type ReturnStatus =
+  | "REQUESTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "PICKED_UP"
+  | "COMPLETED"
+  | "WITHDRAWN";
+
+// An item-level return request on an order.
+export type OrderReturn = {
+  id: string;
+  type: "RETURN" | "REPLACE";
+  status: ReturnStatus;
+  reason: ReturnReason;
+  note: string | null;
+  items: {
+    id: string;
+    orderItemId: string;
+    qty: number;
+    restocked: boolean | null; // set when received: true = back in stock
+  }[];
+  photos: string[]; // short-lived signed URLs
+  rejectReason: string | null;
+  pickupCarrier: string | null;
+  pickupTrackingNumber: string | null;
+  pickupTrackingUrl: string | null;
+  refundAmount: number | null;
+  refundStatus: RefundStatus | null;
+  createdAt: string;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  pickedUpAt: string | null;
+  completedAt: string | null;
+  withdrawnAt: string | null;
+  maxRefund?: number; // admin view, open returns only
+};
+
+export type ReturnActionResponse = { id: string; status: ReturnStatus };
 
 export type OrderListItem = {
   id: string;
@@ -564,6 +604,7 @@ export type OrderAddressSnapshot = {
 };
 
 export type OrderItemRow = {
+  id: string;
   productName: string;
   slug?: string | null;
   primaryImageUrl?: string | null;
@@ -660,6 +701,7 @@ export type OrderDetail = {
   statusHistory: OrderStatusHistoryEntry[];
   invoice: OrderInvoiceSummary | null;
   refunds: OrderRefund[];
+  returns: OrderReturn[];
 };
 
 export type OrderCancelResponse = {
@@ -668,11 +710,6 @@ export type OrderCancelResponse = {
   status: "CANCELLED";
 };
 
-export type OrderReturnResponse = {
-  id: string;
-  orderNumber: string;
-  status: "RETURN_REQUESTED";
-};
 
 export type InvoiceDownloadResponse = {
   url: string;

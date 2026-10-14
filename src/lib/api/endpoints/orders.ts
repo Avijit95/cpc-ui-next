@@ -1,10 +1,10 @@
-import { request } from "../client";
+import { request, s3Put } from "../client";
 import type {
   OrderCancelResponse,
   OrderDetail,
   OrderListResponse,
-  OrderReturnResponse,
   OrderStatus,
+  ReturnActionResponse,
   ReturnReason,
 } from "../types";
 
@@ -20,9 +20,13 @@ export type CancelOrderBody = {
 };
 
 export type ReturnOrderBody = {
+  items: { orderItemId: string; qty: number }[];
   reason: ReturnReason;
   note?: string;
+  photoKeys?: string[]; // from uploadReturnPhoto (max 5)
 };
+
+export type ReturnPhotoContentType = "image/jpeg" | "image/png" | "image/webp";
 
 export const ordersApi = {
   list(query: ListOrdersQuery = {}) {
@@ -37,10 +41,33 @@ export const ordersApi = {
       { method: "POST", body },
     );
   },
-  returnRequest(id: string, body: ReturnOrderBody) {
-    return request<OrderReturnResponse>(
-      `/me/orders/${encodeURIComponent(id)}/return-request`,
+  // Item-level return request for a delivered order.
+  createReturn(orderId: string, body: ReturnOrderBody) {
+    return request<ReturnActionResponse>(
+      `/me/orders/${encodeURIComponent(orderId)}/returns`,
       { method: "POST", body },
     );
+  },
+  withdrawReturn(returnId: string) {
+    return request<ReturnActionResponse>(
+      `/me/returns/${encodeURIComponent(returnId)}/withdraw`,
+      { method: "POST" },
+    );
+  },
+  // Presign + S3 PUT for one return photo; returns the objectKey to submit.
+  async uploadReturnPhoto(file: File): Promise<{ objectKey: string }> {
+    const presigned = await request<{
+      uploadUrl: string;
+      objectKey: string;
+      expiresIn: number;
+    }>("/me/returns/photos/presign", {
+      method: "POST",
+      body: {
+        contentType: file.type as ReturnPhotoContentType,
+        contentLength: file.size,
+      },
+    });
+    await s3Put(presigned.uploadUrl, file);
+    return { objectKey: presigned.objectKey };
   },
 };
