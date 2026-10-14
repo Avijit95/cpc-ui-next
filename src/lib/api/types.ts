@@ -603,6 +603,33 @@ export type OrderInvoiceSummary = {
   downloadExpiresIn: number | null;
 };
 
+export type RefundStatus = "PENDING" | "SUCCESS" | "FAILED";
+export type RefundReason = "CANCELLATION" | "LATE_PAYMENT" | "MANUAL";
+
+// A refund on an order (back to the original payment method via Cashfree).
+export type OrderRefund = {
+  id: string;
+  amount: number;
+  reason: RefundReason;
+  status: RefundStatus;
+  bankReference: string | null;
+  createdAt: string;
+  processedAt: string | null;
+  creditNote: {
+    number: string;
+    downloadUrl: string | null; // 5-min signed URL, null until the PDF is ready
+    downloadExpiresIn: number | null;
+  } | null;
+};
+
+// Admin view adds the internal fields.
+export type AdminOrderRefund = OrderRefund & {
+  note: string | null;
+  failureReason: string | null;
+  initiatedById: string | null;
+  cfRefundId: string | null;
+};
+
 export type OrderDetail = {
   id: string;
   orderNumber: string;
@@ -627,10 +654,12 @@ export type OrderDetail = {
   returnReason?: ReturnReason | null;
   returnReasonNote?: string | null;
   deliveredAt?: string | null;
+  paidAt?: string | null; // set when the online payment confirmed the order
   createdAt: string;
   items: OrderItemRow[];
   statusHistory: OrderStatusHistoryEntry[];
   invoice: OrderInvoiceSummary | null;
+  refunds: OrderRefund[];
 };
 
 export type OrderCancelResponse = {
@@ -708,9 +737,20 @@ export type AdminOrderListResponse = {
   offset: number;
 };
 
-export type AdminOrderDetail = OrderDetail & {
+export type AdminOrderDetail = Omit<OrderDetail, "refunds"> & {
   user: AdminOrderUserSummary;
   legalTransitions: OrderStatus[];
+  refunds: AdminOrderRefund[];
+};
+
+export type AdminCreateRefundResponse = {
+  id: string;
+  amount: number;
+  reason: RefundReason;
+  note: string | null;
+  status: RefundStatus;
+  failureReason: string | null;
+  createdAt: string;
 };
 
 export type AdminOrderStatusPatchResponse = {
