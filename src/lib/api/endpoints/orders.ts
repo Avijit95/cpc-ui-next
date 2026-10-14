@@ -20,6 +20,7 @@ export type CancelOrderBody = {
 };
 
 export type ReturnOrderBody = {
+  type?: "RETURN" | "REPLACE"; // refund (default) or the same item again
   items: { orderItemId: string; qty: number }[];
   reason: ReturnReason;
   note?: string;

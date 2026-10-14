@@ -205,6 +205,7 @@ export default function OrderDetailPage() {
 
   const [showReturn, setShowReturn] = useState(false);
   const [returnReason, setReturnReason] = useState<ReturnReason>("DAMAGED");
+  const [returnType, setReturnType] = useState<"RETURN" | "REPLACE">("RETURN");
   const [returnNote, setReturnNote] = useState("");
   const [returnBusy, setReturnBusy] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
@@ -339,6 +340,7 @@ export default function OrderDetailPage() {
   };
 
   const openReturn = () => {
+    setReturnType("RETURN");
     setReturnQty({});
     setReturnReason("DAMAGED");
     setReturnNote("");
@@ -418,6 +420,7 @@ export default function OrderDetailPage() {
     setReturnError(null);
     try {
       await ordersApi.createReturn(id, {
+        type: returnType,
         items,
         reason: returnReason,
         note: returnNote.trim() || undefined,
@@ -434,7 +437,7 @@ export default function OrderDetailPage() {
     } finally {
       setReturnBusy(false);
     }
-  }, [id, returnQty, returnReason, returnNote, returnPhotos, fetchOrder]);
+  }, [id, returnType, returnQty, returnReason, returnNote, returnPhotos, fetchOrder]);
 
   const handleWithdrawReturn = useCallback(
     async (returnId: string) => {
@@ -572,6 +575,18 @@ export default function OrderDetailPage() {
                   {order.status === "RETURN_REQUESTED" && (
                     <div className="mt-3 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
                       Return requested on {formatDateTime(order.returnRequestedAt)}. Track its progress in the Return section below.
+                    </div>
+                  )}
+                  {order.replacementFor && (
+                    <div className="mt-3 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                      Free replacement for order{" "}
+                      <Link
+                        href={`/account/orders/${order.replacementFor.orderId}`}
+                        className="font-semibold underline"
+                      >
+                        {order.replacementFor.orderNumber}
+                      </Link>
+                      .
                     </div>
                   )}
                   {order.status === "CANCELLED" && (
@@ -783,7 +798,9 @@ export default function OrderDetailPage() {
                   <h2 className="font-bold text-gray-800 text-sm mb-3">Invoice</h2>
                   {!order.invoice ? (
                     <p className="text-xs text-gray-500">
-                      An invoice will be generated once payment is confirmed.
+                      {order.replacementFor
+                        ? `No invoice — this is a free replacement (see order ${order.replacementFor.orderNumber}).`
+                        : "An invoice will be generated once payment is confirmed."}
                     </p>
                   ) : order.invoice.downloadUrl ? (
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -825,7 +842,13 @@ export default function OrderDetailPage() {
                           { label: "Approved", at: r.approvedAt },
                           { label: "Picked up", at: r.pickedUpAt },
                           {
-                            label: r.completedAt && !refunded ? "Received" : "Refunded",
+                            label: refunded
+                              ? "Refunded"
+                              : r.type === "REPLACE"
+                              ? "Replacement sent"
+                              : r.completedAt
+                              ? "Received"
+                              : "Refunded",
                             at: r.completedAt,
                           },
                         ];
@@ -847,6 +870,7 @@ export default function OrderDetailPage() {
                               </span>
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5">
+                              {r.type === "REPLACE" ? "Replacement · " : ""}
                               {RETURN_REASONS.find((x) => x.value === r.reason)?.label ?? r.reason}
                               {r.note ? ` · ${r.note}` : ""}
                             </p>
@@ -899,7 +923,19 @@ export default function OrderDetailPage() {
                                 You withdrew this request on {formatDateTime(r.withdrawnAt)}.
                               </p>
                             )}
-                            {r.status === "COMPLETED" && (
+                            {r.status === "COMPLETED" && r.replacementOrder && (
+                              <p className="text-xs text-gray-600 mt-2">
+                                Your free replacement is order{" "}
+                                <Link
+                                  href={`/account/orders/${r.replacementOrder.id}`}
+                                  className="font-semibold text-[#129cd3] hover:underline"
+                                >
+                                  {r.replacementOrder.orderNumber}
+                                </Link>
+                                .
+                              </p>
+                            )}
+                            {r.status === "COMPLETED" && !r.replacementOrder && (
                               <p className="text-xs text-gray-600 mt-2">
                                 {refunded
                                   ? `Refund of ${formatPrice(r.refundAmount ?? 0)} started — see Refunds below.`
@@ -1091,6 +1127,38 @@ export default function OrderDetailPage() {
                 : ""}
               . We&apos;ll review your request and follow up.
             </p>
+
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              What would you like?
+            </label>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {(
+                [
+                  ["RETURN", "Refund", "Money back to your payment method"],
+                  ["REPLACE", "Replacement", "The same item, shipped free"],
+                ] as const
+              ).map(([value, label, hint]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setReturnType(value)}
+                  className={`border rounded-lg px-3 py-2 text-left transition-colors ${
+                    returnType === value
+                      ? "border-[#129cd3] bg-[#129cd3]/10"
+                      : "border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <span
+                    className={`block text-sm font-semibold ${
+                      returnType === value ? "text-[#129cd3]" : "text-gray-800"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                  <span className="block text-[11px] text-gray-500">{hint}</span>
+                </button>
+              ))}
+            </div>
 
             <label className="block text-xs font-semibold text-gray-600 mb-1">
               Items to return
