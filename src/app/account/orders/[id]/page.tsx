@@ -7,7 +7,13 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { isApiError, ordersApi, paymentsApi } from "@/lib/api";
-import type { OrderDetail, OrderStatus, ReturnReason } from "@/lib/api";
+import type {
+  OrderDetail,
+  OrderStatus,
+  RefundReason,
+  RefundStatus,
+  ReturnReason,
+} from "@/lib/api";
 import { openCashfreeCheckout } from "@/lib/payments/cashfree";
 import {
   LayoutDashboard,
@@ -65,6 +71,24 @@ const STATUS_BADGE: Record<OrderStatus, string> = {
   CANCELLED: "bg-red-100 text-red-700",
   RETURN_REQUESTED: "bg-orange-100 text-orange-700",
   RETURNED: "bg-gray-200 text-gray-700",
+};
+
+const REFUND_REASON_LABEL: Record<RefundReason, string> = {
+  CANCELLATION: "Order cancelled",
+  LATE_PAYMENT: "Payment received after cancellation",
+  MANUAL: "Refund",
+};
+
+const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
+  PENDING: "Processing",
+  SUCCESS: "Refunded",
+  FAILED: "Delayed",
+};
+
+const REFUND_BADGE: Record<RefundStatus, string> = {
+  PENDING: "bg-yellow-100 text-yellow-700",
+  SUCCESS: "bg-green-100 text-green-700",
+  FAILED: "bg-gray-100 text-gray-700",
 };
 
 const RETURN_REASONS: { value: ReturnReason; label: string }[] = [
@@ -629,6 +653,57 @@ export default function OrderDetailPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Refunds */}
+                {order.refunds?.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <h2 className="font-bold text-gray-800 text-sm mb-3">Refunds</h2>
+                    <ul className="divide-y divide-gray-100">
+                      {order.refunds.map((r) => (
+                        <li key={r.id} className="py-3 first:pt-0 last:pb-0">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              {formatPrice(r.amount)} · {REFUND_REASON_LABEL[r.reason]}
+                            </p>
+                            <span
+                              className={`text-xs font-semibold px-2.5 py-1 rounded-full ${REFUND_BADGE[r.status]}`}
+                            >
+                              {REFUND_STATUS_LABEL[r.status]}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {r.status === "SUCCESS"
+                              ? `Refunded ${formatDateTime(r.processedAt)}${r.bankReference ? ` · Bank ref ${r.bankReference}` : ""}`
+                              : r.status === "PENDING"
+                              ? `Started ${formatDateTime(r.createdAt)} · usually 5–7 working days to reach you`
+                              : "This refund is delayed. Our team is on it and will contact you."}
+                          </p>
+                          {r.creditNote && (
+                            <div className="flex flex-wrap items-center justify-between gap-3 mt-2">
+                              <p className="text-xs text-gray-600">
+                                Credit note {r.creditNote.number}
+                              </p>
+                              {r.creditNote.downloadUrl ? (
+                                <a
+                                  href={r.creditNote.downloadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#129cd3] hover:bg-[#0e87b5] px-4 py-2 rounded-lg transition-colors"
+                                >
+                                  <FileText size={13} /> Download Credit Note
+                                </a>
+                              ) : (
+                                <span className="flex items-center gap-2 text-xs text-gray-600">
+                                  <Clock size={14} className="animate-pulse" /> Credit note is being generated…
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Status history */}
                 {order.statusHistory.length > 0 && (

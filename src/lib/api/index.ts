@@ -32,6 +32,7 @@ export type {
   AttachProductCouponBody,
   ListAdminOrdersQuery,
   PatchOrderStatusBody,
+  CreateRefundBody,
   CreateAdminOrderBody,
   CreateAdminOrderItem,
   CreateAdminOrderResponse,

@@ -5,7 +5,12 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { adminApi, isApiError } from "@/lib/api";
-import type { AdminOrderDetail, OrderStatus } from "@/lib/api";
+import type {
+  AdminOrderDetail,
+  OrderStatus,
+  RefundReason,
+  RefundStatus,
+} from "@/lib/api";
 import {
   ChevronLeft,
   Loader2,
@@ -13,7 +18,26 @@ import {
   FileText,
   RefreshCw,
   Clock,
+  Undo2,
 } from "lucide-react";
+
+const REFUND_REASON_LABEL: Record<RefundReason, string> = {
+  CANCELLATION: "Cancellation",
+  LATE_PAYMENT: "Late payment on cancelled order",
+  MANUAL: "Manual",
+};
+
+const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
+  PENDING: "Pending",
+  SUCCESS: "Refunded",
+  FAILED: "Failed",
+};
+
+const REFUND_STYLE: Record<RefundStatus, string> = {
+  PENDING: "bg-amber-50 text-amber-600 border-amber-200",
+  SUCCESS: "bg-emerald-50 text-emerald-600 border-emerald-200",
+  FAILED: "bg-red-50 text-red-600 border-red-200",
+};
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING_PAYMENT: "Pending Payment",
@@ -85,6 +109,26 @@ export default function AdminOrderDetailPage() {
 
   const [regenBusy, setRegenBusy] = useState(false);
   const [regenMessage, setRegenMessage] = useState<string | null>(null);
+
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundNote, setRefundNote] = useState("");
+  const [refundBusy, setRefundBusy] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  // Still refundable: what was paid online minus refunds that haven't failed.
+  const refundable = order?.paidAt
+    ? Math.max(
+        0,
+        Math.round(
+          (order.grandTotal -
+            order.refunds
+              .filter((r) => r.status !== "FAILED")
+              .reduce((sum, r) => sum + r.amount, 0)) *
+            100,
+        ) / 100,
+      )
+    : 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -200,6 +244,57 @@ export default function AdminOrderDetailPage() {
       setRegenBusy(false);
     }
   }, [id, refresh]);
+
+  const openRefund = () => {
+    setRefundAmount(refundable.toFixed(2));
+    setRefundNote("");
+    setRefundError(null);
+    setRefundOpen(true);
+  };
+
+  const closeRefund = () => {
+    if (refundBusy) return;
+    setRefundOpen(false);
+    setRefundError(null);
+  };
+
+  const handleRefund = useCallback(async () => {
+    const amount = Math.round(Number(refundAmount) * 100) / 100;
+    if (!(amount >= 1)) {
+      setRefundError("Enter an amount of at least ₹1.");
+      return;
+    }
+    if (amount > refundable) {
+      setRefundError(`Only ${formatPrice(refundable)} can still be refunded.`);
+      return;
+    }
+    if (refundNote.trim().length < 3) {
+      setRefundError("Please add a reason (at least 3 characters).");
+      return;
+    }
+    setRefundBusy(true);
+    setRefundError(null);
+    try {
+      const refund = await adminApi.createRefund(id, {
+        amount,
+        note: refundNote.trim(),
+      });
+      await refresh();
+      if (refund.status === "FAILED") {
+        setRefundError(
+          `Cashfree rejected the refund: ${refund.failureReason ?? "unknown reason"}`,
+        );
+      } else {
+        setRefundOpen(false);
+      }
+    } catch (err) {
+      setRefundError(
+        isApiError(err) ? err.displayMessage : "Could not issue refund",
+      );
+    } finally {
+      setRefundBusy(false);
+    }
+  }, [id, refundAmount, refundNote, refundable, refresh]);
 
   return (
     <>
@@ -456,6 +551,78 @@ export default function AdminOrderDetailPage() {
               )}
             </div>
 
+            {/* Refunds */}
+            {(order.paidAt || order.refunds.length > 0) && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                  <h2 className="font-bold text-gray-800 text-sm">Refunds</h2>
+                  {refundable > 0 && (
+                    <button
+                      onClick={openRefund}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <Undo2 size={13} />
+                      Issue refund
+                    </button>
+                  )}
+                </div>
+                {order.refunds.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    No refunds yet. Cancelling this order refunds the customer automatically.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {order.refunds.map((r) => (
+                      <li key={r.id} className="py-3 first:pt-0 last:pb-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-gray-800">
+                            {formatPrice(r.amount)} · {REFUND_REASON_LABEL[r.reason]}
+                            {r.note ? ` — “${r.note}”` : ""}
+                          </p>
+                          <span
+                            className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${REFUND_STYLE[r.status]}`}
+                          >
+                            {REFUND_STATUS_LABEL[r.status]}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {formatDateTime(r.processedAt ?? r.createdAt)}
+                          {r.bankReference ? ` · Bank ref ${r.bankReference}` : ""}
+                          {r.cfRefundId ? ` · Cashfree ref ${r.cfRefundId}` : ""}
+                        </p>
+                        {r.status === "FAILED" && r.failureReason && (
+                          <p className="text-xs text-red-600 mt-1">
+                            Cashfree: {r.failureReason}
+                          </p>
+                        )}
+                        {r.creditNote && (
+                          <div className="flex flex-wrap items-center justify-between gap-3 mt-2">
+                            <p className="text-xs text-gray-600">
+                              Credit note {r.creditNote.number}
+                            </p>
+                            {r.creditNote.downloadUrl ? (
+                              <a
+                                href={r.creditNote.downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 text-xs font-semibold text-white bg-[#129cd3] hover:bg-[#0e87b5] px-4 py-2 rounded-lg transition-colors"
+                              >
+                                <FileText size={13} /> Download
+                              </a>
+                            ) : (
+                              <span className="flex items-center gap-2 text-xs text-gray-600">
+                                <Clock size={14} className="animate-pulse" /> PDF not generated yet.
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             {/* Status history */}
             {order.statusHistory.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -576,6 +743,82 @@ export default function AdminOrderDetailPage() {
               <button
                 onClick={closeTransition}
                 disabled={transitionBusy}
+                className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {refundOpen && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !refundBusy && closeRefund()}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-gray-800">Issue refund</h2>
+              <button
+                onClick={closeRefund}
+                disabled={refundBusy}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-colors disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Goes back to the customer&apos;s original payment method (5–7 working
+              days). Up to {formatPrice(refundable)} can still be refunded.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Amount (₹) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={refundable}
+                  step="0.01"
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Reason <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={100}
+                  value={refundNote}
+                  onChange={(e) => setRefundNote(e.target.value)}
+                  placeholder="e.g. Price drop, goodwill (shown on the credit note)"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                />
+              </div>
+            </div>
+            {refundError && (
+              <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {refundError}
+              </div>
+            )}
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={handleRefund}
+                disabled={refundBusy}
+                className="flex-1 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 bg-[#129cd3] hover:bg-[#0e87b5]"
+              >
+                {refundBusy && <Loader2 size={16} className="animate-spin" />}
+                Issue refund
+              </button>
+              <button
+                onClick={closeRefund}
+                disabled={refundBusy}
                 className="flex-1 border-2 border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancel

@@ -7,6 +7,7 @@ import type {
   AdminCouponDetail,
   AdminCouponRow,
   AdminCouponsList,
+  AdminCreateRefundResponse,
   AdminReviewRow,
   AdminReviewsListResponse,
   AdminOrderDetail,
@@ -217,6 +218,11 @@ export type ListAdminOrdersQuery = AdminListSortFilter & {
   to?: string; // ISO date — legacy filter on createdAt
   limit?: number;
   offset?: number;
+};
+
+export type CreateRefundBody = {
+  amount: number; // ₹, up to 2 decimals
+  note: string; // 3–100 chars, shown on the credit note
 };
 
 export type PatchOrderStatusBody = {
@@ -625,6 +631,13 @@ export const adminApi = {
     return request<AdminOrderStatusPatchResponse>(
       `/admin/orders/${encodeURIComponent(id)}/status`,
       { method: "PATCH", body },
+    );
+  },
+  // Manual (full or partial) refund of an order's online payment.
+  createRefund(id: string, body: CreateRefundBody) {
+    return request<AdminCreateRefundResponse>(
+      `/admin/orders/${encodeURIComponent(id)}/refunds`,
+      { method: "POST", body },
     );
   },
   regenerateInvoice(id: string) {
