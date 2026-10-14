@@ -17,7 +17,7 @@ import type { ListCard, Variant } from "@/lib/api";
 export default function WishlistPage() {
   const router = useRouter();
   const { status } = useAuth();
-  const { items, loading, error, refresh } = useWishlist();
+  const { items, loading, error, refresh, removeByItemId } = useWishlist();
   const { stocks, setStock } = useStock();
 
   const [productDetails, setProductDetails] = useState<Record<string, ProductDetail>>({});
@@ -143,6 +143,9 @@ export default function WishlistPage() {
                     key={item.wishlistItemId}
                     product={listCard}
                     variantOverride={variantOverride}
+                    onAddedToCart={() => {
+                      removeByItemId(item.wishlistItemId).catch(() => {});
+                    }}
                   />
                 );
               })}

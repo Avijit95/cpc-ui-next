@@ -96,11 +96,13 @@ export default function ProductCard({
   variantOverride,
   titleOverride,
   className,
+  onAddedToCart,
 }: {
   product: ListCard;
   variantOverride?: Variant;
   titleOverride?: string;
   className?: string;
+  onAddedToCart?: () => void;
 }) {
   const [addState, setAddState] = useState<AddState>("idle");
   const [shareState, setShareState] = useState<"idle" | "copied">("idle");
@@ -406,8 +408,12 @@ export default function ProductCard({
                 qty: 1,
               }));
               adjustStock(stockKey, -1);
-              setAddState("added");
-              window.setTimeout(() => setAddState("idle"), 1500);
+              if (onAddedToCart) {
+                onAddedToCart();
+              } else {
+                setAddState("added");
+                window.setTimeout(() => setAddState("idle"), 1500);
+              }
             } catch (err) {
               setAddState("error");
               window.setTimeout(() => setAddState("idle"), 2000);

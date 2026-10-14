@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { useCart } from "@/lib/cart/CartProvider";
 import { cartApi, catalogApi, isApiError } from "@/lib/api";
 import { useStock } from "@/lib/stock/StockProvider";
+import { useWishlist } from "@/lib/wishlist/WishlistProvider";
 import type { CartView, PricedCartLine } from "@/lib/api";
 import {
   Trash2,
@@ -20,7 +21,6 @@ import {
   Heart,
   X,
 } from "lucide-react";
-import { wishlistApi } from "@/lib/api";
 
 function formatPrice(price: number) {
   return "₹" + Math.round(price).toLocaleString("en-IN");
@@ -32,6 +32,7 @@ export default function CartPage() {
 
   const { setCart: syncHeaderCart } = useCart();
   const { stocks, setStock, adjustStock } = useStock();
+  const { add: addToWishlist } = useWishlist();
   const [cart, setCart] = useState<CartView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -616,7 +617,7 @@ export default function CartPage() {
                   setWishlistBusy(true);
                   setWishlistError(null);
                   try {
-                    await wishlistApi.addItem({ productId: line.productId, ...(line.variantId ? { variantId: line.variantId } : {}) });
+                    await addToWishlist(line.productId, line.variantId ?? undefined);
                     setRemoveModal(null);
                     await removeLine(line);
                   } catch {
