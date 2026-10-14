@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { paymentsApi } from "@/lib/api";
+import { openCashfreeCheckout } from "@/lib/payments/cashfree";
 import { useStock } from "@/lib/stock/StockProvider";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 
@@ -112,8 +113,7 @@ function PaymentResultInner() {
     if (!orderId) return;
     setRetrying(true);
     try {
-      const { redirectUrl } = await paymentsApi.initiate(orderId);
-      window.location.href = redirectUrl;
+      await openCashfreeCheckout(await paymentsApi.initiate(orderId));
     } catch {
       setRetrying(false);
       router.replace(`/account/orders/${encodeURIComponent(orderId)}`);
