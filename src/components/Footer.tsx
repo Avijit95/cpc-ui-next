@@ -6,11 +6,37 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Mail } from "lucide-react";
 
-const footerLinks = {
-  "OUR SHOPS": ["New Arrivals", "Best Sellers", "Today's Deals", "Clearance Sale", "Gift Cards"],
-  "INFORMATION": ["About Us", "Privacy Policy", "Terms & Conditions", "Blog", "Sitemap"],
-  "BRANDS": ["Apple", "Samsung", "Sony", "OnePlus", "JBL", "Google"],
-  "ALL CATEGORIES": ["Smartphones", "Cameras", "Speakers", "Earphones", "Smartwatches", "Accessories"],
+const footerLinks: Record<string, { name: string; href: string }[]> = {
+  "OUR SHOPS": [
+    { name: "New Arrivals", href: "/products?sort=newest" },
+    { name: "Best Sellers", href: "/products?sort=popular" },
+    { name: "Today's Deals", href: "/deals" },
+    { name: "Clearance Sale", href: "/products" },
+    { name: "Gift Cards", href: "#" },
+  ],
+  "INFORMATION": [
+    { name: "About Us", href: "#" },
+    { name: "Privacy Policy", href: "#" },
+    { name: "Terms & Conditions", href: "#" },
+    { name: "Blog", href: "#" },
+    { name: "Sitemap", href: "#" },
+  ],
+  "BRANDS": [
+    { name: "Apple", href: "/products?brand=apple" },
+    { name: "Samsung", href: "/products?brand=samsung" },
+    { name: "Sony", href: "/products?brand=sony" },
+    { name: "OnePlus", href: "/products?brand=oneplus" },
+    { name: "JBL", href: "/products?brand=jbl" },
+    { name: "Google", href: "/products?brand=google" },
+  ],
+  "ALL CATEGORIES": [
+    { name: "Phone", href: "/products?category=phone" },
+    { name: "Camera", href: "/products?category=camera" },
+    { name: "Camera Lens", href: "/products?category=camera-lens" },
+    { name: "TV", href: "/products?category=tv" },
+    { name: "Speakers", href: "/products?category=speakers" },
+    { name: "Smart Devices", href: "/products?category=smart-devices" },
+  ],
 };
 
 // Public business identifiers — inlined at build time (same as the OAuth client
@@ -27,6 +53,31 @@ const footerNav = [
   { name: "SPEAKERS", href: "/products?category=speakers", category: "speakers" },
   { name: "SMART DEVICES", href: "/products?category=smart-devices", category: "smart-devices" },
 ];
+
+// Active category links for the "ALL CATEGORIES" column — needs useSearchParams.
+function FooterCategoryLinks() {
+  const searchParams = useSearchParams();
+  const activeCategory = searchParams.get("category");
+  const categories = footerLinks["ALL CATEGORIES"];
+  return (
+    <ul className="space-y-2">
+      {categories.map((link) => {
+        const slug = new URL(link.href, "http://x").searchParams.get("category");
+        const isActive = !!slug && activeCategory === slug;
+        return (
+          <li key={link.name}>
+            <Link
+              href={link.href}
+              className={`text-xs transition-colors ${isActive ? "text-[#18bcfd] font-semibold" : "hover:text-[#129cd3]"}`}
+            >
+              {link.name}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 // Reads the URL to highlight the active category, so it must live behind a
 // <Suspense> boundary (useSearchParams) to keep pages statically prerenderable.
@@ -137,15 +188,31 @@ export default function Footer() {
           <div key={title}>
             <h4 className="text-white font-bold text-xs uppercase tracking-wide mb-1">{title}</h4>
             <div className="h-px bg-gradient-to-r from-transparent via-[#129cd3] to-transparent mb-3 xs:hidden" />
-            <ul className="space-y-2">
-              {links.map((link) => (
-                <li key={link}>
-                  <a href="#" className="text-xs hover:text-[#129cd3] transition-colors">
-                    {link}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            {title === "ALL CATEGORIES" ? (
+              <Suspense fallback={
+                <ul className="space-y-2">
+                  {links.map((link) => (
+                    <li key={link.name}>
+                      <Link href={link.href} className="text-xs hover:text-[#129cd3] transition-colors">
+                        {link.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              }>
+                <FooterCategoryLinks />
+              </Suspense>
+            ) : (
+              <ul className="space-y-2">
+                {links.map((link) => (
+                  <li key={link.name}>
+                    <Link href={link.href} className="text-xs hover:text-[#129cd3] transition-colors">
+                      {link.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ))}
       </div>
