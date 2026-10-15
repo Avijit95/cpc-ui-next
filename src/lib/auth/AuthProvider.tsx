@@ -39,6 +39,11 @@ const SESSION_MARKER = "has_session";
 // Prevents anonymous visitors from hitting /auth/refresh on every subsequent visit
 // after the initial deployment that introduced the marker cookie.
 const MIGRATION_KEY = "auth_session_checked";
+// localStorage key storing the last logged-in user's ID.
+// Used to detect when the rt cookie belongs to a different user (e.g. another
+// person logging in on the same device), so we sign out instead of silently
+// switching accounts on page refresh.
+const SESSION_USER_KEY = "session_user_id";
 
 function setSessionMarker() {
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
@@ -59,6 +64,18 @@ function migrationChecked(): boolean {
 
 function setMigrationChecked() {
   try { localStorage.setItem(MIGRATION_KEY, "1"); } catch { /* ignore */ }
+}
+
+function getStoredUserId(): string | null {
+  try { return localStorage.getItem(SESSION_USER_KEY); } catch { return null; }
+}
+
+function setStoredUserId(id: string) {
+  try { localStorage.setItem(SESSION_USER_KEY, id); } catch { /* ignore */ }
+}
+
+function clearStoredUserId() {
+  try { localStorage.removeItem(SESSION_USER_KEY); } catch { /* ignore */ }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -110,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       if (!refreshed) {
         clearSessionMarker();
+        clearStoredUserId();
         setState({ user: null, status: "unauthenticated" });
         return;
       }
@@ -118,11 +136,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const user = await meApi.get();
         if (cancelled) return;
+        // Guard against a different user's rt cookie silently taking over.
+        // If a stored user ID exists and doesn't match, sign out instead.
+        const storedId = getStoredUserId();
+        if (storedId && storedId !== user.id) {
+          accessTokenRef.current = null;
+          clearSessionMarker();
+          clearStoredUserId();
+          setState({ user: null, status: "unauthenticated" });
+          return;
+        }
+        setStoredUserId(user.id);
         setState({ user, status: "authenticated" });
       } catch {
         if (cancelled) return;
         accessTokenRef.current = null;
         clearSessionMarker();
+        clearStoredUserId();
         setState({ user: null, status: "unauthenticated" });
       }
     })();
@@ -134,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setSession = useCallback((resp: LoginResponse) => {
     accessTokenRef.current = resp.accessToken;
     setSessionMarker();
+    setStoredUserId(resp.user.id);
     setState({ user: resp.user, status: "authenticated" });
   }, []);
 
@@ -158,6 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     accessTokenRef.current = null;
     clearSessionMarker();
+    clearStoredUserId();
     setState({ user: null, status: "unauthenticated" });
   }, []);
 
@@ -169,6 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     accessTokenRef.current = null;
     clearSessionMarker();
+    clearStoredUserId();
     setState({ user: null, status: "unauthenticated" });
   }, []);
 
