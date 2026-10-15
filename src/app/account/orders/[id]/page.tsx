@@ -305,7 +305,7 @@ export default function OrderDetailPage() {
       const body = cancelReason.trim()
         ? { reason: cancelReason.trim() }
         : undefined;
-      await ordersApi.cancel(id, body);
+      await ordersApi.cancel(order!.id, body);
       // Re-fetch full detail so status history + cancelledAt populate.
       await fetchOrder();
       setShowCancel(false);
@@ -419,7 +419,7 @@ export default function OrderDetailPage() {
     setReturnBusy(true);
     setReturnError(null);
     try {
-      await ordersApi.createReturn(id, {
+      await ordersApi.createReturn(order!.id, {
         type: returnType,
         items,
         reason: returnReason,
