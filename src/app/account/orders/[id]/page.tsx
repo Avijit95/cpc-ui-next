@@ -875,17 +875,19 @@ export default function OrderDetailPage() {
                               {r.note ? ` · ${r.note}` : ""}
                             </p>
                             {r.status !== "REJECTED" && r.status !== "WITHDRAWN" && (
-                              <ol className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+                              <ol className="space-y-2 mt-2 text-xs">
                                 {steps.map((step) => (
                                   <li
                                     key={step.label}
-                                    className={`flex items-center gap-1.5 ${step.at ? "text-gray-800" : "text-gray-400"}`}
+                                    className={`flex items-center gap-3 ${step.at ? "text-gray-700" : "text-gray-400"}`}
                                   >
                                     <span
-                                      className={`w-2 h-2 rounded-full ${step.at ? "bg-[#129cd3]" : "bg-gray-300"}`}
+                                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${step.at ? "bg-[#129cd3]" : "bg-gray-300"}`}
                                     />
-                                    {step.label}
-                                    {step.at ? ` · ${formatDateTime(step.at)}` : ""}
+                                    <span className="font-medium">{step.label}</span>
+                                    {step.at && (
+                                      <span className="text-gray-500">{formatDateTime(step.at)}</span>
+                                    )}
                                   </li>
                                 ))}
                               </ol>
