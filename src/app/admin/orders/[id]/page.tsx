@@ -217,8 +217,6 @@ export default function AdminOrderDetailPage() {
   const openTransition = (target: OrderStatus) => {
     setTransitionTarget(target);
     setTransitionNote("");
-    setDeliveryCode("");
-    setDeliveryUrl("");
     setTransitionError(null);
   };
 
@@ -226,8 +224,6 @@ export default function AdminOrderDetailPage() {
     if (transitionBusy) return;
     setTransitionTarget(null);
     setTransitionNote("");
-    setDeliveryCode("");
-    setDeliveryUrl("");
     setTransitionError(null);
   };
 
@@ -250,8 +246,6 @@ export default function AdminOrderDetailPage() {
       await refresh();
       setTransitionTarget(null);
       setTransitionNote("");
-      setDeliveryCode("");
-      setDeliveryUrl("");
     } catch (err) {
       setTransitionError(
         isApiError(err) ? err.displayMessage : "Could not update status",
