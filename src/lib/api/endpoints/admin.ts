@@ -242,8 +242,6 @@ export type CreateRefundBody = {
 export type PatchOrderStatusBody = {
   toStatus: OrderStatus;
   note?: string;
-  deliveryCode?: string;
-  deliveryUrl?: string;
 };
 
 export type CreateAdminOrderItem = {

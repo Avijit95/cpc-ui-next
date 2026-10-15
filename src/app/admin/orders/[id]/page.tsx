@@ -139,8 +139,6 @@ export default function AdminOrderDetailPage() {
 
   const [transitionTarget, setTransitionTarget] = useState<OrderStatus | null>(null);
   const [transitionNote, setTransitionNote] = useState("");
-  const [deliveryCode, setDeliveryCode] = useState("");
-  const [deliveryUrl, setDeliveryUrl] = useState("");
   const [transitionBusy, setTransitionBusy] = useState(false);
   const [transitionError, setTransitionError] = useState<string | null>(null);
 
@@ -241,30 +239,13 @@ export default function AdminOrderDetailPage() {
       setTransitionError("Please add a reason for cancellation.");
       return;
     }
-    if (transitionTarget === "SHIPPED") {
-      if (!deliveryCode.trim()) {
-        setTransitionError("Delivery Code is required to mark the order as Shipped.");
-        return;
-      }
-      if (!deliveryUrl.trim()) {
-        setTransitionError("Delivery URL is required to mark the order as Shipped.");
-        return;
-      }
-    }
     setTransitionBusy(true);
     setTransitionError(null);
     try {
-      const body =
-        transitionTarget === "SHIPPED"
-          ? {
-              toStatus: transitionTarget,
-              deliveryCode: deliveryCode.trim() || undefined,
-              deliveryUrl: deliveryUrl.trim() || undefined,
-            }
-          : {
-              toStatus: transitionTarget,
-              note: transitionNote.trim() || undefined,
-            };
+      const body = {
+        toStatus: transitionTarget,
+        note: transitionNote.trim() || undefined,
+      };
       await adminApi.patchOrderStatus(id, body);
       await refresh();
       setTransitionTarget(null);
@@ -278,7 +259,7 @@ export default function AdminOrderDetailPage() {
     } finally {
       setTransitionBusy(false);
     }
-  }, [id, transitionTarget, transitionNote, deliveryCode, deliveryUrl, noteRequired, refresh]);
+  }, [id, transitionTarget, transitionNote, noteRequired, refresh]);
 
   const handleRegenerate = useCallback(async () => {
     setRegenBusy(true);
@@ -1000,35 +981,7 @@ export default function AdminOrderDetailPage() {
                 ? "This starts the customer's 7-day return window."
                 : `Update the order status to ${STATUS_LABEL[transitionTarget]}.`}
             </p>
-            {transitionTarget === "SHIPPED" ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Delivery Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={deliveryCode}
-                    onChange={(e) => setDeliveryCode(e.target.value)}
-                    placeholder="e.g. 1234567890"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Delivery URL <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="url"
-                    value={deliveryUrl}
-                    onChange={(e) => setDeliveryUrl(e.target.value)}
-                    placeholder="https://track.carrier.com/..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
-                  />
-                </div>
-              </div>
-            ) : (
-              <>
+            <>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   Note{" "}
                   <span className="font-normal text-gray-400">
@@ -1048,7 +1001,6 @@ export default function AdminOrderDetailPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 resize-none"
                 />
               </>
-            )}
             {transitionError && (
               <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 {transitionError}
