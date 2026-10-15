@@ -139,8 +139,9 @@ export default function AdminOrderDetailPage() {
 
   const [transitionTarget, setTransitionTarget] = useState<OrderStatus | null>(null);
   const [transitionNote, setTransitionNote] = useState("");
-  const [deliveryCode, setDeliveryCode] = useState("");
-  const [deliveryUrl, setDeliveryUrl] = useState("");
+  const [shipmentCarrier, setShipmentCarrier] = useState("");
+  const [shipmentTrackingNumber, setShipmentTrackingNumber] = useState("");
+  const [shipmentTrackingUrl, setShipmentTrackingUrl] = useState("");
   const [transitionBusy, setTransitionBusy] = useState(false);
   const [transitionError, setTransitionError] = useState<string | null>(null);
 
@@ -219,8 +220,9 @@ export default function AdminOrderDetailPage() {
   const openTransition = (target: OrderStatus) => {
     setTransitionTarget(target);
     setTransitionNote("");
-    setDeliveryCode("");
-    setDeliveryUrl("");
+    setShipmentCarrier("");
+    setShipmentTrackingNumber("");
+    setShipmentTrackingUrl("");
     setTransitionError(null);
   };
 
@@ -228,8 +230,9 @@ export default function AdminOrderDetailPage() {
     if (transitionBusy) return;
     setTransitionTarget(null);
     setTransitionNote("");
-    setDeliveryCode("");
-    setDeliveryUrl("");
+    setShipmentCarrier("");
+    setShipmentTrackingNumber("");
+    setShipmentTrackingUrl("");
     setTransitionError(null);
   };
 
@@ -241,19 +244,34 @@ export default function AdminOrderDetailPage() {
       setTransitionError("Please add a reason for cancellation.");
       return;
     }
+    if (transitionTarget === "SHIPPED") {
+      if (!shipmentCarrier.trim() || !shipmentTrackingNumber.trim() || !shipmentTrackingUrl.trim()) {
+        setTransitionError("Carrier, tracking number, and tracking URL are all required.");
+        return;
+      }
+    }
     setTransitionBusy(true);
     setTransitionError(null);
     try {
-      const body = {
-        toStatus: transitionTarget,
-        note: transitionNote.trim() || undefined,
-      };
+      const body =
+        transitionTarget === "SHIPPED"
+          ? {
+              toStatus: transitionTarget,
+              shipmentCarrier: shipmentCarrier.trim(),
+              shipmentTrackingNumber: shipmentTrackingNumber.trim(),
+              shipmentTrackingUrl: shipmentTrackingUrl.trim(),
+            }
+          : {
+              toStatus: transitionTarget,
+              note: transitionNote.trim() || undefined,
+            };
       await adminApi.patchOrderStatus(id, body);
       await refresh();
       setTransitionTarget(null);
       setTransitionNote("");
-      setDeliveryCode("");
-      setDeliveryUrl("");
+      setShipmentCarrier("");
+      setShipmentTrackingNumber("");
+      setShipmentTrackingUrl("");
     } catch (err) {
       setTransitionError(
         isApiError(err) ? err.displayMessage : "Could not update status",
@@ -261,7 +279,7 @@ export default function AdminOrderDetailPage() {
     } finally {
       setTransitionBusy(false);
     }
-  }, [id, transitionTarget, transitionNote, deliveryCode, deliveryUrl, noteRequired, refresh]);
+  }, [id, transitionTarget, transitionNote, shipmentCarrier, shipmentTrackingNumber, shipmentTrackingUrl, noteRequired, refresh]);
 
   const handleRegenerate = useCallback(async () => {
     setRegenBusy(true);
@@ -987,24 +1005,36 @@ export default function AdminOrderDetailPage() {
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Delivery Code <span className="font-normal text-gray-400">(optional)</span>
+                    Carrier <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    value={deliveryCode}
-                    onChange={(e) => setDeliveryCode(e.target.value)}
+                    value={shipmentCarrier}
+                    onChange={(e) => setShipmentCarrier(e.target.value)}
+                    placeholder="e.g. Delhivery, BlueDart"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Tracking Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={shipmentTrackingNumber}
+                    onChange={(e) => setShipmentTrackingNumber(e.target.value)}
                     placeholder="e.g. 1234567890"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Delivery URL <span className="font-normal text-gray-400">(optional)</span>
+                    Tracking URL <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="url"
-                    value={deliveryUrl}
-                    onChange={(e) => setDeliveryUrl(e.target.value)}
+                    value={shipmentTrackingUrl}
+                    onChange={(e) => setShipmentTrackingUrl(e.target.value)}
                     placeholder="https://track.carrier.com/..."
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
                   />
