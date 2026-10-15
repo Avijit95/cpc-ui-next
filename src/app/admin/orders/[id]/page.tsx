@@ -139,6 +139,8 @@ export default function AdminOrderDetailPage() {
 
   const [transitionTarget, setTransitionTarget] = useState<OrderStatus | null>(null);
   const [transitionNote, setTransitionNote] = useState("");
+  const [deliveryCode, setDeliveryCode] = useState("");
+  const [deliveryUrl, setDeliveryUrl] = useState("");
   const [transitionBusy, setTransitionBusy] = useState(false);
   const [transitionError, setTransitionError] = useState<string | null>(null);
 
@@ -217,6 +219,8 @@ export default function AdminOrderDetailPage() {
   const openTransition = (target: OrderStatus) => {
     setTransitionTarget(target);
     setTransitionNote("");
+    setDeliveryCode("");
+    setDeliveryUrl("");
     setTransitionError(null);
   };
 
@@ -224,6 +228,8 @@ export default function AdminOrderDetailPage() {
     if (transitionBusy) return;
     setTransitionTarget(null);
     setTransitionNote("");
+    setDeliveryCode("");
+    setDeliveryUrl("");
     setTransitionError(null);
   };
 
@@ -246,6 +252,8 @@ export default function AdminOrderDetailPage() {
       await refresh();
       setTransitionTarget(null);
       setTransitionNote("");
+      setDeliveryCode("");
+      setDeliveryUrl("");
     } catch (err) {
       setTransitionError(
         isApiError(err) ? err.displayMessage : "Could not update status",
@@ -253,7 +261,7 @@ export default function AdminOrderDetailPage() {
     } finally {
       setTransitionBusy(false);
     }
-  }, [id, transitionTarget, transitionNote, noteRequired, refresh]);
+  }, [id, transitionTarget, transitionNote, deliveryCode, deliveryUrl, noteRequired, refresh]);
 
   const handleRegenerate = useCallback(async () => {
     setRegenBusy(true);
@@ -975,7 +983,35 @@ export default function AdminOrderDetailPage() {
                 ? "This starts the customer's 7-day return window."
                 : `Update the order status to ${STATUS_LABEL[transitionTarget]}.`}
             </p>
-            <>
+            {transitionTarget === "SHIPPED" ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Delivery Code <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryCode}
+                    onChange={(e) => setDeliveryCode(e.target.value)}
+                    placeholder="e.g. 1234567890"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Delivery URL <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={deliveryUrl}
+                    onChange={(e) => setDeliveryUrl(e.target.value)}
+                    placeholder="https://track.carrier.com/..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800"
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   Note{" "}
                   <span className="font-normal text-gray-400">
@@ -995,6 +1031,7 @@ export default function AdminOrderDetailPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#129cd3] focus:ring-1 focus:ring-[#129cd3] text-gray-800 resize-none"
                 />
               </>
+            )}
             {transitionError && (
               <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 {transitionError}
